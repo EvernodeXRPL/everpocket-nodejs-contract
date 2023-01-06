@@ -1,0 +1,26 @@
+{
+    "name": "everpocket-nodejs-contract",
+    "description": "Evernode convenience library for Hot Pocket nodejs contracts.",
+    "keywords": [
+        "Evernode",
+        "Hot Pocket"
+    ],
+    "homepage": "https://github.com/EvernodeXRPL/everpocket-nodejs-contract",
+    "license": "MIT",
+    "version": "0.1.0",
+    "scripts": {
+        "lint": "./node_modules/.bin/eslint src/**/*.js",
+        "build": "npm run lint && ncc build src/index.js -o dist/",
+        "bundle": "npm run build && ./clean-pkg.sh",
+        "publish": "npm run bundle && cp npm-readme.md dist/README.md && npm publish ./dist"
+    },
+    "dependencies": {
+    },
+    "devDependencies": {
+        "eslint": "8.31.0"
+    },
+    "peerDependencies": {
+        "hotpocket-nodejs-contract": "0.x",
+        "evernode-js-client": "0.x"
+    }
+}

@@ -1,2 +1,2 @@
 # everpocket-nodejs-contract
-Evernode-HotPocket contract library for nodejs.
+Evernode convenience library for Hot Pocket nodejs contracts.
