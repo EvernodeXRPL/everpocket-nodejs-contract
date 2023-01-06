@@ -1,0 +1,16 @@
+{
+    "name": "test",
+    "version": "1.0.0",
+    "scripts": {
+        "build": "npx ncc build src/test.js -o dist",
+        "start": "npm run build && hpdevkit deploy dist"
+    },
+    "dependencies": {
+        "hotpocket-nodejs-contract": "0.5.7",
+        "evernode-js-client": "0.5.14",
+        "everpocket-nodejs-contract": "file:../dist"
+    },
+    "devDependencies": {
+        "@vercel/ncc": "0.34.0"
+    }
+}
