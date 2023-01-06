@@ -1,3 +1,5 @@
-module.exports = {
+const { Context } = require('./Context');
 
+module.exports = {
+    Context
 }
