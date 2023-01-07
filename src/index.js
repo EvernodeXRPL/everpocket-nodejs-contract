@@ -1,5 +1,4 @@
-const { Context } = require('./Context');
-
 module.exports = {
-    Context
+    ...require('./Context'),
+    ...require('./vote-electors')
 }

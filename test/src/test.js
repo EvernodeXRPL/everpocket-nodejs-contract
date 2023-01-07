@@ -1,14 +1,18 @@
 const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 
-const test = async (ctx) => {
+const testContract = async (ctx) => {
+
+    const evpContext = new evp.Context(ctx);
+
     if (!ctx.readonly) {
-        ctx.unl.onMessage((node, msg) => { // msg is a Buffer
-            console.log(msg.toString() + " from " + node.publicKey);
+        ctx.unl.onMessage((node, msg) => {
+            evpContext.feedUnlMessage(node, msg);
         })
-        await ctx.unl.send("Hello");
+
+        console.log(await evpContext.vote("firstRound", 1, new evp.AllVoteElector(1, 3000)));
     }
 }
 
 const hpc = new HotPocket.Contract();
-hpc.init(test);
+hpc.init(testContract);

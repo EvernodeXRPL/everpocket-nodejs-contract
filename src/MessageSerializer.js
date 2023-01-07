@@ -1,7 +1,7 @@
 const msgFields = {
     type: '_evpType',
     election: 'election',
-    vote: 'vote'
+    data: 'data'
 }
 Object.freeze(msgFields);
 
@@ -14,10 +14,9 @@ class MessageSerializer {
 
     #deserializeMessage(msg, expectedType) {
         try {
-            const obj = JSON.parse(msg);
-            if (obj && obj[msgFields.type] && (!expectedType || obj[msgFields.type] === expectedType)) {
+            const obj = JSON.parse(msg.toString());
+            if (obj && obj[msgFields.type] && (!expectedType || obj[msgFields.type] === expectedType))
                 return obj;
-            }
         }
         catch {
         }
@@ -29,11 +28,11 @@ class MessageSerializer {
         return this.#deserializeMessage(msg, msgTypes.vote);
     }
 
-    serializeVote(electionName, vote) {
+    serializeVote(electionName, data) {
         return JSON.stringify({
             [msgFields.type]: msgTypes.vote,
             [msgFields.election]: electionName,
-            [msgFields.vote]: vote
+            [msgFields.data]: data
         })
     }
 }

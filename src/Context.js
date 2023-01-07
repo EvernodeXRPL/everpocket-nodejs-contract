@@ -12,10 +12,10 @@ class Context {
 
     feedUnlMessage(sender, msg) {
         const vote = this.serializer.deserializeVote(msg);
-        vote && this.voteEmitter.emit(obj.voteName, sender, obj.data);
+        vote && this.voteEmitter.emit(vote.election, sender, vote.data);
     }
 
-    vote(electionName, votes, elector) {
+    async vote(electionName, votes, elector) {
 
         // Start the election.
         const election = elector.election(electionName, this.voteEmitter);
@@ -27,7 +27,7 @@ class Context {
         }));
 
         // Get election result.
-        const result = await election;
+        return await election;
     }
 }
 
