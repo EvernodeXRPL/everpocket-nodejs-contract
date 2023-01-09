@@ -10,7 +10,13 @@ const testContract = async (ctx) => {
             evpContext.feedUnlMessage(node, msg);
         })
 
-        console.log(await evpContext.vote("firstRound", 1, new evp.AllVoteElector(1, 3000)));
+        // Voting examples
+
+        const r1 = evpContext.vote("firstRound", [1,2], new evp.AllVoteElector(10, 1000));
+        const r2 = evpContext.vote("secondRound", [6,7], new evp.AllVoteElector(10, 1000));
+
+        console.log((await r1).map(v => v.data));
+        console.log((await r2).map(v => v.data));
     }
 }
 
