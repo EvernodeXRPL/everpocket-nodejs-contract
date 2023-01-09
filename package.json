@@ -12,7 +12,8 @@
         "lint": "./node_modules/.bin/eslint src/**/*.js",
         "build": "npm run lint && ncc build src/index.js -o dist/",
         "bundle": "npm run build && ./clean-pkg.sh",
-        "publish": "npm run bundle && cp npm-readme.md dist/README.md && npm publish ./dist"
+        "publish": "npm run bundle && cp npm-readme.md dist/README.md && npm publish ./dist",
+        "test": "npm run build && npm --prefix test i &&  npm --prefix test start"
     },
     "dependencies": {
     },
