@@ -1,3 +1,5 @@
+import { Buffer } from 'buffer';
+
 const msgFields = {
     type: '_evpType',
     election: 'election',
@@ -12,23 +14,24 @@ Object.freeze(msgTypes);
 
 class MessageSerializer {
 
-    #deserializeMessage(msg, expectedType) {
+    private deserializeMessage(msg: any, expectedType: string): any {
         try {
             const obj = JSON.parse(msg.toString());
             if (obj && obj[msgFields.type] && (!expectedType || obj[msgFields.type] === expectedType))
                 return obj;
         }
         catch {
+            console.error('Invalid message format')
         }
 
         return null;
     }
 
-    deserializeVote(msg) {
-        return this.#deserializeMessage(msg, msgTypes.vote);
+    public deserializeVote(msg: Buffer): any {
+        return this.deserializeMessage(msg, msgTypes.vote);
     }
 
-    serializeVote(electionName, data) {
+    public serializeVote(electionName: string, data: any): string {
         return JSON.stringify({
             [msgFields.type]: msgTypes.vote,
             [msgFields.election]: electionName,
@@ -37,6 +40,4 @@ class MessageSerializer {
     }
 }
 
-module.exports = {
-    MessageSerializer
-}
+export default MessageSerializer;

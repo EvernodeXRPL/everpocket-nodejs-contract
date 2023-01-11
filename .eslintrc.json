@@ -5,7 +5,9 @@
         "es2021": true
     },
     "extends": "eslint:recommended",
+    "parser": "@typescript-eslint/parser",
     "parserOptions": {
+        "sourceType": "module",
         "ecmaVersion": 13
     },
     "rules": {
