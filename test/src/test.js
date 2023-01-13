@@ -1,22 +1,46 @@
 const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
+const bson = require('bson');
 
 const testContract = async (ctx) => {
+    //await vote(ctx);
+    await fileUpload(ctx);
+}
 
-    const evpContext = new evp.Context(ctx);
+// Voting examples
+async function vote(ctx) {
+    const context = new evp.Context(ctx);
+
+    ctx.unl.onMessage((node, msg) => {
+        context.feedUnlMessage(node, msg);
+    })
+
+    const r1 = context.vote("firstRound", [1, 2], new evp.AllVoteElector(10, 1000));
+    const r2 = context.vote("secondRound", [6, 7], new evp.AllVoteElector(10, 1000));
+
+    console.log((await r1).map(v => v.data));
+    console.log((await r2).map(v => v.data));
+}
+
+async function fileUpload(ctx) {
+    const evpContext = new evp.FilesContext(ctx);
 
     if (!ctx.readonly) {
-        ctx.unl.onMessage((node, msg) => {
-            evpContext.feedUnlMessage(node, msg);
-        })
+        for (const user of ctx.users.list()) {
 
-        // Voting examples
-
-        const r1 = evpContext.vote("firstRound", [1,2], new evp.AllVoteElector(10, 1000));
-        const r2 = evpContext.vote("secondRound", [6,7], new evp.AllVoteElector(10, 1000));
-
-        console.log((await r1).map(v => v.data));
-        console.log((await r2).map(v => v.data));
+            for (const input of user.inputs) {
+                const buf = await ctx.users.read(input);
+                const msg = bson.deserialize(buf);
+                if (msg.type == "upload") {
+                    const output = evpContext.upload(msg);
+                    await user.send(bson.serialize(output));
+                }
+                else if (msg.type == "merge") {
+                    const output = evpContext.mergeUploadedFiles(msg);
+                    await user.send(bson.serialize(output));
+                }
+            }
+        }
     }
 }
 
