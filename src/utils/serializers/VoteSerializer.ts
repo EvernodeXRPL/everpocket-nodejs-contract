@@ -18,11 +18,22 @@ class VoteSerializer extends MessageSerializer {
         super('json', (obj: any) => { return obj && obj[msgFields.type] && (!msgTypes.vote || obj[msgFields.type] === msgTypes.vote) })
     }
 
+    /**
+     * Deserialize user vote to a object.
+     * @param msg Serialized buffer.
+     * @returns Deserialized object.
+     */
     public deserializeVote(msg: Buffer): any {
         return super.deserializeMessage(msg);
     }
 
-    public serializeVote(electionName: string, data: any): Buffer {
+    /**
+     * Serialize vote message.
+     * @param electionName Election name that's voting for.
+     * @param data Vote data object.
+     * @returns Serialized buffer.
+     */
+    public serializeVote(electionName: string, data: any): Buffer | null {
         return super.serializeMessage({
             [msgFields.type]: msgTypes.vote,
             [msgFields.election]: electionName,

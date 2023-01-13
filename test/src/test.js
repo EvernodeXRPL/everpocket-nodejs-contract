@@ -12,6 +12,7 @@ const testContract = async (ctx) => {
             () => getContractConfig(ctx),
             () => updateContractConfig(ctx),
             () => updateContract(ctx),
+            () => updateUnl(ctx),
         ];
 
         for (const test of tests) {
@@ -87,6 +88,24 @@ const updateContract = async (ctx) => {
     fs.rmSync(bundle, { recursive: true });
     context.updateContract(fs.readFileSync(zip));
     fs.rmSync(zip);
+}
+
+const updateUnl = async (ctx) => {
+    const context = new evp.ContractContext(ctx);
+    const removed = 'removed.txt';
+    const unlList = ctx.unl.list();
+    console.log(`Current unl count: ${unlList.length}`)
+    
+    if (!fs.existsSync(removed)) {
+        const pubKey = unlList[0].publicKey;
+        context.removeNodes([pubKey]);
+        fs.writeFileSync(removed, pubKey);
+    }
+    else {
+        const pubKey = fs.readFileSync(removed).toString();
+        context.addNodes([pubKey]);
+        fs.rmSync(removed);
+    }
 }
 
 const hpc = new HotPocket.Contract();

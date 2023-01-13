@@ -10,22 +10,35 @@ const HP_POST_EXEC_SCRIPT = "post_exec.sh";
 class Context {
     hpContext: any;
 
+    /**
+     * HotPocket contract context handler.
+     * @param hpContext HotPocket contract context.
+     */
     public constructor(hpContext: any) {
         this.hpContext = hpContext;
     }
 
+    /**
+     * Get current contract configuration.
+     * @returns Contract configuration.
+     */
     public async getConfig(): Promise<ContractConfig> {
+        // Get the value from contract config and cast to ContractConfig model.
         return JSONHelpers.castToModel<ContractConfig>(await this.hpContext.getConfig(), ['environment']);
 
     }
 
+    /**
+     * Update contract configuration.
+     * @param config Configuration with the values that needed to be updated.
+     */
     public async updateConfig(config: ContractConfig) {
         let patchCfg: ContractConfig = await this.getConfig();
 
-        if (!config.binPath)
-            throw 'Binary path cannot be empty.';
+        // Take only the non empty not null values since the values are optional.
 
-        patchCfg.binPath = config.binPath;
+        if (config.binPath)
+            patchCfg.binPath = config.binPath;
 
         if (config.binArgs)
             patchCfg.binArgs = config.binArgs;
@@ -81,14 +94,40 @@ class Context {
                 patchCfg.roundLimits.procOfdCount = config.roundLimits.procOfdCount;
         }
 
+        // Cast to a snake case object before sending to update.
         await this.hpContext.updateConfig(JSONHelpers.castFromModel(patchCfg, ['environment']));
     }
 
+    /**
+     * Add public keys to the contract UNL.
+     * @param pubKeys List of public keys that needed to be added.
+     */
+    public async addNodes(pubKeys: string[]) {
+        let config = await this.getConfig();
+        config.unl.push(...pubKeys);
+        await this.hpContext.updateConfig(JSONHelpers.castFromModel(config, ['environment']));
+    }
+
+    /**
+     * Remove public keys from contract UNL.
+     * @param pubKeys Public keys to remove.
+     */
+    public async removeNodes(pubKeys: string[]) {
+        let config = await this.getConfig();
+        config.unl = config.unl.filter(p => !pubKeys.includes(p));
+        await this.hpContext.updateConfig(JSONHelpers.castFromModel(config, ['environment']));
+    }
+
+    /**
+     * Update the contract binaries with given zip bundle.
+     * @param bundle Byte array of the contract bundle zip (Can include: contract binaries, contract.config, install.sh).
+     */
     public async updateContract(bundle: Buffer) {
         const CONFIG = "contract.config";
         const PATCH_CFG_BK = "../patch.cfg.bk";
         const INSTALL_SCRIPT = "install.sh";
 
+        // Create a temporary directory and unzip the bundle into it.
         const tmpDir = `bundle_${this.hpContext.lclHash.substr(0, 10)}`;
         fs.mkdirSync(tmpDir);
         const files = await new Promise<decompress.File[]>((resolve, reject) => {
@@ -99,18 +138,20 @@ class Context {
             });
         });
 
+        // If there's a configuration file inside the bundle update the contract configuration with it.
         const cfgFile = files.find(f => f.path === CONFIG);
-
         if (cfgFile) {
             const cfg: ContractConfig = JSONHelpers.castToModel<ContractConfig>(JSON.parse(cfgFile.data.toString()), ['environment']);
+            // Create backup of patch.config before update.
             fs.copyFileSync(PATCH_CFG, PATCH_CFG_BK);
             await this.updateConfig(cfg);
+            fs.rmSync(`${tmpDir}/${CONFIG}`);
         }
 
-        fs.rmSync(`${tmpDir}/${CONFIG}`);
-
+        // Prepare the post execution script to place the new contract binaries.
         let postExecScript = `#!/bin/bash`;
 
+        // Run install.sh script if there's one.
         const installScript = files.find(f => f.path === INSTALL_SCRIPT);
         if (installScript) {
             postExecScript += `
@@ -131,11 +172,13 @@ else
 fi`;
         }
 
+        // If success place contract binaries in state directory, remove temporary directory and patch config backup
         postExecScript += `
 mv ${tmpDir}/* ./ && rm -r ${tmpDir}
 rm ${PATCH_CFG_BK}
 exit 0
-`
+`;
+        // Create post execution script and change it's permissions.
         fs.writeFileSync(HP_POST_EXEC_SCRIPT, postExecScript);
         fs.chmodSync(HP_POST_EXEC_SCRIPT, 0o777);
     }
