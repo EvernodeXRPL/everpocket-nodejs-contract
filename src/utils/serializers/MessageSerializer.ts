@@ -86,9 +86,7 @@ class MessageSerializer {
     public serializeMessage(data: any): Buffer | null {
         try {
             if (this.validate(data))
-                return null;
-
-            return this.serializer.serialize(data);
+                return this.serializer.serialize(data);
         }
         catch {
             console.error('Invalid message format')
