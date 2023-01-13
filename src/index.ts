@@ -1,5 +1,7 @@
-export { default as Context } from './Context'
+export { default as VoteContext } from './vote/Context'
 
-export * from './vote-electors'
+export { default as ContractContext } from './contract/Context'
+
+export * from './vote/vote-electors'
 
 export * from './models'

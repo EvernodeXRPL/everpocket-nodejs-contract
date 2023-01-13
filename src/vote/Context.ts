@@ -1,17 +1,17 @@
 import * as EventEmitter from 'events';
-import MessageSerializer from './MessageSerializer';
-import { UnlNode } from './models/common';
-import AllVoteElector from './vote-electors/AllVoteElector';
 import { Buffer } from 'buffer';
+import { AllVoteElector } from './vote-electors';
+import { UnlNode } from '../models';
+import VoteSerializer from '../utils/serializers/VoteSerializer';
 
 class Context {
     hpContext: any;
     voteEmitter: EventEmitter = new EventEmitter();
-    serializer: MessageSerializer;
+    serializer: VoteSerializer;
 
-    public constructor(hpContext: any, options: any = {}) {
+    public constructor(hpContext: any) {
         this.hpContext = hpContext;
-        this.serializer = options.serializer || new MessageSerializer();
+        this.serializer = new VoteSerializer();
     }
 
     public feedUnlMessage(sender: UnlNode, msg: Buffer): void {
