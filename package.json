@@ -15,11 +15,13 @@
         "publish": "npm run bundle && cp npm-readme.md dist/README.md && npm publish ./dist",
         "test": "npm run build && npm --prefix test i &&  npm --prefix test start"
     },
+    "dependencies": {
+    },
     "devDependencies": {
         "eslint": "8.31.0"
     },
     "peerDependencies": {
-        "evernode-js-client": "^0.5.14",
-        "hotpocket-nodejs-contract": "0.x"
+        "hotpocket-nodejs-contract": "0.x",
+        "evernode-js-client": "0.x"
     }
 }

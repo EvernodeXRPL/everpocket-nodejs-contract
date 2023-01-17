@@ -19,7 +19,6 @@ class Context {
     }
 
     feedUnlMessage(sender, msg) {
-        this.sender = sender;
         const vote = this.serializer.deserializeVote(msg);
         vote && this.voteEmitter.emit(vote.election, sender, vote.data);
     }
