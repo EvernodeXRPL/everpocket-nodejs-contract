@@ -15,6 +15,7 @@ class Context {
     private hpContext: any;
     private eventEmitter: EventEmitter = new EventEmitter();
     private voteSerializer: VoteSerializer;
+    private listened: boolean = false;
 
     /**
      * HotPocket contract context handler.
@@ -22,7 +23,20 @@ class Context {
      */
     public constructor(hpContext: any, options: any = {}) {
         this.hpContext = hpContext;
-        this.voteSerializer = options.voteSerializer ||new VoteSerializer();
+        this.voteSerializer = options.voteSerializer || new VoteSerializer();
+    }
+
+    /**
+     * Initialize listener to the incoming unl messages.
+     */
+    private initUnlListener(): void {
+        if (!this.listened) {
+            // Listen to incoming unl messages and feed them to elector.
+            this.hpContext.unl.onMessage((node: UnlNode, msg: Buffer) => {
+                this.feedUnlMessage(node, msg);
+            });
+            this.listened = true;
+        }
     }
 
     /**
@@ -43,6 +57,7 @@ class Context {
      * @returns Evaluated votes as a promise.
      */
     public async vote(electionName: string, votes: any[], elector: AllVoteElector): Promise<any[]> {
+        this.initUnlListener();
 
         // Start the election.
         const election = elector.election(electionName, this.eventEmitter);
@@ -71,7 +86,7 @@ class Context {
      * Update contract configuration.
      * @param config Configuration with the values that needed to be updated.
      */
-    public async updateConfig(config: ContractConfig) {
+    public async updateConfig(config: ContractConfig): Promise<void> {
         let patchCfg: ContractConfig = await this.getConfig();
 
         // Take only the non empty not null values since the values are optional.
@@ -150,7 +165,7 @@ class Context {
      * Add public keys to the contract UNL.
      * @param pubKeys List of public keys that needed to be added.
      */
-    public async addUNLNodes(pubKeys: string[]) {
+    public async addUNLNodes(pubKeys: string[]): Promise<void> {
         let config = await this.getConfig();
         if (!config.unl)
             config.unl = [];
@@ -162,7 +177,7 @@ class Context {
      * Remove public keys from contract UNL.
      * @param pubKeys Public keys to remove.
      */
-    public async removeUNLNodes(pubKeys: string[]) {
+    public async removeUNLNodes(pubKeys: string[]): Promise<void> {
         let config = await this.getConfig();
         if (config.unl)
             config.unl = config.unl.filter(p => !pubKeys.includes(p));
@@ -173,7 +188,7 @@ class Context {
      * Add peers to the peer list.
      * @param peers Peers to add.
      */
-    public async addPeers(peers: Peer[]) {
+    public async addPeers(peers: Peer[]): Promise<void> {
         await this.hpContext.updatePeers(peers.map(p => p.toString()), null);
     }
 
@@ -181,7 +196,7 @@ class Context {
      * Remove peers from the peer list.
      * @param peers Peers to remove.
      */
-    public async removePeers(peers: Peer[]) {
+    public async removePeers(peers: Peer[]): Promise<void> {
         await this.hpContext.updatePeers(null, peers.map(p => p.toString()));
     }
 
@@ -189,7 +204,7 @@ class Context {
      * Update the contract binaries with given zip bundle.
      * @param bundle Byte array of the contract bundle zip (Can include: contract binaries, contract.config, install.sh).
      */
-    public async updateContract(bundle: Buffer) {
+    public async updateContract(bundle: Buffer): Promise<void> {
         const CONFIG = "contract.config";
         const PATCH_CFG_BK = "../patch.cfg.bk";
         const INSTALL_SCRIPT = "install.sh";
@@ -248,6 +263,18 @@ exit 0
         // Create post execution script and change it's permissions.
         fs.writeFileSync(HP_POST_EXEC_SCRIPT, postExecScript);
         fs.chmodSync(HP_POST_EXEC_SCRIPT, 0o777);
+    }
+
+    public async random(): Promise<number | null> {
+        this.initUnlListener();
+
+        const number = Math.random();
+        const config = await this.getConfig();
+
+        const timeout = (config.consensus?.roundtime || 0) / 2 || 1000;
+        const rn = await this.vote(`randomNumber${this.hpContext.timestamp}`, [number], new AllVoteElector(this.hpContext.unl.list().length, timeout));
+
+        return rn.length ? Math.min(...rn.map(v => v.data)) : null;
     }
 }
 
