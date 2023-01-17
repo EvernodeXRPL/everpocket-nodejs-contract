@@ -1,0 +1,1 @@
+export { default as MultiSigner } from './MultiSigner'

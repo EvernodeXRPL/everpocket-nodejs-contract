@@ -25,11 +25,6 @@ const testContract = async (ctx) => {
             await fs.writeFile(filename, masterKey);
         }
 
-        
-
-        const someTx = {};
-        const rr = await evpContext.enableMultiSigning(masterKey);
-        const r1 = evpContext.submitTransaction(tx, masterKey)
     }
 }
 
