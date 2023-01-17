@@ -9,16 +9,19 @@
     "license": "MIT",
     "version": "0.1.0",
     "scripts": {
-        "lint": "./node_modules/.bin/eslint src/**/*.js",
-        "build": "npm run lint && ncc build src/index.js -o dist/",
+        "lint": "./node_modules/.bin/eslint src --ext .ts",
+        "build": "npm run lint && tsc --build tsconfig.json",
         "bundle": "npm run build && ./clean-pkg.sh",
         "publish": "npm run bundle && cp npm-readme.md dist/README.md && npm publish ./dist",
         "test": "npm run build && npm --prefix test i &&  npm --prefix test start"
     },
     "dependencies": {
+        "@typescript-eslint/parser": "5.48.1"
     },
     "devDependencies": {
-        "eslint": "8.31.0"
+        "@types/node": "18.11.18",
+        "eslint": "8.31.0",
+        "typescript": "4.9.4"
     },
     "peerDependencies": {
         "hotpocket-nodejs-contract": "0.x",
