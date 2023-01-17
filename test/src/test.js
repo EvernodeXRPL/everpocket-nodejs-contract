@@ -138,13 +138,13 @@ const updateUnl = async (evpContext, ctx) => {
     // Remove node if text file does not exist.
     if (!fs.existsSync(removedNode)) {
         const pubKey = unlList[unlList.length - 1].publicKey;
-        await evpContext.removeUNLNodes([pubKey]);
+        await evpContext.removeUnlNodes([pubKey]);
         fs.writeFileSync(removedNode, pubKey);
     }
     // Add node if text file exist.
     else {
         const pubKey = fs.readFileSync(removedNode).toString();
-        await evpContext.addUNLNodes([pubKey]);
+        await evpContext.addUnlNodes([pubKey]);
         fs.rmSync(removedNode);
     }
 }
