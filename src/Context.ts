@@ -5,7 +5,7 @@ import { JSONHelpers } from './utils';
 import * as decompress from 'decompress';
 import { ContractConfig, Peer } from './models';
 import { UnlNode } from './models';
-import VoteSerializer from './utils/serializers/VoteSerializer';
+import VoteSerializer from './vote/VoteSerializer';
 import { AllVoteElector } from './vote/vote-electors';
 
 const PATCH_CFG = "../patch.cfg";
@@ -20,9 +20,9 @@ class Context {
      * HotPocket contract context handler.
      * @param hpContext HotPocket contract context.
      */
-    public constructor(hpContext: any) {
+    public constructor(hpContext: any, options: any = {}) {
         this.hpContext = hpContext;
-        this.voteSerializer = new VoteSerializer();
+        this.voteSerializer = options.voteSerializer ||new VoteSerializer();
     }
 
     /**

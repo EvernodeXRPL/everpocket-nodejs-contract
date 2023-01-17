@@ -1,5 +1,5 @@
 import { Buffer } from 'buffer';
-import MessageSerializer from './MessageSerializer';
+import MessageSerializer from '../utils/MessageSerializer';
 
 const msgFields = {
     type: '_evpType',

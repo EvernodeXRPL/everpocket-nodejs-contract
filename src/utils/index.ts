@@ -1,2 +1,2 @@
-export { default as VoteSerializer } from './serializers/VoteSerializer'
+export { default as MessageSerializer } from './MessageSerializer'
 export { default as JSONHelpers } from './helpers/JSONHelper'
