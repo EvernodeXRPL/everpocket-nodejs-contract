@@ -7,6 +7,7 @@ import { ContractConfig, Peer } from './models';
 import { UnlNode } from './models';
 import VoteSerializer from './vote/VoteSerializer';
 import { AllVoteElector } from './vote/vote-electors';
+import { v4 as uuidv4 } from 'uuid';
 
 const PATCH_CFG = "../patch.cfg";
 const HP_POST_EXEC_SCRIPT = "post_exec.sh";
@@ -265,16 +266,38 @@ exit 0
         fs.chmodSync(HP_POST_EXEC_SCRIPT, 0o777);
     }
 
-    public async random(): Promise<number | null> {
+    /**
+     * Generates a random number.
+     * @param timeout Maximum timeout to generate a random number.
+     * @returns A random number between 0-1.
+     */
+    public async random(timeout: number = 1000): Promise<number | null> {
         this.initUnlListener();
 
+        // Generate a random number.
+        // Vote for the random number each node has generated.
         const number = Math.random();
-        const config = await this.getConfig();
-
-        const timeout = (config.consensus?.roundtime || 0) / 2 || 1000;
         const rn = await this.vote(`randomNumber${this.hpContext.timestamp}`, [number], new AllVoteElector(this.hpContext.unl.list().length, timeout));
 
+        // Take the minimum random number.
         return rn.length ? Math.min(...rn.map(v => v.data)) : null;
+    }
+
+    /**
+     * Generates an uuid string.
+     * @param timeout Maximum timeout to generate an uuid.
+     * @returns An uuid.
+     */
+    public async uuid4(timeout: number = 1000): Promise<string | null> {
+        this.initUnlListener();
+
+        // Generate an uuid.
+        // Vote for the uuid each node has generated.
+        const uuid = uuidv4();
+        const uuids = await this.vote(`uuid4${this.hpContext.timestamp}`, [uuid], new AllVoteElector(this.hpContext.unl.list().length, timeout));
+
+        // Take the first ascending uuid.
+        return uuids.length ? uuids.map(v => v.data).sort()[0] : null;
     }
 }
 

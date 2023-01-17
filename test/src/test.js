@@ -15,6 +15,7 @@ const testContract = async (ctx) => {
             () => updateUnl(evpContext, ctx),
             () => updatePeers(evpContext),
             () => randomNumber(evpContext),
+            () => uuidv4(evpContext),
         ];
 
         for (const test of tests) {
@@ -25,11 +26,6 @@ const testContract = async (ctx) => {
 
 // Voting examples.
 const testVote = async (evpContext, ctx) => {
-    // Listen to incoming unl messages and feed them to elector.
-    ctx.unl.onMessage((node, msg) => {
-        evpContext.feedUnlMessage(node, msg);
-    })
-
     // Send votes to an election.
     const r1 = evpContext.vote("firstRound", [1, 2], new evp.AllVoteElector(10, 1000));
     const r2 = evpContext.vote("secondRound", [6, 7], new evp.AllVoteElector(10, 1000));
@@ -89,7 +85,7 @@ const updateContract = async (evpContext) => {
         bin_path: '/usr/bin/node',
         bin_args: 'index.js',
         consensus: {
-            roundtime: 2000
+            roundtime: 4000
         }
     }, null, 4));
 
@@ -176,6 +172,15 @@ const randomNumber = async (evpContext) => {
 
     console.log('Random number 1', random1);
     console.log('Random number 2', random2);
+}
+
+// Get an uuid.
+const uuidv4 = async (evpContext) => {
+    const uuid1 = await evpContext.uuid4();
+    const uuid2 = await evpContext.uuid4();
+
+    console.log('UUID 1', uuid1);
+    console.log('UUID 2', uuid2);
 }
 
 const hpc = new HotPocket.Contract();
