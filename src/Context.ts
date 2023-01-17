@@ -150,7 +150,7 @@ class Context {
      * Add public keys to the contract UNL.
      * @param pubKeys List of public keys that needed to be added.
      */
-    public async addUNLNodes(pubKeys: string[]) {
+    public async addUnlNodes(pubKeys: string[]) {
         let config = await this.getConfig();
         if (!config.unl)
             config.unl = [];
@@ -162,7 +162,7 @@ class Context {
      * Remove public keys from contract UNL.
      * @param pubKeys Public keys to remove.
      */
-    public async removeUNLNodes(pubKeys: string[]) {
+    public async removeUnlNodes(pubKeys: string[]) {
         let config = await this.getConfig();
         if (config.unl)
             config.unl = config.unl.filter(p => !pubKeys.includes(p));
