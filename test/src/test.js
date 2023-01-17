@@ -31,13 +31,25 @@ async function fileUpload(ctx) {
             for (const input of user.inputs) {
                 const buf = await ctx.users.read(input);
                 const msg = bson.deserialize(buf);
-                if (msg.type == "upload") {
-                    const output = evpContext.upload(msg);
-                    await user.send(bson.serialize(output));
-                }
-                else if (msg.type == "merge") {
-                    const output = evpContext.mergeUploadedFiles(msg);
-                    await user.send(bson.serialize(output));
+                switch (msg.type) {
+                    case 'file': {
+                        if (msg.action == "upload") {
+                            const output = evpContext.upload(msg);
+                            await user.send(bson.serialize(output));
+                        }
+                        else if (msg.action == "merge") {
+                            const output = evpContext.mergeUploadedFiles(msg);
+                            await user.send(bson.serialize(output));
+                        }
+                        else if (msg.action == "delete") {
+                            const output = evpContext.deleteFile(msg.fileName);
+                            await user.send(bson.serialize(output));
+                        }
+                    }
+                        break;
+
+                    default:
+                        break;
                 }
             }
         }

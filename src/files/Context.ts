@@ -88,9 +88,32 @@ class FilesContext {
                 return {
                     ...output,
                     status: "ok",
-                    fileName: msg.rebuildFileName
+                    data: {
+                        fileName: msg.rebuildFileName
+                    }
                 };
             }
+        }
+    }
+
+    public deleteFile(fileName: string): any {
+        const output = { ...outputFormat, action: "delete" }
+        if (fs.existsSync(fileName)) {
+            fs.unlinkSync(fileName);
+            return {
+                ...output,
+                status: "ok",
+                fileName: fileName
+            };
+        }
+        else {
+            return {
+                ...output,
+                status: "not_found",
+                data: {
+                    fileName: fileName
+                }
+            };
         }
     }
 }
