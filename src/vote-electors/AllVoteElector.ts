@@ -1,15 +1,17 @@
-class AllVoteElector {
-    desiredVoteCount;
-    timeout;
+import * as EventEmitter from 'events';
 
-    constructor(desiredVoteCount, timeout) {
+class AllVoteElector {
+    desiredVoteCount: number;
+    timeout: number;
+
+    public constructor(desiredVoteCount: number, timeout: number) {
         this.desiredVoteCount = desiredVoteCount;
         this.timeout = timeout;
     }
 
-    election(electionName, voteEmitter) {
+    election(electionName: string, voteEmitter: EventEmitter): Promise<any[]> {
         return new Promise((resolve) => {
-            const collected = [];
+            const collected: any[] = [];
 
             // Fire up the timeout if we didn't receive enough votes.
             const timer = setTimeout(() => resolve(collected), this.timeout);
@@ -27,6 +29,4 @@ class AllVoteElector {
     }
 }
 
-module.exports = {
-    AllVoteElector
-}
+export default AllVoteElector;
