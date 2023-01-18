@@ -29,4 +29,5 @@ class AllVoteElector {
     }
 }
 
+
 export default AllVoteElector;

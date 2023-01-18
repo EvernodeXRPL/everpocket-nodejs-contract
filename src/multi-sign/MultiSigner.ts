@@ -1,4 +1,5 @@
-import { signerList } from "../models";
+import { SignerList } from "../models";
+import kp = require('ripple-keypairs');
 
 const evernode = require('evernode-js-client');
 const fs = require("fs").promises;
@@ -17,22 +18,26 @@ class MultiSigner {
     }
 
     /**
-     * signerList :   A list with signer objects
+     * (Master Account method)
+     * This submits a signerList transaction to the account and then disable the master key. SignerList is saved to an object.
      * 
-     *  This submits a signerList transaction to the account and then disable the master key. SignerList is saved to an object.
+     * @param quorum 
+     * @param signerList 
+     * @param masterKey 
+     * @param disableMasterKey 
      */
-    static async enable(quorum: number, signerList: signerList[], masterKey: string, disableMasterKey: boolean = false): Promise<void> {
+    public async enable(quorum: number, signerList: SignerList[], disableMasterKey: boolean = false): Promise<void> {
 
-        const masterAccount = new evernode.XrplAccount(null, masterKey);
+        // const masterAccount = new evernode.XrplAccount(null, masterKey);
         // Add a validation to check if the account has a signerList already.
 
         try {
             // Set a signerList for the account
-            await masterAccount.setSignerList(signerList, { SignerQuorum: quorum });
+            await this.nodeAccount.setSignerList(signerList, { SignerQuorum: quorum });
 
             if (disableMasterKey)
                 // Disable the master key
-                await masterAccount.setAccountFields({ Flags: { asfDisableMaster: true } });
+                await this.nodeAccount.setAccountFields({ Flags: { asfDisableMaster: true } });
 
         } catch (e) {
             throw (e);
@@ -41,44 +46,44 @@ class MultiSigner {
     }
 
     /**
-     * 
-     * @param {string} keyLocation Defaults to "../node.key"
-     * @returns The generated public address as a promise
+     * Generate a key for the node and save the node key in a file named by (../\<master address\>.key) .
+     * @param masterKey 
+     * @returns 
      */
-    static async generateAccount(keyLocation = "../node.key"): Promise<string> {
-        const privatekey = evernode.generatePrivate();
-        await fs.writeFile(keyLocation, privatekey);
+    static async generateAccount(masterKey: string): Promise<{address: string, secret: string}> {
+        const nodeSecret = kp.generateSeed({algorithm:"ecdsa-secp256k1"});
 
-        const nodeAccountAddress = new evernode.XrplAccount(null, privatekey).address;
-        return nodeAccountAddress;
+        const keyPair = kp.deriveKeypair(masterKey);
+        const keyFileName = kp.deriveAddress(keyPair.publicKey);
+        await fs.writeFile(`../${keyFileName}.key`, nodeSecret);
+
+        const nodeAccount = new evernode.XrplAccount(null, nodeSecret);
+        const nodeAddress: string  = nodeAccount.address;
+        return {address: nodeAddress, secret: nodeSecret};
     }
 
-    /**
-     * 
-     * @param {string} masterKey Secret key of the target account
-     * @returns An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || null 
-     */
-    static async getSignerList(masterKey: string): Promise<any> {
-        const masterAccount = new evernode.XrplAccount(null, masterKey);
-        const accountObjects = await masterAccount.getAccountObjects({ type: "signer_list" });
+   /**
+    * Returns the signer list of the account
+    * @returns An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || null 
+    */
+    public async getSignerList(): Promise<{signerQuorum: number, signerList: SignerList[]} | undefined> {
+        const accountObjects = await this.nodeAccount.getAccountObjects({ type: "signer_list" });
         if (accountObjects.length > 0) {
             const signerObject = accountObjects.filter((ob: any) => ob.LedgerEntryType === 'SignerList')[0];
-            const signerList = accountObjects.SignerEntries.map((signer: any) => ({ account: signer.SignerEntry.Account, weight: signer.SignerEntry.SignerWeight }));
+            const signerList: SignerList[] = accountObjects.SignerEntries.map((signer: any) => ({ account: signer.SignerEntry.Account, weight: signer.SignerEntry.SignerWeight }));
             const res = { signerQuorum: signerObject.SignerQuorum, signerList: signerList };
             return res;
-        }
-        else {
-            return null;
-        }
+        } 
+        else 
+         return undefined;
     }
 
     /**
      * 
-     * @returns The sequence number of the given account.
+     * @returns 
      */
-    static async getSequenceNumber(masterKey: string): Promise<number> {
-        const masterAccount = new evernode.XrplAccount(null, masterKey);
-        return await masterAccount.getSequence();
+    public async getSequenceNumber(): Promise<number> {
+        return await this.nodeAccount.getSequence();
     }
 
     /**
@@ -87,7 +92,7 @@ class MultiSigner {
      * @returns The signed transaction blob
      */
     public sign(tx: any): string {
-        const signedTxBlob: string = this.nodeAccount.sign(tx);
+        const signedTxBlob: string = this.nodeAccount.sign(tx, true);
         return signedTxBlob;
     }
 
@@ -109,39 +114,10 @@ class MultiSigner {
 
             const tx_status = await this.xrplApi.submissionStatus(res.hash)
             if (tx_status == "tesSUCCESS")
-                return true;
+                return tx_status;
 
         } catch (error) {
             console.log("Error in submitting the multisigned transaction.", error);
-        } finally {
-            await this.xrplApi.disconnect();
-        }
-    }
-
-    // Not in Use
-    async isMultiSignedEnabled(masterkey: string) {
-        const masterAccount = new evernode.XrplAccount(null, masterkey);
-
-        try {
-            const acc_info = await masterAccount.getInfo();  // Returns account_data field object
-
-        } catch (error) {
-            console.log("Error in fetching account info", error)
-        } finally {
-            await this.xrplApi.disconnect();
-        }
-    }
-
-    // Not in Use
-    async getAccountInfo(masterkey: string) {
-        let acc_info = null;
-
-        const masterAccount = new evernode.XrplAccount(null, masterkey);
-        try {
-            acc_info = await masterAccount.getInfo(); // Returns account_data field object
-            return acc_info;
-        } catch (error) {
-            throw (`Error in fetching account info:  ${error}`);
         } finally {
             await this.xrplApi.disconnect();
         }
