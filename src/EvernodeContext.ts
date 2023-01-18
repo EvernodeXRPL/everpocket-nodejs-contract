@@ -47,4 +47,4 @@ class EvernodeContext extends Context {
     }
 }
 
-export default Context;
+export default EvernodeContext;
