@@ -22,7 +22,7 @@ class Context {
      */
     public constructor(hpContext: any, options: any = {}) {
         this.hpContext = hpContext;
-        this.voteSerializer = options.voteSerializer ||new VoteSerializer();
+        this.voteSerializer = options.voteSerializer || new VoteSerializer();
     }
 
     /**
