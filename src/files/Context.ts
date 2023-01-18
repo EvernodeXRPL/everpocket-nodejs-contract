@@ -103,7 +103,9 @@ class FilesContext {
             return {
                 ...output,
                 status: "ok",
-                fileName: fileName
+                data: {
+                    fileName: fileName
+                }
             };
         }
         else {
