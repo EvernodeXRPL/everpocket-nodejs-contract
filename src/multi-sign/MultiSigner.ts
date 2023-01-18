@@ -1,15 +1,14 @@
-import { signerList } from "../models";
-
-const evernode = require('evernode-js-client');
-const fs = require("fs").promises;
+import { Signer } from "../models";
+import * as evernode from 'evernode-js-client';
+import * as fs from 'fs';
 
 class MultiSigner {
     public xrplApi: any = null;
     public nodeAddress: string = '';
     public nodeAccount: any;
 
-    public constructor(nodeKey: string) {
-        this.nodeAccount = new evernode.XrplAccount(null, nodeKey);
+    public constructor(address: string | null = null, secret: string | null = null) {
+        this.nodeAccount = new evernode.XrplAccount(address, secret);
         this.nodeAddress = this.nodeAccount.address;
 
         // Use a singleton xrplApi for all tests.
@@ -21,23 +20,14 @@ class MultiSigner {
      * 
      *  This submits a signerList transaction to the account and then disable the master key. SignerList is saved to an object.
      */
-    static async enable(quorum: number, signerList: signerList[], masterKey: string, disableMasterKey: boolean = false): Promise<void> {
+    async setSignerList(quorum: number, signerList: Signer[], sequence: number): Promise<void> {
+        // Set a signerList for the account
+        await this.nodeAccount.setSignerList(signerList, { SignerQuorum: quorum, sequence: sequence });
+    }
 
-        const masterAccount = new evernode.XrplAccount(null, masterKey);
-        // Add a validation to check if the account has a signerList already.
-
-        try {
-            // Set a signerList for the account
-            await masterAccount.setSignerList(signerList, { SignerQuorum: quorum });
-
-            if (disableMasterKey)
-                // Disable the master key
-                await masterAccount.setAccountFields({ Flags: { asfDisableMaster: true } });
-
-        } catch (e) {
-            throw (e);
-        }
-
+    async disableMasterKey(sequence: number): Promise<void> {
+        // Disable the master key
+        await this.nodeAccount.setAccountFields({ Flags: { asfDisableMaster: true }, sequence: sequence });
     }
 
     /**
@@ -45,9 +35,9 @@ class MultiSigner {
      * @param {string} keyLocation Defaults to "../node.key"
      * @returns The generated public address as a promise
      */
-    static async generateAccount(keyLocation = "../node.key"): Promise<string> {
+    async generateAccount(keyLocation = "../node.key"): Promise<string> {
         const privatekey = evernode.generatePrivate();
-        await fs.writeFile(keyLocation, privatekey);
+        fs.writeFileSync(keyLocation, privatekey);
 
         const nodeAccountAddress = new evernode.XrplAccount(null, privatekey).address;
         return nodeAccountAddress;
@@ -70,15 +60,6 @@ class MultiSigner {
         else {
             return null;
         }
-    }
-
-    /**
-     * 
-     * @returns The sequence number of the given account.
-     */
-    static async getSequenceNumber(masterKey: string): Promise<number> {
-        const masterAccount = new evernode.XrplAccount(null, masterKey);
-        return await masterAccount.getSequence();
     }
 
     /**
