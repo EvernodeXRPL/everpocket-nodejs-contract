@@ -4,18 +4,17 @@ import * as fs from 'fs';
 import * as kp from 'ripple-keypairs';
 
 class MultiSigner {
-    private xrplApi: any = null;
+    private xrplApi: any;
     private keyPath: string;
     public masterAcc: any;
     public signerAcc: any;
 
-    public constructor(address: string | null = null, secret: string | null = null) {
-        this.xrplApi = new evernode.XrplApi('wss://hooks-testnet-v2.xrpl-labs.com');
-
-        this.masterAcc = new evernode.XrplAccount(address, secret);
+    public constructor(xrplApi: any, address: string | null = null, secret: string | null = null) {
+        this.xrplApi = xrplApi;
+        this.masterAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
         this.keyPath = `../${this.masterAcc.address}.key`;
         if (fs.existsSync(this.keyPath)) {
-            this.signerAcc = new evernode.XrplAccount(null, fs.readFileSync(this.keyPath));
+            this.signerAcc = new evernode.XrplAccount(null, fs.readFileSync(this.keyPath), { xrplApi: this.xrplApi });
         }
     }
 
