@@ -19,38 +19,39 @@ class MultiSigner {
     }
 
     /**
-     * (Master Account method)
-     * This submits a signerList transaction to the account and then disable the master key. SignerList is saved to an object.
-     * 
+     * Set signer list for the master account
      * @param quorum 
      * @param signerList 
-     * @param masterKey 
-     * @param disableMasterKey 
+     * @param sequence
      */
     public async setSignerList(quorum: number, signerList: Signer[], sequence: number): Promise<void> {
         // Set a signerList for the account
         await this.masterAcc.setSignerList(signerList, { SignerQuorum: quorum, sequence: sequence });
     }
 
+    /**
+     * Disable the master key
+     * @param sequence 
+     */
     public async disableMasterKey(sequence: number): Promise<void> {
-        // Disable the master key
         await this.masterAcc.setAccountFields({ Flags: { asfDisableMaster: true }, sequence: sequence });
     }
 
     /**
      * Generate a key for the node and save the node key in a file named by (../\<master address\>.key) .
      * @param masterKey 
-     * @returns 
+     * @returns Generated account's public address
      */
     public generateSigner(): string {
         const nodeSecret = kp.generateSeed({ algorithm: "ecdsa-secp256k1" });
         fs.writeFileSync(this.keyPath, nodeSecret);
-        return nodeSecret;
+        const keypair = kp.deriveKeypair(nodeSecret);
+        return kp.deriveAddress(keypair.publicKey);
     }
 
     /**
      * Returns the signer list of the account
-     * @returns An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || null 
+     * @returns An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || undefined 
      */
     public async getSignerList(): Promise<{ signerQuorum: number, signerList: Signer[] } | undefined> {
         const accountObjects = await this.masterAcc.getAccountObjects({ type: "signer_list" });
@@ -98,6 +99,7 @@ class MultiSigner {
 
         } catch (error) {
             console.log("Error in submitting the multisigned transaction.", error);
+            throw(error);
         } finally {
             await this.xrplApi.disconnect();
         }
