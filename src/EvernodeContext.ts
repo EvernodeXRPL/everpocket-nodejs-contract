@@ -1,6 +1,6 @@
 import Context from './Context';
-import { Signer } from './models';
-import { MultiSigner } from './multi-sign';
+import { SignedBlob, Signer } from './models';
+import { MultiSignedBlobCollector, MultiSigner } from './multi-sign';
 import { AllVoteElector } from './vote-electors';
 import * as evernode from 'evernode-js-client';
 
@@ -10,7 +10,7 @@ class EvernodeContext extends Context {
 
         // Decide a sequence number to send the same transaction from all the nodes.
         const sequence = await xrplAcc.getSequenceNumber();
-        const sequences: number[] = await this.vote(`transactionInfo${this.hpContext.timestamp}`, [sequence], new AllVoteElector(this.hpContext.unl.list().length, timeout));
+        const sequences: number[] = (await this.vote(`transactionInfo${this.hpContext.timestamp}`, [sequence], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
 
         return sequences.sort()[0];
     }
@@ -20,30 +20,33 @@ class EvernodeContext extends Context {
 
         // Generate and collect signer list if signer list isn't provided.
         if (!signerList || !signerList.length) {
-            const signer = multiSigner.generateAccount();
-            signerList = await this.vote(`multiSigner${this.hpContext.timestamp}`, [signer], new AllVoteElector(this.hpContext.unl.list().length, timeout));
+            const signer = multiSigner.generateSigner();
+            signerList = (await this.vote(`multiSigner${this.hpContext.timestamp}`, [signer], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
         }
 
         // Configure multisig for the account.
-        await multiSigner.setSignerList(quorum, signerList, await this.getSequenceNumber(multiSigner.nodeAccount.address));
+        await multiSigner.setSignerList(quorum, signerList, await this.getSequenceNumber(multiSigner.masterAcc.address));
 
         if (disableMasterKey)
-            await multiSigner.disableMasterKey(await this.getSequenceNumber(multiSigner.nodeAccount.address));
+            await multiSigner.disableMasterKey(await this.getSequenceNumber(multiSigner.masterAcc.address));
 
         return multiSigner;
     }
 
-    public async submitTransaction(address: string, transaction: any, timeout: number = 1000) {
+    public async submitTransaction(address: string, transaction: any, timeout: number = 2000) {
         const multiSigner = new MultiSigner(address, null);
+        const signerListInfo = await multiSigner.getSignerList();
 
-        transaction.Sequence = await this.getSequenceNumber(multiSigner.nodeAccount.address);
+        transaction.Sequence = await this.getSequenceNumber(multiSigner.masterAcc.address);
 
         // Sign the transaction and collect the signed blob list.
         const signed = multiSigner.sign(transaction);
-        const signList = await this.vote(`sign${this.hpContext.timestamp}`, [signed], new AllVoteElector(this.hpContext.unl.list().length, timeout));
+        const signedBlobs = (await this.vote(`sign${this.hpContext.timestamp}`, [<SignedBlob>{ blob: signed, account: multiSigner.signerAcc.address }],
+            new MultiSignedBlobCollector(this.hpContext.npl.count, signerListInfo, timeout)))
+            .map(ob => ob.data);
 
         // Submit the signed blobs.
-        await multiSigner.submitSignedBlobs(signList);
+        await multiSigner.submitSignedBlobs(signedBlobs);
     }
 }
 

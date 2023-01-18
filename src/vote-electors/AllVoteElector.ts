@@ -1,4 +1,5 @@
 import * as EventEmitter from 'events';
+import { UnlNode } from '../models';
 
 class AllVoteElector {
     desiredVoteCount: number;
@@ -16,7 +17,7 @@ class AllVoteElector {
             // Fire up the timeout if we didn't receive enough votes.
             const timer = setTimeout(() => resolve(collected), this.timeout);
 
-            voteEmitter.on(electionName, (sender, data) => {
+            voteEmitter.on(electionName, (sender: UnlNode, data: any) => {
                 collected.push({ sender, data });
 
                 // Resolve immediately if we have the required no. of messages.
@@ -28,5 +29,6 @@ class AllVoteElector {
         });
     }
 }
+
 
 export default AllVoteElector;
