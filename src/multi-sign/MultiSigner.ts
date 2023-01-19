@@ -26,7 +26,9 @@ class MultiSigner {
      */
     public async setSignerList(quorum: number, signerList: Signer[], sequence: number): Promise<void> {
         // Set a signerList for the account
+        console.log("B1");
         await this.masterAcc.setSignerList(signerList, { SignerQuorum: quorum, sequence: sequence });
+        console.log("B2");
     }
 
     /**

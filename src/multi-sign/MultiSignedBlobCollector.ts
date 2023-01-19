@@ -1,6 +1,6 @@
 import EventEmitter = require("events");
 import { SignedBlob, Signer, SignerListInfo, UnlNode } from "../models";
-import { AllVoteElector } from "../vote-electors";
+import { AllVoteElector } from "../vote/vote-electors";
 
 class MultiSignedBlobCollector extends AllVoteElector {
     private signerListInfo?: SignerListInfo;

@@ -1,5 +1,5 @@
 import * as EventEmitter from 'events';
-import { UnlNode } from '../models';
+import { UnlNode } from '../../models';
 
 class AllVoteElector {
     desiredVoteCount: number;

@@ -1,7 +1,7 @@
-import Context from './Context';
-import { SignedBlob, Signer } from './models';
-import { MultiSignedBlobCollector, MultiSigner } from './multi-sign';
-import { AllVoteElector } from './vote-electors';
+import Context from './ContractContext';
+import { SignedBlob, Signer } from '../models';
+import { MultiSignedBlobCollector, MultiSigner } from '../multi-sign';
+import { AllVoteElector } from '../vote/vote-electors';
 import * as evernode from 'evernode-js-client';
 
 class EvernodeContext extends Context {
@@ -12,20 +12,25 @@ class EvernodeContext extends Context {
         this.xrplApi = new evernode.XrplApi('wss://hooks-testnet-v2.xrpl-labs.com');
     }
 
-    public async getSequenceNumber(address: string, timeout: number = 1000): Promise<number> {
-        const xrplAcc = new evernode.XrplAccount(address, { xrplApi: this.xrplApi });
-
+    public async getSequenceNumber(address: string, timeout: number = 5000): Promise<number> {
+        console.log("AA0");
+        const xrplAcc = new evernode.XrplAccount(address, null, { xrplApi: this.xrplApi });
+        console.log("AA1");
         await this.xrplApi.connect();
-
+        console.log("AA2");
         try {
             // Decide a sequence number to send the same transaction from all the nodes.
-            const sequence = await xrplAcc.getSequenceNumber();
+            const sequence = await xrplAcc.getSequence();
+            console.log("Sequence", sequence);
+            console.log("AA3");
             const sequences: number[] = (await this.vote(`transactionInfo${this.hpContext.timestamp}`, [sequence], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
-
+            console.log(sequences);
+            console.log("AA4");
             return sequences.sort()[0];
         }
         finally {
             await this.xrplApi.disconnect();
+            console.log("AA5");
         }
     }
 
@@ -38,25 +43,38 @@ class EvernodeContext extends Context {
      * @param disableMasterKey (optinal) Whether to disable the master key after setting the signr list. Defaults to false.
      */
     public async prepareMultiSigner(quorum: number, secret: string, signerList: Signer[] = [], timeout: number = 1000, disableMasterKey: boolean = false): Promise<void> {
-        const multiSigner = new MultiSigner(null, secret);
+        const multiSigner = new MultiSigner(this.xrplApi, null, secret);
+        console.log("A1");
         await this.xrplApi.connect();
-
+        console.log("A2");
         try {
             // Generate and collect signer list if signer list isn't provided.
             if (!signerList || !signerList.length) {
+                console.log("A3");
                 const signerAddress = multiSigner.generateSigner();
+                console.log("A4");
                 const addressList: string[] = (await this.vote(`multiSigner${this.hpContext.timestamp}`, [signerAddress], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
-                signerList = addressList.map(addr => (<Signer>{account: addr, weight: 1}));
+                console.log("A5");
+                signerList = addressList.map(addr => (<Signer>{ account: addr, weight: 1 }));
+                console.log("A6");
             }
 
+            console.log("A7");
+            console.log(multiSigner.masterAcc.address);
+            console.log(await this.getSequenceNumber(multiSigner.masterAcc.address));
+            console.log("A8");
             // Configure multisig for the account.
-            await multiSigner.setSignerList(quorum, signerList, await this.getSequenceNumber(multiSigner.masterAcc.address));
+            await multiSigner.setSignerList(quorum, signerList, (await this.getSequenceNumber(multiSigner.masterAcc.address))); 
+            console.log("A9");
 
             if (disableMasterKey)
                 await multiSigner.disableMasterKey(await this.getSequenceNumber(multiSigner.masterAcc.address));
+            console.log("A10");
         }
         finally {
+            console.log("A11");
             await this.xrplApi.disconnect();
+            console.log("A12");
         }
     }
 
@@ -67,7 +85,7 @@ class EvernodeContext extends Context {
      * @param timeout (optional) Defaults to 2000 in ms
      */
     public async submitTransaction(address: string, transaction: any, timeout: number = 2000): Promise<void> {
-        const multiSigner = new MultiSigner(address, null);
+        const multiSigner = new MultiSigner(this.xrplApi, address, null);
         await this.xrplApi.connect();
 
         try {

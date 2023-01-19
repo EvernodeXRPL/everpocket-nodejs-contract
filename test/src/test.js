@@ -4,16 +4,20 @@ const fs = require('fs');
 const archiver = require('archiver');
 
 const testContract = async (ctx) => {
-    const evpContext = new evp.Context(ctx);
+    const baseContext = new evp.BaseContext(ctx);
+    const contractContext = new evp.ContractContext(ctx);
+    const evernodeContext = new evp.EvernodeContext(ctx);
+
 
     if (!ctx.readonly) {
         const tests = [
-            () => testVote(evpContext, ctx),
-            () => getContractConfig(evpContext),
-            () => updateContractConfig(evpContext),
-            () => updateContract(evpContext),
-            () => updateUnl(evpContext, ctx),
-            () => updatePeers(evpContext),
+            // () => testVote(baseContext, ctx),
+            // () => getContractConfig(contractContext),
+            // () => updateContractConfig(contractContext),
+            // () => updateContract(contractContext),
+            // () => updateUnl(contractContext, ctx),
+            // () => updatePeers(contractContext),
+            () => multiSignTransaction(evernodeContext)
         ];
 
         for (const test of tests) {
@@ -23,30 +27,30 @@ const testContract = async (ctx) => {
 }
 
 // Voting examples.
-const testVote = async (evpContext, ctx) => {
+const testVote = async (baseContext, ctx) => {
     // Listen to incoming unl messages and feed them to elector.
     ctx.unl.onMessage((node, msg) => {
-        evpContext.feedUnlMessage(node, msg);
+        baseContext.feedUnlMessage(node, msg);
     })
 
     // Send votes to an election.
-    const r1 = evpContext.vote("firstRound", [1, 2], new evp.AllVoteElector(10, 1000));
-    const r2 = evpContext.vote("secondRound", [6, 7], new evp.AllVoteElector(10, 1000));
+    const r1 = baseContext.vote("firstRound", [1, 2], new evp.AllVoteElector(10, 1000));
+    const r2 = baseContext.vote("secondRound", [6, 7], new evp.AllVoteElector(10, 1000));
 
     console.log((await r1).map(v => v.data));
     console.log((await r2).map(v => v.data));
 }
 
 // Get contract config examples.
-const getContractConfig = async (evpContext) => {
+const getContractConfig = async (contractContext) => {
     // Get current contract config.
-    const config = await evpContext.getConfig();
+    const config = await contractContext.getConfig();
 
     console.log(JSON.stringify(config));
 }
 
 // Update contract config examples.
-const updateContractConfig = async (evpContext) => {
+const updateContractConfig = async (contractContext) => {
     // Print environment variable if exist.
     if (process.env.TEST_VAR)
         console.log(`Env TEST_VAR="${process.env.TEST_VAR}"`);
@@ -60,19 +64,19 @@ const updateContractConfig = async (evpContext) => {
     }
 
     // Update the contract config with updated one.
-    await evpContext.updateConfig(config);
+    await contractContext.updateConfig(config);
 
     console.log(`Config Updated`);
 }
 
 // Update contract config examples.
-const updateContract = async (evpContext) => {
+const updateContract = async (contractContext) => {
     /*
     In the real case scenario this bundle will be uploaded by the user from a client which can be collected as follows.
     for (const input of user.inputs) {
         const buf = await ctx.users.read(input);
         const msg = bson.deserialize(buf);
-        evpContext.updateContract(msg.content);
+        contractContext.updateContract(msg.content);
     }
     */
 
@@ -119,7 +123,7 @@ const updateContract = async (evpContext) => {
     fs.rmSync(bundle, { recursive: true });
 
     // Send bundle content buffer as it's received from user input.
-    await evpContext.updateContract(fs.readFileSync(zip));
+    await contractContext.updateContract(fs.readFileSync(zip));
 
     // Remove the zip file after update.
     fs.rmSync(zip);
@@ -129,7 +133,7 @@ const updateContract = async (evpContext) => {
 }
 
 // Update unl examples.
-const updateUnl = async (evpContext, ctx) => {
+const updateUnl = async (contractContext, ctx) => {
     // In this test in first consensus round, remove the last node from the unl and save the pubkey in a text file.
     // In next consensus round add the pubkey again to the unl and remove the text file.
     // So, repeatedly in every one after other consensus round the node will be removed and added.
@@ -140,19 +144,19 @@ const updateUnl = async (evpContext, ctx) => {
     // Remove node if text file does not exist.
     if (!fs.existsSync(removedNode)) {
         const pubKey = unlList[unlList.length - 1].publicKey;
-        await evpContext.removeUnlNodes([pubKey]);
+        await contractContext.removeUnlNodes([pubKey]);
         fs.writeFileSync(removedNode, pubKey);
     }
     // Add node if text file exist.
     else {
         const pubKey = fs.readFileSync(removedNode).toString();
-        await evpContext.addUnlNodes([pubKey]);
+        await contractContext.addUnlNodes([pubKey]);
         fs.rmSync(removedNode);
     }
 }
 
 // Update peers examples.
-const updatePeers = async (evpContext) => {
+const updatePeers = async (contractContext) => {
     // In this test in first consensus round, remove the 8083 peer from the peer.
     // In next consensus round add the peer again to the peer list.
     // So, repeatedly in every one after other consensus round the peer will be removed and added.
@@ -161,13 +165,40 @@ const updatePeers = async (evpContext) => {
 
     // Remove peer is text file does not exist.
     if (!fs.existsSync(removedPeer)) {
-        await evpContext.removePeers([peer]);
+        await contractContext.removePeers([peer]);
         fs.writeFileSync(removedPeer, '22863');
     }
     // Add peer if text file exist.
     else {
-        await evpContext.addPeers([peer.toString()]);
+        await contractContext.addPeers([peer.toString()]);
         fs.rmSync(removedPeer);
+    }
+}
+
+const multiSignTransaction = async (evernodeContext) => {
+
+    // user inputs
+    const signerList = []; // [{ account: "rafef45v45efefe", weight: 1 }, { account: "rafef4gg5v45efefe", weight: 1 }];
+    const quorum = 3;
+    const masterKey = "ssJ3BwXRpH5TLDnJDFNNZUJziX3oC";
+    const masterAddress = "r3KvcExtEwa851uV8nJmosGkcwG8i1Bpzo";
+    const tx = {
+
+        TransactionType: "Payment",
+        Account: "r3KvcExtEwa851uV8nJmosGkcwG8i1Bpzo",
+        Destination: "rNbmMCHbSjkpGLNfqYxKT8NU1Bxue8r6s3",
+        Amount: "1000",
+        Fee: "12",
+        Flags: 2147483648
+    };
+
+    try {
+        console.log("----------- Multi-Signing Test")
+        await evernodeContext.prepareMultiSigner(quorum, masterKey, signerList, 2000, true);
+        await evernodeContext.submitTransaction(masterAddress, tx);
+
+    } catch (e) {
+        console.log(e);
     }
 }
 
