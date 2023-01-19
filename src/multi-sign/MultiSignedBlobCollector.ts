@@ -1,5 +1,5 @@
 import EventEmitter = require("events");
-import { SignerListInfo } from "../models/common";
+import { SignedBlob, Signer, SignerListInfo, UnlNode } from "../models";
 import { AllVoteElector } from "../vote-electors";
 
 class MultiSignedBlobCollector extends AllVoteElector {
@@ -17,11 +17,11 @@ class MultiSignedBlobCollector extends AllVoteElector {
             // Fire up the timeout if we didn't receive enough votes.
             const timer = setTimeout(() => resolve(collected), this.timeout);
 
-            voteEmitter.on(electionName, (sender, data) => {
+            voteEmitter.on(electionName, (sender: UnlNode, data: SignedBlob) => {
                 collected.push({ sender, data });
 
                 const currSignerWeight = collected.reduce((total: number, co: any) => {
-                    const signer = this.signerListInfo?.signerList.find((ob: any) => ob.account == co.data.account);
+                    const signer = this.signerListInfo?.signerList.find((ob: Signer) => ob.account == co.data.account);
                     if (signer)
                         return total + signer.weight;
                     else

@@ -1,89 +1,68 @@
-import { SignerList } from "../models";
-import kp = require('ripple-keypairs');
-
-const evernode = require('evernode-js-client');
-const fs = require("fs").promises;
+import { Signer } from "../models";
+import * as evernode from 'evernode-js-client';
+import * as fs from 'fs';
+import * as kp from 'ripple-keypairs';
 
 class MultiSigner {
-    public xrplApi: any = null;
-    public nodeAddress: string = '';
-    public nodeAccount: any;
+    private xrplApi: any;
+    private keyPath: string;
+    public masterAcc: any;
+    public signerAcc: any;
 
-    public constructor(nodeKey: string) {
-        this.nodeAccount = new evernode.XrplAccount(null, nodeKey);
-        this.nodeAddress = this.nodeAccount.address;
-
-        // Use a singleton xrplApi for all tests.
-        this.xrplApi = new evernode.XrplApi('wss://hooks-testnet-v2.xrpl-labs.com');
+    public constructor(xrplApi: any, address: string | null = null, secret: string | null = null) {
+        this.xrplApi = xrplApi;
+        this.masterAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
+        this.keyPath = `../${this.masterAcc.address}.key`;
+        if (fs.existsSync(this.keyPath)) {
+            this.signerAcc = new evernode.XrplAccount(null, fs.readFileSync(this.keyPath), { xrplApi: this.xrplApi });
+        }
     }
 
     /**
-     * (Master Account method)
-     * This submits a signerList transaction to the account and then disable the master key. SignerList is saved to an object.
-     * 
+     * Set signer list for the master account
      * @param quorum 
      * @param signerList 
-     * @param masterKey 
-     * @param disableMasterKey 
+     * @param sequence
      */
-    public async enable(quorum: number, signerList: SignerList[], disableMasterKey: boolean = false): Promise<void> {
+    public async setSignerList(quorum: number, signerList: Signer[], sequence: number): Promise<void> {
+        // Set a signerList for the account
+        await this.masterAcc.setSignerList(signerList, { SignerQuorum: quorum, sequence: sequence });
+    }
 
-        // const masterAccount = new evernode.XrplAccount(null, masterKey);
-        // Add a validation to check if the account has a signerList already.
-
-        try {
-            // Set a signerList for the account
-            await this.nodeAccount.setSignerList(signerList, { SignerQuorum: quorum });
-
-            if (disableMasterKey)
-                // Disable the master key
-                await this.nodeAccount.setAccountFields({ Flags: { asfDisableMaster: true } });
-
-        } catch (e) {
-            throw (e);
-        }
-
+    /**
+     * Disable the master key
+     * @param sequence 
+     */
+    public async disableMasterKey(sequence: number): Promise<void> {
+        await this.masterAcc.setAccountFields({ Flags: { asfDisableMaster: true }, sequence: sequence });
     }
 
     /**
      * Generate a key for the node and save the node key in a file named by (../\<master address\>.key) .
      * @param masterKey 
-     * @returns 
+     * @returns Generated account's public address
      */
-    static async generateAccount(masterKey: string): Promise<{address: string, secret: string}> {
-        const nodeSecret = kp.generateSeed({algorithm:"ecdsa-secp256k1"});
-
-        const keyPair = kp.deriveKeypair(masterKey);
-        const keyFileName = kp.deriveAddress(keyPair.publicKey);
-        await fs.writeFile(`../${keyFileName}.key`, nodeSecret);
-
-        const nodeAccount = new evernode.XrplAccount(null, nodeSecret);
-        const nodeAddress: string  = nodeAccount.address;
-        return {address: nodeAddress, secret: nodeSecret};
-    }
-
-   /**
-    * Returns the signer list of the account
-    * @returns An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || null 
-    */
-    public async getSignerList(): Promise<{signerQuorum: number, signerList: SignerList[]} | undefined> {
-        const accountObjects = await this.nodeAccount.getAccountObjects({ type: "signer_list" });
-        if (accountObjects.length > 0) {
-            const signerObject = accountObjects.filter((ob: any) => ob.LedgerEntryType === 'SignerList')[0];
-            const signerList: SignerList[] = accountObjects.SignerEntries.map((signer: any) => ({ account: signer.SignerEntry.Account, weight: signer.SignerEntry.SignerWeight }));
-            const res = { signerQuorum: signerObject.SignerQuorum, signerList: signerList };
-            return res;
-        } 
-        else 
-         return undefined;
+    public generateSigner(): string {
+        const nodeSecret = kp.generateSeed({ algorithm: "ecdsa-secp256k1" });
+        fs.writeFileSync(this.keyPath, nodeSecret);
+        const keypair = kp.deriveKeypair(nodeSecret);
+        return kp.deriveAddress(keypair.publicKey);
     }
 
     /**
-     * 
-     * @returns 
+     * Returns the signer list of the account
+     * @returns An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || undefined 
      */
-    public async getSequenceNumber(): Promise<number> {
-        return await this.nodeAccount.getSequence();
+    public async getSignerList(): Promise<{ signerQuorum: number, signerList: Signer[] } | undefined> {
+        const accountObjects = await this.masterAcc.getAccountObjects({ type: "signer_list" });
+        if (accountObjects.length > 0) {
+            const signerObject = accountObjects.filter((ob: any) => ob.LedgerEntryType === 'SignerList')[0];
+            const signerList: Signer[] = accountObjects.SignerEntries.map((signer: any) => ({ account: signer.SignerEntry.Account, weight: signer.SignerEntry.SignerWeight }));
+            const res = { signerQuorum: signerObject.SignerQuorum, signerList: signerList };
+            return res;
+        }
+        else
+            return undefined;
     }
 
     /**
@@ -92,7 +71,9 @@ class MultiSigner {
      * @returns The signed transaction blob
      */
     public sign(tx: any): string {
-        const signedTxBlob: string = this.nodeAccount.sign(tx, true);
+        if (!this.signerAcc)
+            throw `No signer for ${this.masterAcc.address}`;
+        const signedTxBlob: string = this.signerAcc.sign(tx, true);
         return signedTxBlob;
     }
 
@@ -118,6 +99,7 @@ class MultiSigner {
 
         } catch (error) {
             console.log("Error in submitting the multisigned transaction.", error);
+            throw(error);
         } finally {
             await this.xrplApi.disconnect();
         }
