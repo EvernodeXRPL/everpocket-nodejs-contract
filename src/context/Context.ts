@@ -1,18 +1,18 @@
 import * as EventEmitter from 'events';
 import { Buffer } from 'buffer';
 import * as fs from 'fs';
-import { JSONHelpers } from './utils';
+import { JSONHelpers } from '../utils';
 import * as decompress from 'decompress';
-import { ContractConfig, Peer } from './models';
-import { UnlNode } from './models';
-import VoteSerializer from './vote/VoteSerializer';
-import { AllVoteElector } from './vote/vote-electors';
+import { ContractConfig, Peer } from '../models';
+import { UnlNode } from '../models';
+import VoteSerializer from '../vote/VoteSerializer';
+import { AllVoteElector } from '../vote/vote-electors';
 
 const PATCH_CFG = "../patch.cfg";
 const HP_POST_EXEC_SCRIPT = "post_exec.sh";
 
 class Context {
-    private hpContext: any;
+    protected hpContext: any;
     private eventEmitter: EventEmitter = new EventEmitter();
     private voteSerializer: VoteSerializer;
 

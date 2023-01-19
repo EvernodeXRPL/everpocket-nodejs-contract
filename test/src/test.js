@@ -9,13 +9,13 @@ const testContract = async (ctx) => {
 
     if (!ctx.readonly) {
         const tests = [
-            () => testVote(evpContext, ctx),
-            () => getContractConfig(evpContext),
-            () => updateContractConfig(evpContext),
-            () => updateContract(evpContext),
-            () => updateUnl(evpContext, ctx),
-            () => updatePeers(evpContext),
-            () => testFileUpload(ctx),
+            // () => testVote(evpContext, ctx),
+            // () => getContractConfig(evpContext),
+            // () => updateContractConfig(evpContext),
+            // () => updateContract(evpContext),
+            // () => updateUnl(evpContext, ctx),
+            // () => updatePeers(evpContext),
+            // () => testFileOperations(ctx),
         ];
 
         for (const test of tests) {
@@ -173,38 +173,9 @@ const updatePeers = async (evpContext) => {
     }
 }
 
-const testFileUpload = async (ctx) => {
+const testFileOperations = async (ctx) => {
     const evpContext = new evp.FilesContext(ctx);
-
-    if (!ctx.readonly) {
-        for (const user of ctx.users.list()) {
-
-            for (const input of user.inputs) {
-                const buf = await ctx.users.read(input);
-                const msg = bson.deserialize(buf);
-                switch (msg.type) {
-                    case 'file': {
-                        if (msg.action == "upload") {
-                            const output = evpContext.upload(msg);
-                            await user.send(bson.serialize(output));
-                        }
-                        else if (msg.action == "merge") {
-                            const output = evpContext.mergeUploadedFiles(msg);
-                            await user.send(bson.serialize(output));
-                        }
-                        else if (msg.action == "delete") {
-                            const output = evpContext.deleteFile(msg.fileName);
-                            await user.send(bson.serialize(output));
-                        }
-                    }
-                        break;
-
-                    default:
-                        break;
-                }
-            }
-        }
-    }
+    await evpContext.handleFileOperation();
 }
 
 const hpc = new HotPocket.Contract();

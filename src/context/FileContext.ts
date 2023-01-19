@@ -1,15 +1,50 @@
 import { Buffer } from 'buffer';
 import * as fs from 'fs';
+import { MessageSerializer } from '../utils';
+import Context from './Context';
 
 const outputFormat = {
     type: 'file',
 }
 
-class FilesContext {
-    hpContext: any
+class FilesContext extends Context {
 
-    public constructor(hpContext: any) {
-        this.hpContext = hpContext;
+    private messageSerializer: MessageSerializer;
+
+    public constructor(hpContext: any, options: any = {}) {
+        super(hpContext);
+        this.messageSerializer = new MessageSerializer('bson');
+    }
+
+    public async handleFileOperation() {
+        if (!this.hpContext.readonly) {
+            for (const user of this.hpContext.users.list()) {
+                for (const input of user.inputs) {
+                    const buf = await this.hpContext.users.read(input);
+                    const msg = this.messageSerializer.deserializeMessage(buf);
+                    switch (msg.type) {
+                        case 'file': {
+                            if (msg.action == "upload") {
+                                const output = this.upload(msg);
+                                await user.send(this.messageSerializer.serializeMessage(output));
+                            }
+                            else if (msg.action == "merge") {
+                                const output = this.mergeUploadedFiles(msg);
+                                await user.send(this.messageSerializer.serializeMessage(output));
+                            }
+                            else if (msg.action == "delete") {
+                                const output = this.deleteFile(msg.fileName);
+                                await user.send(this.messageSerializer.serializeMessage(output));
+                            }
+                        }
+                            break;
+
+                        default:
+                            break;
+                    }
+                }
+            }
+        }
     }
 
     public upload(msg: any): any {
