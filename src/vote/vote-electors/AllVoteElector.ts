@@ -10,6 +10,12 @@ class AllVoteElector {
         this.timeout = timeout;
     }
 
+    /**
+     * Evaluate the election.
+     * @param electionName Election identifier.
+     * @param voteEmitter Event emitter which the votes are fed into,
+     * @returns Evaluated votes as a promise.
+     */
     election(electionName: string, voteEmitter: EventEmitter): Promise<any[]> {
         return new Promise((resolve) => {
             const collected: any[] = [];
