@@ -44,13 +44,3 @@ export class Peer {
     return `${this.ip}:${this.port}`
   }
 }
-
-export interface SignerList {
-  account : string;
-  weight: number
-}
-
-export interface SignerListInfo {
-  signerQuorum: number;
-  signerList: SignerList[];
-}
