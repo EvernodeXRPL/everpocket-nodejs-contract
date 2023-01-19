@@ -73,8 +73,8 @@ class MultiSigner {
     public sign(tx: any): string {
         if (!this.signerAcc)
             throw `No signer for ${this.masterAcc.address}`;
-        const signedTxBlob: string = this.signerAcc.sign(tx, true);
-        return signedTxBlob;
+        const signedObj = this.signerAcc.sign(tx, true);
+        return signedObj.tx_blob;
     }
 
 
@@ -88,21 +88,7 @@ class MultiSigner {
             throw ("No transaction blobs to submit.")
         }
         const finalBlob = evernode.XrplApi.multiSign(blobList);
-        try {
-            await this.xrplApi.connect();
-            const res = await this.xrplApi.submitOnly(finalBlob);
-            console.log("Submitted only", res);
-
-            const tx_status = await this.xrplApi.submissionStatus(res.hash)
-            if (tx_status == "tesSUCCESS")
-                return tx_status;
-
-        } catch (error) {
-            console.log("Error in submitting the multisigned transaction.", error);
-            throw(error);
-        } finally {
-            await this.xrplApi.disconnect();
-        }
+        return await this.signerAcc.submitTransactionBlob(finalBlob);
     }
 
 }
