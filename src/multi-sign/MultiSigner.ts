@@ -28,8 +28,14 @@ class MultiSigner {
      * @param sequence
      */
     public async setSignerList(quorum: number, signerList: Signer[], sequence: number): Promise<void> {
-        // Set a signerList for the account
-        await this.masterAcc.setSignerList(signerList, { SignerQuorum: quorum, sequence: sequence });
+        try {
+            await this.xrplApi.connect();
+            // Set a signerList for the account
+            await this.masterAcc.setSignerList(signerList, { signerQuorum: quorum, sequence: sequence });
+        } 
+        finally  {
+            await this.xrplApi.disconnect();
+        }
     }
 
     /**
@@ -47,10 +53,12 @@ class MultiSigner {
     public generateSigner(): Signer {
         const nodeSecret = kp.generateSeed({ algorithm: "ecdsa-secp256k1" });
         const keypair = kp.deriveKeypair(nodeSecret);
-        return <Signer>{
+        this.signer = <Signer>{
             address: kp.deriveAddress(keypair.publicKey),
             secret: nodeSecret
         };
+
+        return this.signer;
     }
 
     public persistSigner(): void {
@@ -65,7 +73,7 @@ class MultiSigner {
         const accountObjects = await this.masterAcc.getAccountObjects({ type: "signer_list" });
         if (accountObjects.length > 0) {
             const signerObject = accountObjects.filter((ob: any) => ob.LedgerEntryType === 'SignerList')[0];
-            const signerList: Signer[] = accountObjects.SignerEntries.map((signer: any) => ({ account: signer.SignerEntry.Account, weight: signer.SignerEntry.SignerWeight }));
+            const signerList: Signer[] = signerObject.SignerEntries.map((signer: any) => ({ account: signer.SignerEntry.Account, weight: signer.SignerEntry.SignerWeight }));
             const res = { signerQuorum: signerObject.SignerQuorum, signerList: signerList };
             return res;
         }

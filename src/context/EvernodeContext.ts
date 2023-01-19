@@ -63,7 +63,7 @@ class EvernodeContext extends Context {
      * @param transaction Transaction object
      * @param timeout (optional) Defaults to 2000 in ms
      */
-    public async submitTransaction(address: string, transaction: any, timeout: number = 2000): Promise<void> {
+    public async submitTransaction(address: string, transaction: any, timeout: number = 4000): Promise<void> {
         const multiSigner = new MultiSigner(this.xrplApi, address, null);
         await this.xrplApi.connect();
 
@@ -75,9 +75,8 @@ class EvernodeContext extends Context {
             // Sign the transaction and collect the signed blob list.
             const signed = multiSigner.sign(transaction);
             const signedBlobs: SignedBlob[] = (await this.vote(`sign${this.hpContext.timestamp}`, [<SignedBlob>{ blob: signed, account: multiSigner.signerAcc.address }],
-                new MultiSignedBlobCollector(this.hpContext.npl.count, signerListInfo, timeout)))
+                new MultiSignedBlobCollector(this.hpContext.users.length, signerListInfo, timeout)))
                 .map(ob => ob.data);
-
             // Submit the signed blobs.
             await multiSigner.submitSignedBlobs(signedBlobs.map(sb => sb.blob));
         }
