@@ -1,7 +1,6 @@
 const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
-const bson = require('bson');
 const archiver = require('archiver');
 
 const testContract = async (ctx) => {
