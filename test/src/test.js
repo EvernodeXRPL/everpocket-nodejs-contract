@@ -187,13 +187,18 @@ const multiSignTransaction = async (evernodeContext) => {
         Flags: 2147483648
     };
 
+    await evernodeContext.setMultiSigner(masterAddress);
+
     try {
         console.log("----------- Multi-Signing Test")
         await evernodeContext.prepareMultiSigner(quorum, masterKey, signerList, 2000, true);
-        await evernodeContext.submitTransaction(masterAddress, tx);
+        console.log("Signer list added");
+        await evernodeContext.submitTransaction(tx);
 
     } catch (e) {
         console.log(e);
+    } finally {
+        await evernodeContext.removeMultiSigner();
     }
 }
 

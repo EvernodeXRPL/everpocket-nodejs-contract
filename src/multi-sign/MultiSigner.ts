@@ -11,14 +11,35 @@ class MultiSigner {
     public masterAcc: any;
     public signerAcc: any;
 
-    public constructor(xrplApi: any, address: string | null = null, secret: string | null = null) {
-        this.xrplApi = xrplApi;
+    public constructor(address: string | null = null, secret: string | null = null) {
+        this.xrplApi = new evernode.XrplApi();
         this.masterAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
         this.keyPath = `../${this.masterAcc.address}.key`;
         if (fs.existsSync(this.keyPath)) {
             this.signer = JSONHelpers.castToModel<Signer>(JSON.parse(fs.readFileSync(this.keyPath).toString()));
-            this.signerAcc = new evernode.XrplAccount(this.signer.address, this.signer.secret, { xrplApi: this.xrplApi });
+            this.signerAcc = new evernode.XrplAccount(this.signer.account, this.signer.secret, { xrplApi: this.xrplApi });
         }
+    }
+    /**
+     * Initialize multi signer object.
+     */
+    public async init(): Promise<void> {
+        await this.xrplApi.connect();
+    }
+
+    /**
+     * De-Initialize multi signer object.
+     */
+    public async deinit(): Promise<void> {
+        await this.xrplApi.disconnect();
+    }
+
+    public async getSequence(): Promise<number> {
+        return await this.masterAcc.getSequence()
+    }
+
+    public getMaxLedgerSequence(): number {
+        return Math.ceil((this.xrplApi.ledgerIndex + 30) / 10) * 10; // Get nearest 10th
     }
 
     /**
@@ -27,15 +48,9 @@ class MultiSigner {
      * @param signerList 
      * @param sequence
      */
-    public async setSignerList(quorum: number, signerList: Signer[], sequence: number): Promise<void> {
-        try {
-            await this.xrplApi.connect();
-            // Set a signerList for the account
-            await this.masterAcc.setSignerList(signerList, { signerQuorum: quorum, sequence: sequence });
-        } 
-        finally  {
-            await this.xrplApi.disconnect();
-        }
+    public async setSignerList(quorum: number, signerList: Signer[], sequence: number, maxLedgerIndex: number): Promise<void> {
+        // Set a signerList for the account
+        await this.masterAcc.setSignerList(signerList, { signerQuorum: quorum, sequence: sequence, maxLedgerIndex: maxLedgerIndex });
     }
 
     /**
@@ -54,15 +69,17 @@ class MultiSigner {
         const nodeSecret = kp.generateSeed({ algorithm: "ecdsa-secp256k1" });
         const keypair = kp.deriveKeypair(nodeSecret);
         this.signer = <Signer>{
-            address: kp.deriveAddress(keypair.publicKey),
+            account: kp.deriveAddress(keypair.publicKey),
             secret: nodeSecret
         };
+        this.signerAcc = new evernode.XrplAccount(this.signer.account, this.signer.secret, { xrplApi: this.xrplApi });
 
         return this.signer;
     }
 
     public persistSigner(): void {
         fs.writeFileSync(this.keyPath, JSON.stringify(JSONHelpers.castFromModel(this.signer)));
+
     }
 
     /**
@@ -86,10 +103,10 @@ class MultiSigner {
      * @param tx Transaction in json 
      * @returns The signed transaction blob
      */
-    public sign(tx: any): string {
+    public async sign(tx: any): Promise<string> {
         if (!this.signerAcc)
             throw `No signer for ${this.masterAcc.address}`;
-        const signedObj = this.signerAcc.sign(tx, true);
+        const signedObj = await this.signerAcc.sign(tx, true);
         return signedObj.tx_blob;
     }
 
@@ -102,8 +119,8 @@ class MultiSigner {
         if (blobList.length < 1) {
             throw ("No transaction blobs to submit.")
         }
-        const finalBlob = evernode.XrplApi.multiSign(blobList);
-        return await this.signerAcc.submitTransactionBlob(finalBlob);
+        const finalBlob = this.masterAcc.xrplApi.multiSign(blobList);
+        return await this.masterAcc.submitTransactionBlob(finalBlob);
     }
 }
 

@@ -1,5 +1,5 @@
 export interface Signer {
-  address: string;
+  account: string;
   secret: string;
   weight: number;
 }
@@ -12,4 +12,9 @@ export interface SignerListInfo {
 export interface SignedBlob {
   blob: string;
   account: string;
+}
+
+export interface TransactionSubmissionInfo {
+  sequence: number;
+  maxLedgerSequence: number;
 }

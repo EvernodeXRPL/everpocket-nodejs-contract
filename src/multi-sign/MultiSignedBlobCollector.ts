@@ -21,7 +21,7 @@ class MultiSignedBlobCollector extends AllVoteElector {
                 collected.push({ sender, data });
 
                 const currSignerWeight = collected.reduce((total: number, co: any) => {
-                    const signer = this.signerListInfo?.signerList.find((ob: Signer) => ob.address == co.data.account);
+                    const signer = this.signerListInfo?.signerList.find((ob: Signer) => ob.account == co.data.account);
                     if (signer)
                         return total + signer.weight;
                     else
