@@ -6,10 +6,11 @@
         "start": "npm run build && hpdevkit deploy dist"
     },
     "dependencies": {
-        "hotpocket-nodejs-contract": "0.5.7",
+        "archiver": "5.3.1",
         "evernode-js-client": "0.5.14",
         "everpocket-nodejs-contract": "file:../dist",
-        "bson": "4.7.2"
+        "bson": "4.7.2",
+        "hotpocket-nodejs-contract": "0.5.7"
     },
     "devDependencies": {
         "@vercel/ncc": "0.34.0"

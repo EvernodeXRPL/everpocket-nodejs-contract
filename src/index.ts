@@ -1,6 +1,6 @@
 export { default as Context } from './Context'
 
-export * from './vote-electors'
+export * from './vote/vote-electors'
 
 export * from './models'
 

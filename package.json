@@ -16,9 +16,12 @@
         "test": "npm run build && npm --prefix test i &&  npm --prefix test start"
     },
     "dependencies": {
-        "@typescript-eslint/parser": "5.48.1"
+        "@typescript-eslint/parser": "5.48.1",
+        "bson": "4.7.2",
+        "decompress": "4.2.1"
     },
     "devDependencies": {
+        "@types/decompress": "4.2.4",
         "@types/node": "18.11.18",
         "eslint": "8.31.0",
         "typescript": "4.9.4"
