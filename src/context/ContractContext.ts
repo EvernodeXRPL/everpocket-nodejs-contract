@@ -11,7 +11,6 @@ const HP_POST_EXEC_SCRIPT = "post_exec.sh";
 class ContractContext extends BaseContext {
     hpContext: any;
 
-
     /**
      * HotPocket contract context handler.
      * @param hpContext HotPocket contract context.

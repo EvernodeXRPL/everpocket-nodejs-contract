@@ -8,6 +8,7 @@ class BaseContext {
     hpContext: any;
     private eventEmitter: EventEmitter = new EventEmitter();
     private voteSerializer: VoteSerializer;
+    private listened: boolean = false;
 
     /**
      * HotPocket contract context handler.
@@ -28,6 +29,16 @@ class BaseContext {
         vote && this.eventEmitter.emit(vote.election, sender, vote.data);
     }
 
+    public initListener(): void {
+        if (!this.listened) {
+            // Listen to incoming unl messages and feed them to elector.
+            this.hpContext.unl.onMessage((node: UnlNode, msg: Buffer) => {
+                this.feedUnlMessage(node, msg);
+            });
+            this.listened = true;
+        }
+    }
+
     /**
      * Send the votes to a election.
      * @param electionName Election identifier to vote for.
@@ -36,6 +47,7 @@ class BaseContext {
      * @returns Evaluated votes as a promise.
      */
     public async vote(electionName: string, votes: any[], elector: AllVoteElector): Promise<any[]> {
+        this.initListener();
 
         // Start the election.
         const election = elector.election(electionName, this.eventEmitter);

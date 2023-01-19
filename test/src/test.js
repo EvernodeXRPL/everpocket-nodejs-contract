@@ -28,11 +28,6 @@ const testContract = async (ctx) => {
 
 // Voting examples.
 const testVote = async (baseContext, ctx) => {
-    // Listen to incoming unl messages and feed them to elector.
-    ctx.unl.onMessage((node, msg) => {
-        baseContext.feedUnlMessage(node, msg);
-    })
-
     // Send votes to an election.
     const r1 = baseContext.vote("firstRound", [1, 2], new evp.AllVoteElector(10, 1000));
     const r2 = baseContext.vote("secondRound", [6, 7], new evp.AllVoteElector(10, 1000));

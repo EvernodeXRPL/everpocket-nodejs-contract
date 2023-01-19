@@ -2,10 +2,12 @@ import { Signer } from "../models";
 import * as evernode from 'evernode-js-client';
 import * as fs from 'fs';
 import * as kp from 'ripple-keypairs';
+import { JSONHelpers } from "../utils";
 
 class MultiSigner {
     private xrplApi: any;
     private keyPath: string;
+    private signer: Signer | null = null;
     public masterAcc: any;
     public signerAcc: any;
 
@@ -14,7 +16,8 @@ class MultiSigner {
         this.masterAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
         this.keyPath = `../${this.masterAcc.address}.key`;
         if (fs.existsSync(this.keyPath)) {
-            this.signerAcc = new evernode.XrplAccount(null, fs.readFileSync(this.keyPath), { xrplApi: this.xrplApi });
+            this.signer = JSONHelpers.castToModel<Signer>(JSON.parse(fs.readFileSync(this.keyPath).toString()));
+            this.signerAcc = new evernode.XrplAccount(this.signer.address, this.signer.secret, { xrplApi: this.xrplApi });
         }
     }
 
@@ -26,29 +29,32 @@ class MultiSigner {
      */
     public async setSignerList(quorum: number, signerList: Signer[], sequence: number): Promise<void> {
         // Set a signerList for the account
-        console.log("B1");
         await this.masterAcc.setSignerList(signerList, { SignerQuorum: quorum, sequence: sequence });
-        console.log("B2");
     }
 
     /**
-     * Disable the master key
-     * @param sequence 
+     * Get the signer address.
+     * @returns Signer info.
      */
-    public async disableMasterKey(sequence: number): Promise<void> {
-        await this.masterAcc.setAccountFields({ Flags: { asfDisableMaster: true }, sequence: sequence });
+    public getSigner(): Signer | null {
+        return this.signer;
     }
 
     /**
-     * Generate a key for the node and save the node key in a file named by (../\<master address\>.key) .
-     * @param masterKey 
-     * @returns Generated account's public address
+     * Generate a key for the node and save the node key in a file named by (../\<master address\>.key).
+     * @returns Generated signer info.
      */
-    public generateSigner(): string {
+    public generateSigner(): Signer {
         const nodeSecret = kp.generateSeed({ algorithm: "ecdsa-secp256k1" });
-        fs.writeFileSync(this.keyPath, nodeSecret);
         const keypair = kp.deriveKeypair(nodeSecret);
-        return kp.deriveAddress(keypair.publicKey);
+        return <Signer>{
+            address: kp.deriveAddress(keypair.publicKey),
+            secret: nodeSecret
+        };
+    }
+
+    public persistSigner(): void {
+        fs.writeFileSync(this.keyPath, JSON.stringify(JSONHelpers.castFromModel(this.signer)));
     }
 
     /**
@@ -79,7 +85,6 @@ class MultiSigner {
         return signedObj.tx_blob;
     }
 
-
     /**
      * 
      * @param blobList An array of signed blobs
@@ -92,7 +97,6 @@ class MultiSigner {
         const finalBlob = evernode.XrplApi.multiSign(blobList);
         return await this.signerAcc.submitTransactionBlob(finalBlob);
     }
-
 }
 
 

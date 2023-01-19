@@ -1,6 +1,7 @@
 export interface Signer {
-  account : string;
-  weight: number
+  address: string;
+  secret: string;
+  weight: number;
 }
 
 export interface SignerListInfo {
@@ -9,6 +10,6 @@ export interface SignerListInfo {
 }
 
 export interface SignedBlob {
-  blob : string;
+  blob: string;
   account: string;
 }
