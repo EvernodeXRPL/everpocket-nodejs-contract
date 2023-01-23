@@ -26,7 +26,7 @@ class BaseContext {
      * @returns An unique number.
      */
     protected getUniqueNumber(): number {
-        return ++this.uniqueNumber;
+        return this.uniqueNumber++;
     }
 
     /**
