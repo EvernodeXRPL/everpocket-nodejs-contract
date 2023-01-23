@@ -1,5 +1,5 @@
 import * as EventEmitter from 'events';
-import { UnlNode } from '../../models';
+import { BaseContext } from '../../context';
 
 class AllVoteElector {
     desiredVoteCount: number;
@@ -16,20 +16,16 @@ class AllVoteElector {
      * @param voteEmitter Event emitter which the votes are fed into,
      * @returns Evaluated votes as a promise.
      */
-    election(electionName: string, voteEmitter: EventEmitter): Promise<any[]> {
+    election(electionName: string, voteEmitter: EventEmitter, context: BaseContext): Promise<any[]> {
         return new Promise((resolve) => {
-            const collected: any[] = [];
-
             // Fire up the timeout if we didn't receive enough votes.
-            const timer = setTimeout(() => resolve(collected), this.timeout);
+            const timer = setTimeout(() => resolve(context.resolveVotes(electionName)), this.timeout);
 
-            voteEmitter.on(electionName, (sender: UnlNode, data: any) => {
-                collected.push({ sender, data });
-
+            voteEmitter.on(electionName, (collected: any[]) => {
                 // Resolve immediately if we have the required no. of messages.
                 if (collected.length === this.desiredVoteCount) {
                     clearTimeout(timer);
-                    resolve(collected);
+                    resolve(context.resolveVotes(electionName));
                 }
             });
         });

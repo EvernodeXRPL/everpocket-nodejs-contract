@@ -20,17 +20,38 @@ class EvernodeContext extends Context {
         this.multiSigner = null;
     }
 
-    public async getTransactionSubmissionInfo(timeout: number = 5000): Promise<TransactionSubmissionInfo> {
+    public async getTransactionSubmissionInfo(timeout: number = 2000): Promise<TransactionSubmissionInfo> {
         if (!this.multiSigner)
             throw 'No multi signer for the context';
 
         // Decide a sequence number and max ledger sequence to send the same transaction from all the nodes.
-        const infos: TransactionSubmissionInfo[] = (await this.vote(`transactionInfo${this.hpContext.timestamp}`, [<TransactionSubmissionInfo>{
+        const infos: TransactionSubmissionInfo[] = (await this.vote(`transactionInfo${this.getUniqueNumber()}`, [<TransactionSubmissionInfo>{
             sequence: await this.multiSigner.getSequence(),
             maxLedgerSequence: this.multiSigner.getMaxLedgerSequence()
         }], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
         console.log(`Collected ${infos.length} submission info`);
         return infos.sort((a, b) => a.sequence - b.sequence)[0];
+    }
+
+    /**
+     * Multi sign and submit a given transaction.
+     * @param transaction Transaction to submit.
+     * @param timeout Optional timeout for votes to resolve.
+     */
+    public async multiSignAndSubmitTransaction(transaction: any, timeout: number = 2000): Promise<void> {
+        if (!this.multiSigner)
+            throw 'No multi signer for the context';
+
+        const signerListInfo = await this.multiSigner.getSignerList();
+
+        // Sign the transaction and collect the signed blob list.
+        const signed = await this.multiSigner.sign(transaction);
+        const signedBlobs: SignedBlob[] = (await this.vote(`sign${this.getUniqueNumber()}`, [<SignedBlob>{ blob: signed, account: this.multiSigner.signerAcc.address }],
+            new MultiSignedBlobCollector(this.hpContext.users.length, signerListInfo, timeout)))
+            .map(ob => ob.data);
+        console.log(`Collected ${signedBlobs.length} signed blobs`);
+        // Submit the signed blobs.
+        await this.multiSigner.submitSignedBlobs(signedBlobs.map(sb => sb.blob));
     }
 
     /**
@@ -40,14 +61,14 @@ class EvernodeContext extends Context {
      * @param signerList (optional) Signer list for the master account
      * @param timeout  (optional)
      */
-    public async prepareMultiSigner(quorum: number, secret: string, signerList: Signer[] = [], timeout: number = 4000): Promise<void> {
+    public async prepareMultiSigner(quorum: number, secret: string, signerList: Signer[] = [], timeout: number = 2000): Promise<void> {
         if (!this.multiSigner)
             throw 'No multi signer for the context';
 
         // Generate and collect signer list if signer list isn't provided.
         if (!signerList || !signerList.length) {
             const signer = this.multiSigner.generateSigner();
-            signerList = (await this.vote(`multiSigner${this.hpContext.timestamp}`, [<Signer>{
+            signerList = (await this.vote(`multiSigner${this.getUniqueNumber()}`, [<Signer>{
                 account: signer.account,
                 weight: 1
             }], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
@@ -55,13 +76,14 @@ class EvernodeContext extends Context {
 
         // Configure multisig for the account.
         const txSubmitInfo = await this.getTransactionSubmissionInfo();
-        console.log(txSubmitInfo);
-        const multiSigner = new MultiSigner(null, secret);
-        await multiSigner.init();
-        await multiSigner.setSignerList(quorum, signerList.sort((a, b) => a.account < b.account ? -1 : 1), txSubmitInfo.sequence, txSubmitInfo.maxLedgerSequence);
-        await multiSigner.deinit();
+        if (txSubmitInfo) {
+            const multiSigner = new MultiSigner(null, secret);
+            await multiSigner.init();
+            await multiSigner.setSignerList(quorum, signerList.sort((a, b) => a.account < b.account ? -1 : 1), txSubmitInfo.sequence, txSubmitInfo.maxLedgerSequence);
+            await multiSigner.deinit();
 
-        this.multiSigner.persistSigner();
+            this.multiSigner.persistSigner();
+        }
     }
 
     /**
@@ -70,27 +92,20 @@ class EvernodeContext extends Context {
      * @param transaction Transaction object
      * @param timeout (optional) Defaults to 2000 in ms
      */
-    public async submitTransaction(transaction: any, timeout: number = 10000): Promise<void> {
+    public async submitTransaction(transaction: any, timeout: number = 2000): Promise<void> {
         if (!this.multiSigner)
             throw 'No multi signer for the context';
 
-        const signerListInfo = await this.multiSigner.getSignerList();
-
         const txSubmitInfo = await this.getTransactionSubmissionInfo();
-        transaction.Sequence = txSubmitInfo.sequence;
-        transaction.LastLedgerSequence = txSubmitInfo.maxLedgerSequence;
+        if (txSubmitInfo) {
+            transaction.Sequence = txSubmitInfo.sequence;
+            transaction.LastLedgerSequence = txSubmitInfo.maxLedgerSequence;
 
-        // This should be handled in js lib.
-        transaction.Fee = '1000';
+            /////// TODO: This should be handled in js lib. //////
+            transaction.Fee = '1000';
 
-        // Sign the transaction and collect the signed blob list.
-        const signed = await this.multiSigner.sign(transaction);
-        const signedBlobs: SignedBlob[] = (await this.vote(`sign${this.hpContext.timestamp}`, [<SignedBlob>{ blob: signed, account: this.multiSigner.signerAcc.address }],
-            new MultiSignedBlobCollector(this.hpContext.users.length, signerListInfo, timeout)))
-            .map(ob => ob.data);
-        console.log(`Collected ${signedBlobs.length} signed blobs`);
-        // Submit the signed blobs.
-        await this.multiSigner.submitSignedBlobs(signedBlobs.map(sb => sb.blob));
+            await this.multiSignAndSubmitTransaction(transaction, timeout);
+        }
     }
 
     public async renewSignerList(timeout: number = 2000) {
@@ -103,20 +118,17 @@ class EvernodeContext extends Context {
 
         if (curSigner && curSignerWeight) {
             let newSigner = this.multiSigner.generateSigner();
-            const newSignerList: Signer[] = (await this.vote(`multiSigner${this.hpContext.timestamp}`, [<Signer>{
+            const newSignerList: Signer[] = (await this.vote(`signerList${this.getUniqueNumber()}`, [<Signer>{
                 account: newSigner.account,
                 weight: curSigner.weight
             }], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
 
-            const txSubmitInfo = await this.getTransactionSubmissionInfo();
             const signerListTx =
             {
                 Flags: 0,
                 TransactionType: "SignerListSet",
                 Account: this.multiSigner.masterAcc.address,
                 SignerQuorum: curSignerList.signerQuorum,
-                Sequence: txSubmitInfo.sequence,
-                LastLedgerSequence: txSubmitInfo.maxLedgerSequence,
                 SignerEntries: [
                     ...newSignerList.map(signer => ({
                         SignerEntry: {
@@ -127,14 +139,7 @@ class EvernodeContext extends Context {
                 ]
             };
 
-            // Sign the transaction and collect the signed blob list.
-            const signed = await this.multiSigner.sign(signerListTx);
-            const signedBlobs: SignedBlob[] = (await this.vote(`sign${this.hpContext.timestamp}`, [<SignedBlob>{ blob: signed, account: this.multiSigner.signerAcc.address }],
-                new MultiSignedBlobCollector(this.hpContext.npl.count, curSignerList, timeout)))
-                .map(ob => ob.data);
-
-            // Submit the signed blobs.
-            await this.multiSigner.submitSignedBlobs(signedBlobs.map(sb => sb.blob));
+            await this.submitTransaction(signerListTx, timeout);
 
             this.multiSigner.persistSigner();
         }

@@ -10,6 +10,13 @@ const testContract = async (ctx) => {
 
 
     if (!ctx.readonly) {
+        // Listen to incoming unl messages and feed them to elector.
+        ctx.unl.onMessage((node, msg) => {
+            baseContext.feedUnlMessage(node, msg);
+            contractContext.feedUnlMessage(node, msg);
+            evernodeContext.feedUnlMessage(node, msg);
+        })
+
         const tests = [
             // () => testVote(baseContext),
             // () => getContractConfig(contractContext),
@@ -170,18 +177,18 @@ const updatePeers = async (contractContext) => {
 }
 
 // Get a random number.
-const randomNumber = async (evpContext) => {
-    const random1 = await evpContext.random();
-    const random2 = await evpContext.random();
+const randomNumber = async (baseContext) => {
+    const random1 = await baseContext.random();
+    const random2 = await baseContext.random();
 
     console.log('Random number 1', random1);
     console.log('Random number 2', random2);
 }
 
 // Get an uuid.
-const uuidv4 = async (evpContext) => {
-    const uuid1 = await evpContext.uuid4();
-    const uuid2 = await evpContext.uuid4();
+const uuidv4 = async (baseContext) => {
+    const uuid1 = await baseContext.uuid4();
+    const uuid2 = await baseContext.uuid4();
 
     console.log('UUID 1', uuid1);
     console.log('UUID 2', uuid2);

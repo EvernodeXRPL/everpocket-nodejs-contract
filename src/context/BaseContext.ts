@@ -9,7 +9,8 @@ class BaseContext {
     hpContext: any;
     private eventEmitter: EventEmitter = new EventEmitter();
     private voteSerializer: VoteSerializer;
-    private listened: boolean = false;
+    private uniqueNumber: number = 0;
+    private voteCollection: any = {};
 
     /**
      * HotPocket contract context handler.
@@ -21,16 +22,11 @@ class BaseContext {
     }
 
     /**
-     * Initialize listener to the incoming unl messages.
+     * Gives an unique number every time this method is called.
+     * @returns An unique number.
      */
-    private initUnlListener(): void {
-        if (!this.listened) {
-            // Listen to incoming unl messages and feed them to elector.
-            this.hpContext.unl.onMessage((node: UnlNode, msg: Buffer) => {
-                this.feedUnlMessage(node, msg);
-            });
-            this.listened = true;
-        }
+    protected getUniqueNumber(): number {
+        return this.uniqueNumber++;
     }
 
     /**
@@ -40,7 +36,14 @@ class BaseContext {
      */
     public feedUnlMessage(sender: UnlNode, msg: Buffer): void {
         const vote = this.voteSerializer.deserializeVote(msg);
-        vote && this.eventEmitter.emit(vote.election, sender, vote.data);
+        if (vote) {
+            const data = vote.data;
+            if (this.voteCollection[vote.election])
+                this.voteCollection[vote.election].push({ sender, data });
+            else
+                this.voteCollection[vote.election] = [{ sender, data }];
+            this.eventEmitter.emit(vote.election, this.voteCollection[vote.election]);
+        }
     }
 
     /**
@@ -51,10 +54,8 @@ class BaseContext {
      * @returns Evaluated votes as a promise.
      */
     public async vote(electionName: string, votes: any[], elector: AllVoteElector): Promise<any[]> {
-        this.initUnlListener();
-
         // Start the election.
-        const election = elector.election(electionName, this.eventEmitter);
+        const election = elector.election(electionName, this.eventEmitter, this);
 
         // Cast our vote(s).
         await Promise.all(new Array().concat(votes).map(v => {
@@ -66,6 +67,12 @@ class BaseContext {
         return await election;
     }
 
+    public resolveVotes(electionName: string): any[] {
+        const votes = this.voteCollection[electionName];
+        delete this.voteCollection[electionName];
+        return votes ?? [];
+    }
+
     /**
      * Generates a random number.
      * @param timeout Maximum timeout to generate a random number.
@@ -75,7 +82,7 @@ class BaseContext {
         // Generate a random number.
         // Vote for the random number each node has generated.
         const number = Math.random();
-        const rn = await this.vote(`randomNumber${this.hpContext.timestamp}`, [number], new AllVoteElector(this.hpContext.unl.list().length, timeout));
+        const rn = await this.vote(`randomNumber${this.getUniqueNumber()}`, [number], new AllVoteElector(this.hpContext.unl.list().length, timeout));
 
         // Take the minimum random number.
         return rn.length ? Math.min(...rn.map(v => v.data)) : null;
@@ -90,7 +97,7 @@ class BaseContext {
         // Generate an uuid.
         // Vote for the uuid each node has generated.
         const uuid = uuidv4();
-        const uuids = await this.vote(`uuid4${this.hpContext.timestamp}`, [uuid], new AllVoteElector(this.hpContext.unl.list().length, timeout));
+        const uuids = await this.vote(`uuid4${this.getUniqueNumber()}`, [uuid], new AllVoteElector(this.hpContext.unl.list().length, timeout));
 
         // Take the first ascending uuid.
         return uuids.length ? uuids.map(v => v.data).sort()[0] : null;

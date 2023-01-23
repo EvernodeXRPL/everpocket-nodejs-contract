@@ -1,5 +1,6 @@
 import EventEmitter = require("events");
-import { SignedBlob, Signer, SignerListInfo, UnlNode } from "../models";
+import { BaseContext } from "../context";
+import { Signer, SignerListInfo } from "../models";
 import { AllVoteElector } from "../vote/vote-electors";
 
 class MultiSignedBlobCollector extends AllVoteElector {
@@ -10,16 +11,12 @@ class MultiSignedBlobCollector extends AllVoteElector {
         this.signerListInfo = signerListInfo;
     }
 
-    override election(electionName: string, voteEmitter: EventEmitter): Promise<any[]> {
+    override election(electionName: string, voteEmitter: EventEmitter, context: BaseContext): Promise<any[]> {
         return new Promise((resolve) => {
-            const collected: any[] = [];
-
             // Fire up the timeout if we didn't receive enough votes.
-            const timer = setTimeout(() => resolve(collected), this.timeout);
+            const timer = setTimeout(() => resolve(context.resolveVotes(electionName)), this.timeout);
 
-            voteEmitter.on(electionName, (sender: UnlNode, data: SignedBlob) => {
-                collected.push({ sender, data });
-
+            voteEmitter.on(electionName, (collected: any[]) => {
                 const currSignerWeight = collected.reduce((total: number, co: any) => {
                     const signer = this.signerListInfo?.signerList.find((ob: Signer) => ob.account == co.data.account);
                     if (signer)
@@ -32,7 +29,7 @@ class MultiSignedBlobCollector extends AllVoteElector {
                 // If signer Quorum is satisfied, submit the transaction
                 if (currSignerWeight == this.signerListInfo?.signerQuorum) {
                     clearTimeout(timer);
-                    resolve(collected);
+                    resolve(context.resolveVotes(electionName));
                 }
             });
         });
