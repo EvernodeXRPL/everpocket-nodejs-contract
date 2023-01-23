@@ -20,7 +20,7 @@ class EvernodeContext extends Context {
         this.multiSigner = null;
     }
 
-    public async getTransactionSubmissionInfo(timeout: number = 2000): Promise<TransactionSubmissionInfo> {
+    public async getTransactionSubmissionInfo(timeout: number = 4000): Promise<TransactionSubmissionInfo> {
         if (!this.multiSigner)
             throw 'No multi signer for the context';
 
@@ -38,7 +38,7 @@ class EvernodeContext extends Context {
      * @param transaction Transaction to submit.
      * @param timeout Optional timeout for votes to resolve.
      */
-    public async multiSignAndSubmitTransaction(transaction: any, timeout: number = 2000): Promise<void> {
+    public async multiSignAndSubmitTransaction(transaction: any, timeout: number = 4000): Promise<void> {
         if (!this.multiSigner)
             throw 'No multi signer for the context';
 
@@ -61,7 +61,7 @@ class EvernodeContext extends Context {
      * @param signerList (optional) Signer list for the master account
      * @param timeout  (optional)
      */
-    public async prepareMultiSigner(quorum: number, secret: string, signerList: Signer[] = [], timeout: number = 2000): Promise<void> {
+    public async prepareMultiSigner(quorum: number, secret: string, signerList: Signer[] = [], timeout: number = 4000): Promise<void> {
         if (!this.multiSigner)
             throw 'No multi signer for the context';
 
@@ -90,9 +90,9 @@ class EvernodeContext extends Context {
      * Submit a transaction with multi signs.
      * @param address Address of the master account
      * @param transaction Transaction object
-     * @param timeout (optional) Defaults to 2000 in ms
+     * @param timeout (optional) Defaults to 4000 in ms
      */
-    public async submitTransaction(transaction: any, timeout: number = 2000): Promise<void> {
+    public async submitTransaction(transaction: any, timeout: number = 4000): Promise<void> {
         if (!this.multiSigner)
             throw 'No multi signer for the context';
 
@@ -108,7 +108,7 @@ class EvernodeContext extends Context {
         }
     }
 
-    public async renewSignerList(timeout: number = 2000) {
+    public async renewSignerList(timeout: number = 4000) {
         if (!this.multiSigner)
             throw 'No multi signer for the context';
 
