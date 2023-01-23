@@ -7,6 +7,7 @@ import { ContractConfig, Peer } from './models';
 import { UnlNode } from './models';
 import VoteSerializer from './vote/VoteSerializer';
 import { AllVoteElector } from './vote/vote-electors';
+import { v4 as uuidv4 } from 'uuid';
 
 const PATCH_CFG = "../patch.cfg";
 const HP_POST_EXEC_SCRIPT = "post_exec.sh";
@@ -15,6 +16,7 @@ class Context {
     private hpContext: any;
     private eventEmitter: EventEmitter = new EventEmitter();
     private voteSerializer: VoteSerializer;
+    private listened: boolean = false;
 
     /**
      * HotPocket contract context handler.
@@ -23,6 +25,19 @@ class Context {
     public constructor(hpContext: any, options: any = {}) {
         this.hpContext = hpContext;
         this.voteSerializer = options.voteSerializer || new VoteSerializer();
+    }
+
+    /**
+     * Initialize listener to the incoming unl messages.
+     */
+    private initUnlListener(): void {
+        if (!this.listened) {
+            // Listen to incoming unl messages and feed them to elector.
+            this.hpContext.unl.onMessage((node: UnlNode, msg: Buffer) => {
+                this.feedUnlMessage(node, msg);
+            });
+            this.listened = true;
+        }
     }
 
     /**
@@ -43,6 +58,7 @@ class Context {
      * @returns Evaluated votes as a promise.
      */
     public async vote(electionName: string, votes: any[], elector: AllVoteElector): Promise<any[]> {
+        this.initUnlListener();
 
         // Start the election.
         const election = elector.election(electionName, this.eventEmitter);
@@ -71,7 +87,7 @@ class Context {
      * Update contract configuration.
      * @param config Configuration with the values that needed to be updated.
      */
-    public async updateConfig(config: ContractConfig) {
+    public async updateConfig(config: ContractConfig): Promise<void> {
         let patchCfg: ContractConfig = await this.getConfig();
 
         // Take only the non empty not null values since the values are optional.
@@ -173,7 +189,7 @@ class Context {
      * Add peers to the peer list.
      * @param peers Peers to add.
      */
-    public async addPeers(peers: Peer[]) {
+    public async addPeers(peers: Peer[]): Promise<void> {
         await this.hpContext.updatePeers(peers.map(p => p.toString()), null);
     }
 
@@ -181,7 +197,7 @@ class Context {
      * Remove peers from the peer list.
      * @param peers Peers to remove.
      */
-    public async removePeers(peers: Peer[]) {
+    public async removePeers(peers: Peer[]): Promise<void> {
         await this.hpContext.updatePeers(null, peers.map(p => p.toString()));
     }
 
@@ -189,7 +205,7 @@ class Context {
      * Update the contract binaries with given zip bundle.
      * @param bundle Byte array of the contract bundle zip (Can include: contract binaries, contract.config, install.sh).
      */
-    public async updateContract(bundle: Buffer) {
+    public async updateContract(bundle: Buffer): Promise<void> {
         const CONFIG = "contract.config";
         const PATCH_CFG_BK = "../patch.cfg.bk";
         const INSTALL_SCRIPT = "install.sh";
@@ -248,6 +264,40 @@ exit 0
         // Create post execution script and change it's permissions.
         fs.writeFileSync(HP_POST_EXEC_SCRIPT, postExecScript);
         fs.chmodSync(HP_POST_EXEC_SCRIPT, 0o777);
+    }
+
+    /**
+     * Generates a random number.
+     * @param timeout Maximum timeout to generate a random number.
+     * @returns A random number between 0-1.
+     */
+    public async random(timeout: number = 1000): Promise<number | null> {
+        this.initUnlListener();
+
+        // Generate a random number.
+        // Vote for the random number each node has generated.
+        const number = Math.random();
+        const rn = await this.vote(`randomNumber${this.hpContext.timestamp}`, [number], new AllVoteElector(this.hpContext.unl.list().length, timeout));
+
+        // Take the minimum random number.
+        return rn.length ? Math.min(...rn.map(v => v.data)) : null;
+    }
+
+    /**
+     * Generates an uuid string.
+     * @param timeout Maximum timeout to generate an uuid.
+     * @returns An uuid.
+     */
+    public async uuid4(timeout: number = 1000): Promise<string | null> {
+        this.initUnlListener();
+
+        // Generate an uuid.
+        // Vote for the uuid each node has generated.
+        const uuid = uuidv4();
+        const uuids = await this.vote(`uuid4${this.hpContext.timestamp}`, [uuid], new AllVoteElector(this.hpContext.unl.list().length, timeout));
+
+        // Take the first ascending uuid.
+        return uuids.length ? uuids.map(v => v.data).sort()[0] : null;
     }
 }
 

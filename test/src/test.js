@@ -14,6 +14,8 @@ const testContract = async (ctx) => {
             () => updateContract(evpContext),
             () => updateUnl(evpContext, ctx),
             () => updatePeers(evpContext),
+            () => randomNumber(evpContext),
+            () => uuidv4(evpContext),
         ];
 
         for (const test of tests) {
@@ -24,17 +26,12 @@ const testContract = async (ctx) => {
 
 // Voting examples.
 const testVote = async (evpContext, ctx) => {
-    // Listen to incoming unl messages and feed them to elector.
-    ctx.unl.onMessage((node, msg) => {
-        evpContext.feedUnlMessage(node, msg);
-    })
-
     // Send votes to an election.
     const r1 = evpContext.vote("firstRound", [1, 2], new evp.AllVoteElector(10, 1000));
     const r2 = evpContext.vote("secondRound", [6, 7], new evp.AllVoteElector(10, 1000));
 
-    console.log((await r1).map(v => v.data));
-    console.log((await r2).map(v => v.data));
+    console.log('First round votes', (await r1).map(v => v.data));
+    console.log('Second round votes', (await r2).map(v => v.data));
 }
 
 // Get contract config examples.
@@ -42,7 +39,7 @@ const getContractConfig = async (evpContext) => {
     // Get current contract config.
     const config = await evpContext.getConfig();
 
-    console.log(JSON.stringify(config));
+    console.log('Contract config', JSON.stringify(config));
 }
 
 // Update contract config examples.
@@ -61,8 +58,6 @@ const updateContractConfig = async (evpContext) => {
 
     // Update the contract config with updated one.
     await evpContext.updateConfig(config);
-
-    console.log(`Config Updated`);
 }
 
 // Update contract config examples.
@@ -90,7 +85,7 @@ const updateContract = async (evpContext) => {
         bin_path: '/usr/bin/node',
         bin_args: 'index.js',
         consensus: {
-            roundtime: 2000
+            roundtime: 4000
         }
     }, null, 4));
 
@@ -125,7 +120,6 @@ const updateContract = async (evpContext) => {
     fs.rmSync(zip);
 
     ///////////////////////////////////////////
-
 }
 
 // Update unl examples.
@@ -169,6 +163,24 @@ const updatePeers = async (evpContext) => {
         await evpContext.addPeers([peer.toString()]);
         fs.rmSync(removedPeer);
     }
+}
+
+// Get a random number.
+const randomNumber = async (evpContext) => {
+    const random1 = await evpContext.random();
+    const random2 = await evpContext.random();
+
+    console.log('Random number 1', random1);
+    console.log('Random number 2', random2);
+}
+
+// Get an uuid.
+const uuidv4 = async (evpContext) => {
+    const uuid1 = await evpContext.uuid4();
+    const uuid2 = await evpContext.uuid4();
+
+    console.log('UUID 1', uuid1);
+    console.log('UUID 2', uuid2);
 }
 
 const hpc = new HotPocket.Contract();
