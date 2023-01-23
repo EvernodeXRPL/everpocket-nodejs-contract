@@ -1,7 +1,8 @@
 import Context from './ContractContext';
-import { SignedBlob, Signer, TransactionSubmissionInfo } from '../models';
+import { Signature, Signer, TransactionSubmissionInfo } from '../models';
 import { MultiSignedBlobCollector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
+import * as xrplCodec from 'xrpl-binary-codec'
 
 class EvernodeContext extends Context {
     private multiSigner: MultiSigner | null = null;
@@ -46,12 +47,19 @@ class EvernodeContext extends Context {
 
         // Sign the transaction and collect the signed blob list.
         const signed = await this.multiSigner.sign(transaction);
-        const signedBlobs: SignedBlob[] = (await this.vote(`sign${this.getUniqueNumber()}`, [<SignedBlob>{ blob: signed, account: this.multiSigner.signerAcc.address }],
+        const decodedTx = JSON.parse(JSON.stringify(xrplCodec.decode(signed)));
+        const signature: Signature = decodedTx.Signers[0];
+
+        const signatures: Signature[] = (await this.vote(`sign${this.hpContext.timestamp}`, [signature],
             new MultiSignedBlobCollector(this.hpContext.users.length, signerListInfo, timeout)))
             .map(ob => ob.data);
-        console.log(`Collected ${signedBlobs.length} signed blobs`);
-        // Submit the signed blobs.
-        await this.multiSigner.submitSignedBlobs(signedBlobs.map(sb => sb.blob));
+        console.log(`Collected ${signatures.length} signatures.`);
+
+        transaction.Signers = [...signatures] ;
+        transaction.SigningPubKey = "";
+
+        // Submit the multi-signed transaction.
+        await this.multiSigner.submitMultisignedTx(transaction);
     }
 
     /**
@@ -102,10 +110,11 @@ class EvernodeContext extends Context {
             transaction.LastLedgerSequence = txSubmitInfo.maxLedgerSequence;
 
             /////// TODO: This should be handled in js lib. //////
-            transaction.Fee = '1000';
+            transaction.Fee = `${10 * (this.hpContext.unl.list().length + 2)}`;
 
             await this.multiSignAndSubmitTransaction(transaction, timeout);
         }
+
     }
 
     public async renewSignerList(timeout: number = 4000) {

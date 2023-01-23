@@ -112,15 +112,13 @@ class MultiSigner {
 
     /**
      * 
-     * @param blobList An array of signed blobs
-     * @returns 
+     * @param tx Multi-signed transaction
+     * @returns response
      */
-    async submitSignedBlobs(blobList: string[] | []) {
-        if (blobList.length < 1) {
-            throw ("No transaction blobs to submit.")
-        }
-        const finalBlob = this.masterAcc.xrplApi.multiSign(blobList);
-        return await this.masterAcc.submitTransactionBlob(finalBlob);
+    async submitMultisignedTx(tx: any) {
+        const res =  await this.xrplApi.submitMultisigned(tx);
+        console.log(res.result?.engine_result);
+        return res;
     }
 }
 
