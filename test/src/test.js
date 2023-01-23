@@ -11,12 +11,14 @@ const testContract = async (ctx) => {
 
     if (!ctx.readonly) {
         const tests = [
-            // () => testVote(baseContext, ctx),
+            // () => testVote(baseContext),
             // () => getContractConfig(contractContext),
             // () => updateContractConfig(contractContext),
             // () => updateContract(contractContext),
             // () => updateUnl(contractContext, ctx),
             // () => updatePeers(contractContext),
+            // () => randomNumber(baseContext),
+            // () => uuidv4(baseContext),
             () => multiSignTransaction(evernodeContext)
         ];
 
@@ -27,13 +29,13 @@ const testContract = async (ctx) => {
 }
 
 // Voting examples.
-const testVote = async (baseContext, ctx) => {
+const testVote = async (baseContext) => {
     // Send votes to an election.
     const r1 = baseContext.vote("firstRound", [1, 2], new evp.AllVoteElector(10, 1000));
     const r2 = baseContext.vote("secondRound", [6, 7], new evp.AllVoteElector(10, 1000));
 
-    console.log((await r1).map(v => v.data));
-    console.log((await r2).map(v => v.data));
+    console.log('First round votes', (await r1).map(v => v.data));
+    console.log('Second round votes', (await r2).map(v => v.data));
 }
 
 // Get contract config examples.
@@ -41,7 +43,7 @@ const getContractConfig = async (contractContext) => {
     // Get current contract config.
     const config = await contractContext.getConfig();
 
-    console.log(JSON.stringify(config));
+    console.log('Contract config', JSON.stringify(config));
 }
 
 // Update contract config examples.
@@ -60,8 +62,6 @@ const updateContractConfig = async (contractContext) => {
 
     // Update the contract config with updated one.
     await contractContext.updateConfig(config);
-
-    console.log(`Config Updated`);
 }
 
 // Update contract config examples.
@@ -89,7 +89,7 @@ const updateContract = async (contractContext) => {
         bin_path: '/usr/bin/node',
         bin_args: 'index.js',
         consensus: {
-            roundtime: 2000
+            roundtime: 4000
         }
     }, null, 4));
 
@@ -124,7 +124,6 @@ const updateContract = async (contractContext) => {
     fs.rmSync(zip);
 
     ///////////////////////////////////////////
-
 }
 
 // Update unl examples.
@@ -168,6 +167,24 @@ const updatePeers = async (contractContext) => {
         await contractContext.addPeers([peer.toString()]);
         fs.rmSync(removedPeer);
     }
+}
+
+// Get a random number.
+const randomNumber = async (evpContext) => {
+    const random1 = await evpContext.random();
+    const random2 = await evpContext.random();
+
+    console.log('Random number 1', random1);
+    console.log('Random number 2', random2);
+}
+
+// Get an uuid.
+const uuidv4 = async (evpContext) => {
+    const uuid1 = await evpContext.uuid4();
+    const uuid2 = await evpContext.uuid4();
+
+    console.log('UUID 1', uuid1);
+    console.log('UUID 2', uuid2);
 }
 
 const multiSignTransaction = async (evernodeContext) => {

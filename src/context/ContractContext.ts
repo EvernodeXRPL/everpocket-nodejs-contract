@@ -33,7 +33,7 @@ class ContractContext extends BaseContext {
      * Update contract configuration.
      * @param config Configuration with the values that needed to be updated.
      */
-    public async updateConfig(config: ContractConfig) {
+    public async updateConfig(config: ContractConfig): Promise<void> {
         let patchCfg: ContractConfig = await this.getConfig();
 
         // Take only the non empty not null values since the values are optional.
@@ -135,7 +135,7 @@ class ContractContext extends BaseContext {
      * Add peers to the peer list.
      * @param peers Peers to add.
      */
-    public async addPeers(peers: Peer[]) {
+    public async addPeers(peers: Peer[]): Promise<void> {
         await this.hpContext.updatePeers(peers.map(p => p.toString()), null);
     }
 
@@ -143,7 +143,7 @@ class ContractContext extends BaseContext {
      * Remove peers from the peer list.
      * @param peers Peers to remove.
      */
-    public async removePeers(peers: Peer[]) {
+    public async removePeers(peers: Peer[]): Promise<void> {
         await this.hpContext.updatePeers(null, peers.map(p => p.toString()));
     }
 
@@ -151,7 +151,7 @@ class ContractContext extends BaseContext {
      * Update the contract binaries with given zip bundle.
      * @param bundle Byte array of the contract bundle zip (Can include: contract binaries, contract.config, install.sh).
      */
-    public async updateContract(bundle: Buffer) {
+    public async updateContract(bundle: Buffer): Promise<void> {
         const CONFIG = "contract.config";
         const PATCH_CFG_BK = "../patch.cfg.bk";
         const INSTALL_SCRIPT = "install.sh";

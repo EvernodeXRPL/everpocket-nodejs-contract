@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import * as EventEmitter from 'events';
 import { Buffer } from 'buffer';
 import { UnlNode } from '../models';
@@ -20,16 +21,9 @@ class BaseContext {
     }
 
     /**
-     * Deserialize UNL message and feed to the listeners.
-     * @param sender UNLNode which has sent the message.
-     * @param msg Message received from UNL.
+     * Initialize listener to the incoming unl messages.
      */
-    public feedUnlMessage(sender: UnlNode, msg: Buffer): void {
-        const vote = this.voteSerializer.deserializeVote(msg);
-        vote && this.eventEmitter.emit(vote.election, sender, vote.data);
-    }
-
-    public initListener(): void {
+    private initUnlListener(): void {
         if (!this.listened) {
             // Listen to incoming unl messages and feed them to elector.
             this.hpContext.unl.onMessage((node: UnlNode, msg: Buffer) => {
@@ -40,6 +34,16 @@ class BaseContext {
     }
 
     /**
+     * Deserialize UNL message and feed to the listeners.
+     * @param sender UNLNode which has sent the message.
+     * @param msg Message received from UNL.
+     */
+    public feedUnlMessage(sender: UnlNode, msg: Buffer): void {
+        const vote = this.voteSerializer.deserializeVote(msg);
+        vote && this.eventEmitter.emit(vote.election, sender, vote.data);
+    }
+
+    /**
      * Send the votes to a election.
      * @param electionName Election identifier to vote for.
      * @param votes Votes for the election.
@@ -47,7 +51,7 @@ class BaseContext {
      * @returns Evaluated votes as a promise.
      */
     public async vote(electionName: string, votes: any[], elector: AllVoteElector): Promise<any[]> {
-        this.initListener();
+        this.initUnlListener();
 
         // Start the election.
         const election = elector.election(electionName, this.eventEmitter);
@@ -60,6 +64,36 @@ class BaseContext {
 
         // Get election result.
         return await election;
+    }
+
+    /**
+     * Generates a random number.
+     * @param timeout Maximum timeout to generate a random number.
+     * @returns A random number between 0-1.
+     */
+    public async random(timeout: number = 1000): Promise<number | null> {
+        // Generate a random number.
+        // Vote for the random number each node has generated.
+        const number = Math.random();
+        const rn = await this.vote(`randomNumber${this.hpContext.timestamp}`, [number], new AllVoteElector(this.hpContext.unl.list().length, timeout));
+
+        // Take the minimum random number.
+        return rn.length ? Math.min(...rn.map(v => v.data)) : null;
+    }
+
+    /**
+     * Generates an uuid string.
+     * @param timeout Maximum timeout to generate an uuid.
+     * @returns An uuid.
+     */
+    public async uuid4(timeout: number = 1000): Promise<string | null> {
+        // Generate an uuid.
+        // Vote for the uuid each node has generated.
+        const uuid = uuidv4();
+        const uuids = await this.vote(`uuid4${this.hpContext.timestamp}`, [uuid], new AllVoteElector(this.hpContext.unl.list().length, timeout));
+
+        // Take the first ascending uuid.
+        return uuids.length ? uuids.map(v => v.data).sort()[0] : null;
     }
 }
 
