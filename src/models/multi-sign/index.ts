@@ -9,9 +9,12 @@ export interface SignerListInfo {
   signerList: Signer[];
 }
 
-export interface SignedBlob {
-  blob: string;
-  account: string;
+export interface Signature {
+  Signer: {
+    SigningPubKey: string;
+    TxnSignature: string;
+    Account: string;
+  }
 }
 
 export interface TransactionSubmissionInfo {
