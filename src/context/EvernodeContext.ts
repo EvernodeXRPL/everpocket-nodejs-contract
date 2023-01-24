@@ -30,7 +30,11 @@ class EvernodeContext extends Context {
             maxLedgerSequence: this.multiSigner.getMaxLedgerSequence()
         }], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
         console.log(`Collected ${infos.length} submission info`);
-        return infos.sort((a, b) => a.sequence - b.sequence)[0];
+
+        return <TransactionSubmissionInfo>{
+            sequence: infos.map(i => i.sequence).sort()[0],
+            maxLedgerSequence: infos.map(i => i.maxLedgerSequence).sort((a, b) => b - a)[0]
+        };
     }
 
     /**
