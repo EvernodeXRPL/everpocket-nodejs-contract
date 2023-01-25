@@ -210,43 +210,71 @@ const testXrplCluster = async (evpContext) => {
         }
      */
 
-    const buf = fs.readFileSync('node-config.json');
+    const STEP_CONFIG = 'steps.cfg';
+    const XRPL_CONFIG_FILE = 'xrpl.cfg';
+    const NODE_CONFIG_FILE = 'node-config.json';
+
+    const stepConfig = getStepConfig();
+    const currentLcl = evpContext.hpContext.lclSeqNo;
+
+    function updateStepConfig(config) {
+        fs.writeFileSync(STEP_CONFIG, JSON.stringify(config));
+    }
+
+    function getStepConfig() {
+        return !fs.existsSync(STEP_CONFIG) ? {} : JSON.parse(fs.readFileSync(STEP_CONFIG));
+    }
+
+    const buf = fs.readFileSync(NODE_CONFIG_FILE);
     const configs = JSON.parse(buf);
     const primaryNode = configs.nodeDetails[0];
-    let patchCfg = await evpContext.getConfig();
 
     // Move XRPL operations related config file in the bundle to an outer location.
-    if (fs.existsSync('xrpl.cfg')) {
+    if (!stepConfig.secretChange && fs.existsSync(XRPL_CONFIG_FILE)) {
 
-        fs.renameSync('xrpl.cfg', '../xrpl.cfg');
+        fs.renameSync(XRPL_CONFIG_FILE, `../${XRPL_CONFIG_FILE}`);
         console.log("Secret changed.");
 
-        if (evpContext.hpContext.publicKey !== primaryNode.pubkey)
-            await evpContext.addPeers([`${primaryNode.ip}:${primaryNode.peer_port}`]);
+        // Adding peers to the known peer list.
+        await evpContext.addPeers(configs.nodeDetails.filter(n => n.pubkey != evpContext.hpContext.publicKey).map(n => `${n.ip}:${n.peer_port}`));
+        console.log("Added peers.");
 
-    } else if (!fs.existsSync('../flag-selected-primary-node.txt')) {
-        console.log("UNL changed for first time");
-
-        await evpContext.updateConfig({ unl: [primaryNode.pubkey] })
-
-        // Create a flag file to denote the contract status >> Primary node selection.
-        fs.writeFileSync('../flag-selected-primary-node.txt', `${evpContext.hpContext.lclSeqNo}|Primary node was selected as ${primaryNode.pubkey}`);
-
-    } else if (!fs.existsSync('../flag-created-cluster.txt')) {
-        console.log("UNL changed for second time.");
-
-        await evpContext.updateConfig({ unl: configs.nodeDetails.map(n => n.pubkey) });
-
-        patchCfg = await evpContext.getConfig();
-
-        if (evpContext.hpContext.publicKey === primaryNode.pubkey)
-            await evpContext.addPeers(configs.nodeDetails.filter(n => n.pubkey !== primaryNode.pubkey).map(n => `${n.ip}:${n.peer_port}`));
-
-        // Create a flag file to denote the contract status >> Cluster completion.
-        if (configs.nodeDetails.length === patchCfg.unl.length)
-            fs.writeFileSync('../flag-created-cluster.txt', `${evpContext.hpContext.lclSeqNo}|XRPL cluster has been created`);
-
+        updateStepConfig({
+            ...stepConfig,
+            secretChange: currentLcl
+        });
     }
+    else if (!stepConfig.setPrimaryUnl && stepConfig.secretChange && currentLcl > stepConfig.secretChange) {
+        const curPatchCfg = await evpContext.getConfig();
+        
+        await evpContext.updateConfig({ unl: [primaryNode.pubkey], consensus: { roundtime: 10000 } });
+        console.log("Added primary node as UNL");
+
+        updateStepConfig({
+            ...stepConfig,
+            setPrimaryUnl: currentLcl,
+            originalRoundtime: curPatchCfg.consensus.roundtime
+        });
+    }
+    else if (!stepConfig.setClusterUnl && stepConfig.setPrimaryUnl && currentLcl > (stepConfig.setPrimaryUnl + 40)) {
+        await evpContext.updateConfig({ unl: configs.nodeDetails.map(n => n.pubkey) });
+        console.log("Added cluster UNL");
+
+        updateStepConfig({
+            ...stepConfig,
+            setClusterUnl: currentLcl
+        });
+    }
+    else if (!stepConfig.roundtimeChange && stepConfig.originalRoundtime && stepConfig.setClusterUnl && currentLcl > (stepConfig.setClusterUnl + 5)) {
+        await evpContext.updateConfig({ consensus: { roundtime: stepConfig.originalRoundtime } });
+        console.log("Restored original roundtime");
+
+        updateStepConfig({
+            ...stepConfig,
+            roundtimeChange: currentLcl
+        });
+    }
+
 }
 
 const hpc = new HotPocket.Contract();
