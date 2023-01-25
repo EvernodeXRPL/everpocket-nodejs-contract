@@ -108,7 +108,6 @@ class MultiSigner {
      */
     async submitMultisignedTx(tx: any) {
         const res = await this.xrplApi.submitMultisigned(tx);
-        console.log(res.result?.engine_result);
         return res;
     }
 }

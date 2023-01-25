@@ -7,7 +7,7 @@ const testContract = async (ctx) => {
     const baseContext = new evp.BaseContext(ctx);
     const contractContext = new evp.ContractContext(ctx);
     const evernodeContext = new evp.EvernodeContext(ctx);
-
+    const evernodeContextTemp = new evp.EvernodeContext(ctx); // TODO: This is a temporary instance and will be removed in the future
 
     if (!ctx.readonly) {
         // Listen to incoming unl messages and feed them to elector.
@@ -15,9 +15,11 @@ const testContract = async (ctx) => {
             baseContext.feedUnlMessage(node, msg);
             contractContext.feedUnlMessage(node, msg);
             evernodeContext.feedUnlMessage(node, msg);
+            evernodeContextTemp.feedUnlMessage(node, msg); // TODO: This is a temporary function and will be removed in the future
         })
 
         const tests = [
+            () => prepareMultiSigner(evernodeContextTemp, ctx), // TODO: This is a temporary function and will be removed in the future
             // () => testVote(baseContext),
             // () => getContractConfig(contractContext),
             // () => updateContractConfig(contractContext),
@@ -198,7 +200,6 @@ const uuidv4 = async (baseContext) => {
 const multiSignTransaction = async (evernodeContext) => {
     const masterAddress = "r3KvcExtEwa851uV8nJmosGkcwG8i1Bpzo";
     const tx = {
-
         TransactionType: "Payment",
         Account: "r3KvcExtEwa851uV8nJmosGkcwG8i1Bpzo",
         Destination: "rNbmMCHbSjkpGLNfqYxKT8NU1Bxue8r6s3",
@@ -211,13 +212,11 @@ const multiSignTransaction = async (evernodeContext) => {
 
     try {
         console.log("----------- Multi-Signing Test");
-        ////// TODO: This is a temporary function and will be removed in the future //////
-        await evernodeContext.prepareMultiSigner(3, "ssJ3BwXRpH5TLDnJDFNNZUJziX3oC");
-
-        await evernodeContext.submitTransaction(tx);
+        await evernodeContext.multiSignAndSubmitTransaction(tx);
+        console.log("Transaction submitted");
 
     } catch (e) {
-        console.log(e);
+        console.error(e);
     } finally {
         await evernodeContext.removeMultiSigner();
     }
@@ -230,18 +229,90 @@ const renewSignerList = async (evernodeContext) => {
 
     try {
         console.log("----------- Renew Multi-Signing");
-        ////// TODO: This is a temporary function and will be removed in the future //////
-        await evernodeContext.prepareMultiSigner(3, "ssJ3BwXRpH5TLDnJDFNNZUJziX3oC");
-
         await evernodeContext.renewSignerList();
         console.log("Signer list renewed");
 
     } catch (e) {
+        console.error(e);
+    } finally {
+        await evernodeContext.removeMultiSigner();
+    }
+}
+
+////// TODO: This is a temporary function and will be removed in the future //////
+const prepareMultiSigner = async (evernodeContext, ctx) => {
+    const masterAddress = "r3KvcExtEwa851uV8nJmosGkcwG8i1Bpzo";
+    const keyPath = `../${masterAddress}.key`;
+    if (fs.existsSync(keyPath))
+        return;
+
+    await evernodeContext.setMultiSigner(masterAddress);
+
+    try {
+        const kp = require('ripple-keypairs');
+        const nodeSecret = kp.generateSeed({ algorithm: "ecdsa-secp256k1" });
+        const keypair = kp.deriveKeypair(nodeSecret);
+        const signer = {
+            account: kp.deriveAddress(keypair.publicKey),
+            secret: nodeSecret
+        };
+
+        // Generate and collect signer list if signer list isn't provided.
+        const signerList = (await evernodeContext.vote(`multiSignerPrepare`, [{
+            account: signer.account,
+            weight: 1
+        }], new evp.AllVoteElector(ctx.unl.list().length, 4000))).map(ob => ob.data);
+
+        const txSubmitInfo = await evernodeContext.getTransactionSubmissionInfo();
+        if (txSubmitInfo) {
+            const tx = {
+                Flags: 0,
+                TransactionType: "SignerListSet",
+                Account: masterAddress,
+                SignerQuorum: 3,
+                SignerEntries: [
+                    ...signerList.map(signer => ({
+                        SignerEntry: {
+                            Account: signer.account,
+                            SignerWeight: signer.weight
+                        }
+                    })).sort((a, b) => a.SignerEntry.Account < b.SignerEntry.Account ? -1 : 1)
+                ],
+                Sequence: txSubmitInfo.sequence,
+                LastLedgerSequence: txSubmitInfo.maxLedgerSequence,
+                Fee: '10'
+            }
+
+            const xrpl = require('xrpl');
+            const wallet = xrpl.Wallet.fromSeed("ssJ3BwXRpH5TLDnJDFNNZUJziX3oC");
+            const signed = wallet.sign(tx);
+
+            const client = new xrpl.Client('wss://hooks-testnet-v2.xrpl-labs.com');
+            await client.connect();
+            const res = await client.request({ command: 'submit', tx_blob: signed.tx_blob });
+            await client.disconnect();
+
+            if (res.result.engine_result === "tesSUCCESS")
+                console.log("Transaction submitted successfully");
+            else if (res.result.engine_result === "tefPAST_SEQ" || res.result.engine_result === "tefALREADY")
+                console.log("Proceeding with pre-submitted transaction");
+            else
+                throw err;
+
+            fs.writeFileSync(keyPath, JSON.stringify(signer));
+            console.log('Prepared multi signing');
+        }
+        else {
+            throw 'Could not get transaction submission info';
+        }
+    }
+    catch (e) {
         console.log(e);
     } finally {
         await evernodeContext.removeMultiSigner();
     }
 }
+////////////////////////////////////////////////////////////////////////////
 
 const hpc = new HotPocket.Contract();
 hpc.init(testContract);

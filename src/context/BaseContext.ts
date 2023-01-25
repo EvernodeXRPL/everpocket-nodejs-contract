@@ -6,7 +6,7 @@ import VoteSerializer from '../vote/VoteSerializer';
 import { AllVoteElector } from '../vote/vote-electors';
 
 class BaseContext {
-    hpContext: any;
+    protected hpContext: any;
     private eventEmitter: EventEmitter = new EventEmitter();
     private voteSerializer: VoteSerializer;
     private uniqueNumber: number = 0;
