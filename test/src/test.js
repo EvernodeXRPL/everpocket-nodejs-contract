@@ -8,14 +8,15 @@ const testContract = async (ctx) => {
 
     if (!ctx.readonly) {
         const tests = [
-            () => testVote(evpContext, ctx),
-            () => getContractConfig(evpContext),
-            () => updateContractConfig(evpContext),
-            () => updateContract(evpContext),
-            () => updateUnl(evpContext, ctx),
-            () => updatePeers(evpContext),
-            () => randomNumber(evpContext),
-            () => uuidv4(evpContext),
+            // () => testVote(evpContext, ctx),
+            // () => getContractConfig(evpContext),
+            // () => updateContractConfig(evpContext),
+            // () => updateContract(evpContext),
+            // () => updateUnl(evpContext, ctx),
+            // () => updatePeers(evpContext),
+            // () => randomNumber(evpContext),
+            // () => uuidv4(evpContext),
+            () => testXrplCluster(evpContext)
         ];
 
         for (const test of tests) {
@@ -181,6 +182,71 @@ const uuidv4 = async (evpContext) => {
 
     console.log('UUID 1', uuid1);
     console.log('UUID 2', uuid2);
+}
+
+
+const testXrplCluster = async (evpContext) => {
+
+    // Sample `node-config.json` file.
+    /**
+        {
+            "nodeDetails": [
+                {
+                    "ip": "127.0.0.1",
+                    "pubkey": "ed0a2305a082bbe73ffabfded5673816b2601234b6aab12610b97a82e054cb9207",
+                    "peer_port": "22861"
+                },
+                {
+                    "ip": "127.0.0.1",
+                    "pubkey": "ed2f8576f70ba4226de68bf496112c90ae93f706f762345d2e4be17d8d0b019203",
+                    "peer_port": "22862"
+                },
+                {
+                    "ip": "127.0.0.1",
+                    "pubkey": "edbfdb355fd8c72bcca27199050c4108128cf99a0a5e627b5558583cb623917176",
+                    "peer_port": "22863"
+                }
+            ]
+        }
+     */
+
+    const buf = fs.readFileSync('node-config.json');
+    const configs = JSON.parse(buf);
+    const primaryNode = configs.nodeDetails[0];
+    let patchCfg = await evpContext.getConfig();
+
+    // Move XRPL operations related config file in the bundle to an outer location.
+    if (fs.existsSync('xrpl.cfg')) {
+
+        fs.renameSync('xrpl.cfg', '../xrpl.cfg');
+        console.log("Secret changed.");
+
+        if (evpContext.hpContext.publicKey !== primaryNode.pubkey)
+            await evpContext.addPeers([`${primaryNode.ip}:${primaryNode.peer_port}`]);
+
+    } else if (!fs.existsSync('../flag-selected-primary-node.txt')) {
+        console.log("UNL changed for first time");
+
+        await evpContext.updateConfig({ unl: [primaryNode.pubkey] })
+
+        // Create a flag file to denote the contract status >> Primary node selection.
+        fs.writeFileSync('../flag-selected-primary-node.txt', `${evpContext.hpContext.lclSeqNo}|Primary node was selected as ${primaryNode.pubkey}`);
+
+    } else if (!fs.existsSync('../flag-created-cluster.txt')) {
+        console.log("UNL changed for second time.");
+
+        await evpContext.updateConfig({ unl: configs.nodeDetails.map(n => n.pubkey) });
+
+        patchCfg = await evpContext.getConfig();
+
+        if (evpContext.hpContext.publicKey === primaryNode.pubkey)
+            await evpContext.addPeers(configs.nodeDetails.filter(n => n.pubkey !== primaryNode.pubkey).map(n => `${n.ip}:${n.peer_port}`));
+
+        // Create a flag file to denote the contract status >> Cluster completion.
+        if (configs.nodeDetails.length === patchCfg.unl.length)
+            fs.writeFileSync('../flag-created-cluster.txt', `${evpContext.hpContext.lclSeqNo}|XRPL cluster has been created`);
+
+    }
 }
 
 const hpc = new HotPocket.Contract();
