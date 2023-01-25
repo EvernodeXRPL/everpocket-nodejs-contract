@@ -26,7 +26,8 @@ const testContract = async (ctx) => {
             // () => updatePeers(contractContext),
             // () => randomNumber(baseContext),
             // () => uuidv4(baseContext),
-            () => multiSignTransaction(evernodeContext)
+            // () => multiSignTransaction(evernodeContext),
+            () => renewSignerList(evernodeContext)
         ];
 
         for (const test of tests) {
@@ -195,11 +196,6 @@ const uuidv4 = async (baseContext) => {
 }
 
 const multiSignTransaction = async (evernodeContext) => {
-
-    // user inputs
-    const signerList = []; // [{ account: "rafef45v45efefe", weight: 1 }, { account: "rafef4gg5v45efefe", weight: 1 }];
-    const quorum = 3;
-    const masterKey = "ssJ3BwXRpH5TLDnJDFNNZUJziX3oC";
     const masterAddress = "r3KvcExtEwa851uV8nJmosGkcwG8i1Bpzo";
     const tx = {
 
@@ -214,10 +210,31 @@ const multiSignTransaction = async (evernodeContext) => {
     await evernodeContext.setMultiSigner(masterAddress);
 
     try {
-        console.log("----------- Multi-Signing Test")
-        await evernodeContext.prepareMultiSigner(quorum, masterKey, signerList, 2000, true);
-        console.log("Signer list added");
+        console.log("----------- Multi-Signing Test");
+        ////// TODO: This is a temporary function and will be removed in the future //////
+        await evernodeContext.prepareMultiSigner(3, "ssJ3BwXRpH5TLDnJDFNNZUJziX3oC");
+
         await evernodeContext.submitTransaction(tx);
+
+    } catch (e) {
+        console.log(e);
+    } finally {
+        await evernodeContext.removeMultiSigner();
+    }
+}
+
+const renewSignerList = async (evernodeContext) => {
+    const masterAddress = "r3KvcExtEwa851uV8nJmosGkcwG8i1Bpzo";
+
+    await evernodeContext.setMultiSigner(masterAddress);
+
+    try {
+        console.log("----------- Renew Multi-Signing");
+        ////// TODO: This is a temporary function and will be removed in the future //////
+        await evernodeContext.prepareMultiSigner(3, "ssJ3BwXRpH5TLDnJDFNNZUJziX3oC");
+
+        await evernodeContext.renewSignerList();
+        console.log("Signer list renewed");
 
     } catch (e) {
         console.log(e);

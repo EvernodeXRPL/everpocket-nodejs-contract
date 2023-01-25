@@ -2,7 +2,8 @@ import Context from './ContractContext';
 import { Signature, Signer, TransactionSubmissionInfo } from '../models';
 import { MultiSignedBlobCollector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
-import * as xrplCodec from 'xrpl-binary-codec'
+import * as xrplCodec from 'xrpl-binary-codec';
+import * as evernode from 'evernode-js-client';
 
 class EvernodeContext extends Context {
     private multiSigner: MultiSigner | null = null;
@@ -30,7 +31,6 @@ class EvernodeContext extends Context {
             sequence: await this.multiSigner.getSequence(),
             maxLedgerSequence: this.multiSigner.getMaxLedgerSequence()
         }], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
-        console.log(`Collected ${infos.length} submission info`);
 
         return <TransactionSubmissionInfo>{
             sequence: infos.map(i => i.sequence).sort()[0],
@@ -57,45 +57,12 @@ class EvernodeContext extends Context {
         const signatures: Signature[] = (await this.vote(`sign${this.hpContext.timestamp}`, [signature],
             new MultiSignedBlobCollector(this.hpContext.users.length, signerListInfo, timeout)))
             .map(ob => ob.data);
-        console.log(`Collected ${signatures.length} signatures.`);
 
-        transaction.Signers = [...signatures] ;
+        transaction.Signers = [...signatures];
         transaction.SigningPubKey = "";
 
         // Submit the multi-signed transaction.
         await this.multiSigner.submitMultisignedTx(transaction);
-    }
-
-    /**
-     * Set the provided signer list to the master account and disable the master key if necessary. If provided signer lsi is empty, it generates xrpl accounts for each node and set all those accounts as the signer list of the master key.
-     * @param quorum Signer quorum
-     * @param secret Secret of the master account
-     * @param signerList (optional) Signer list for the master account
-     * @param timeout  (optional)
-     */
-    public async prepareMultiSigner(quorum: number, secret: string, signerList: Signer[] = [], timeout: number = 4000): Promise<void> {
-        if (!this.multiSigner)
-            throw 'No multi signer for the context';
-
-        // Generate and collect signer list if signer list isn't provided.
-        if (!signerList || !signerList.length) {
-            const signer = this.multiSigner.generateSigner();
-            signerList = (await this.vote(`multiSigner${this.getUniqueNumber()}`, [<Signer>{
-                account: signer.account,
-                weight: 1
-            }], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
-        }
-
-        // Configure multisig for the account.
-        const txSubmitInfo = await this.getTransactionSubmissionInfo();
-        if (txSubmitInfo) {
-            const multiSigner = new MultiSigner(null, secret);
-            await multiSigner.init();
-            await multiSigner.setSignerList(quorum, signerList.sort((a, b) => a.account < b.account ? -1 : 1), txSubmitInfo.sequence, txSubmitInfo.maxLedgerSequence);
-            await multiSigner.deinit();
-
-            this.multiSigner.persistSigner();
-        }
     }
 
     /**
@@ -130,10 +97,10 @@ class EvernodeContext extends Context {
         const curSignerWeight = curSignerList?.signerList.find(s => s.account === curSigner?.account)?.weight;
 
         if (curSigner && curSignerWeight) {
-            let newSigner = this.multiSigner.generateSigner();
+            const newSigner = this.multiSigner.generateSigner();
             const newSignerList: Signer[] = (await this.vote(`signerList${this.getUniqueNumber()}`, [<Signer>{
                 account: newSigner.account,
-                weight: curSigner.weight
+                weight: curSignerWeight
             }], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
 
             const signerListTx =
@@ -154,12 +121,41 @@ class EvernodeContext extends Context {
 
             await this.submitTransaction(signerListTx, timeout);
 
-            this.multiSigner.persistSigner();
+            // Set the new signer after signer list is successfully set.
+            this.multiSigner.setSigner(newSigner);
         }
         else {
             throw `No signers for ${this.multiSigner.masterAcc.address}`;
         }
     }
+
+    ////// TODO: This is a temporary function and will be removed in the future //////
+    public async prepareMultiSigner(quorum: number, secret: string, timeout: number = 4000): Promise<void> {
+        if (!this.multiSigner)
+            throw 'No multi signer for the context';
+        if (this.multiSigner.signerAcc)
+            return;
+
+        // Generate and collect signer list if signer list isn't provided.
+        const signer = this.multiSigner.generateSigner();
+        const signerList = (await this.vote(`multiSigner${this.getUniqueNumber()}`, [<Signer>{
+            account: signer.account,
+            weight: 1
+        }], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
+
+        // Configure multisig for the account.
+        const txSubmitInfo = await this.getTransactionSubmissionInfo();
+        if (txSubmitInfo) {
+            const xrplApi = new evernode.XrplApi();
+            await xrplApi.connect();
+            const masterAcc = new evernode.XrplAccount(null, secret, { xrplApi: xrplApi });
+            await masterAcc.setSignerList(signerList, { signerQuorum: quorum, sequence: txSubmitInfo.sequence, maxLedgerIndex: txSubmitInfo.maxLedgerSequence });
+            await xrplApi.disconnect();
+
+            this.multiSigner.setSigner(signer);
+        }
+    }
+    ////////////////////////////////////////////////////////////////////////////
 }
 
 export default EvernodeContext;
