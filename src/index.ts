@@ -1,4 +1,4 @@
-export { default as Context } from './Context'
+export * from './context'
 
 export * from './vote/vote-electors'
 
