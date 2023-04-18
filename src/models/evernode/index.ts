@@ -1,4 +1,5 @@
 import { XrplContext } from "../../context";
+import { Peer } from "../common";
 import { XrplContextOptions } from "../xrpl";
 
 export interface EvernodeContextOptions {
@@ -9,4 +10,12 @@ export interface EvernodeContextOptions {
 export interface AcquireOptions {
   host?: string;
   txOptions?: any;
+}
+
+export interface ClusterNode {
+  publicKey: string;
+  peer: Peer;
+  account: string;
+  isUNL: boolean;
+  isQuorum: boolean;
 }

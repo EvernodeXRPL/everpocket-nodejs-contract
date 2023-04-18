@@ -32,7 +32,7 @@ export interface XrplContextOptions {
   voteOptions?: VoteContextOptions;
 }
 
-export class MultiSignOptions {
+export interface MultiSignOptions {
   quorum?: number;
   weight?: number;
   voteTimeout?: number;

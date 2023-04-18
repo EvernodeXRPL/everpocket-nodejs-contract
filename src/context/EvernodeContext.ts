@@ -1,13 +1,16 @@
 import { XrplContext } from ".";
+import { ClusterManager } from "../cluster";
 import { AcquireOptions, EvernodeContextOptions } from "../models/evernode";
 
 class EvernorContext {
     public hpContext: any;
     public xrplContext: XrplContext;
+    public clusterManager: ClusterManager;
 
     constructor(hpContext: any, address: string, options: EvernodeContextOptions = {}) {
         this.hpContext = hpContext;
         this.xrplContext = options.xrplContext || new XrplContext(this.hpContext, address, null, options.xrplOptions);
+        this.clusterManager = new ClusterManager(hpContext.publicKey);
     }
 
     async init(): Promise<void> {

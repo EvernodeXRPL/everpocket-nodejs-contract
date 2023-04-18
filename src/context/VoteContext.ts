@@ -3,6 +3,7 @@ import { Buffer } from 'buffer';
 import { UnlNode } from '../models';
 import VoteSerializer from '../vote/VoteSerializer';
 import { AllVoteElector } from '../vote/vote-electors';
+import { VoteContextOptions } from '../models/vote';
 
 class VoteContext {
     public hpContext: any;
@@ -15,7 +16,7 @@ class VoteContext {
      * HotPocket contract context handler.
      * @param hpContext HotPocket contract context.
      */
-    public constructor(hpContext: any, options: any = {}) {
+    public constructor(hpContext: any, options: VoteContextOptions = {}) {
         this.hpContext = hpContext;
         this.voteSerializer = options.voteSerializer || new VoteSerializer();
     }
