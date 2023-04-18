@@ -1,3 +1,3 @@
-export { default as ContractContext } from './ContractContext'
+export { default as XrplContext } from './XrplContext'
+export { default as VoteContext } from './VoteContext'
 export { default as EvernodeContext } from './EvernodeContext'
-export { default as BaseContext } from './BaseContext'

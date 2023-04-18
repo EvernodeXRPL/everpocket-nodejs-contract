@@ -1,3 +1,6 @@
+import { VoteContext } from "../../context";
+import { VoteContextOptions } from "../vote";
+
 export interface Signer {
   account: string;
   secret: string;
@@ -5,6 +8,7 @@ export interface Signer {
 }
 
 export interface SignerListInfo {
+  signer?: Signer;
   signerQuorum: number;
   signerList: Signer[];
 }
@@ -20,4 +24,16 @@ export interface Signature {
 export interface TransactionSubmissionInfo {
   sequence: number;
   maxLedgerSequence: number;
+}
+
+export interface XrplContextOptions {
+  xrplApi?: any;
+  voteContext?: VoteContext;
+  voteOptions?: VoteContextOptions;
+}
+
+export class MultiSignOptions {
+  quorum?: number;
+  weight?: number;
+  voteTimeout?: number;
 }

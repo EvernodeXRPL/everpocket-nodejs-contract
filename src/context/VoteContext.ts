@@ -1,12 +1,11 @@
-import { v4 as uuidv4 } from 'uuid';
 import * as EventEmitter from 'events';
 import { Buffer } from 'buffer';
 import { UnlNode } from '../models';
 import VoteSerializer from '../vote/VoteSerializer';
 import { AllVoteElector } from '../vote/vote-electors';
 
-class BaseContext {
-    protected hpContext: any;
+class VoteContext {
+    public hpContext: any;
     private eventEmitter: EventEmitter = new EventEmitter();
     private voteSerializer: VoteSerializer;
     private uniqueNumber: number = 0;
@@ -25,7 +24,7 @@ class BaseContext {
      * Gives an unique number every time this method is called.
      * @returns An unique number.
      */
-    protected getUniqueNumber(): number {
+    public getUniqueNumber(): number {
         return this.uniqueNumber++;
     }
 
@@ -72,36 +71,6 @@ class BaseContext {
         delete this.voteCollection[electionName];
         return votes ?? [];
     }
-
-    /**
-     * Generates a random number.
-     * @param timeout Maximum timeout to generate a random number.
-     * @returns A random number between 0-1.
-     */
-    public async random(timeout: number = 1000): Promise<number | null> {
-        // Generate a random number.
-        // Vote for the random number each node has generated.
-        const number = Math.random();
-        const rn = await this.vote(`randomNumber${this.getUniqueNumber()}`, [number], new AllVoteElector(this.hpContext.unl.list().length, timeout));
-
-        // Take the minimum random number.
-        return rn.length ? Math.min(...rn.map(v => v.data)) : null;
-    }
-
-    /**
-     * Generates an uuid string.
-     * @param timeout Maximum timeout to generate an uuid.
-     * @returns An uuid.
-     */
-    public async uuid4(timeout: number = 1000): Promise<string | null> {
-        // Generate an uuid.
-        // Vote for the uuid each node has generated.
-        const uuid = uuidv4();
-        const uuids = await this.vote(`uuid4${this.getUniqueNumber()}`, [uuid], new AllVoteElector(this.hpContext.unl.list().length, timeout));
-
-        // Take the first ascending uuid.
-        return uuids.length ? uuids.map(v => v.data).sort()[0] : null;
-    }
 }
 
-export default BaseContext;
+export default VoteContext;
