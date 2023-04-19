@@ -12,7 +12,7 @@ const testContract = async (ctx) => {
     if (!ctx.readonly) {
         let nonSigners = [];
         if (ctx.unl.list().length > 3)
-            nonSigners = (ctx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey).map(n => n.publicKey);
+            nonSigners = (ctx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
         if (!nonSigners.length || nonSigners.length === ctx.unl.list().length)
             nonSigners = ctx.unl.list().slice(0, 1).map(n => n.publicKey);
 
