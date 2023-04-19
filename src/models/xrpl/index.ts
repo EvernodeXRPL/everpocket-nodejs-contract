@@ -3,12 +3,14 @@ import { VoteContextOptions } from "../vote";
 
 export interface Signer {
   account: string;
-  secret: string;
   weight: number;
 }
 
+export interface SignerPrivate extends Signer {
+  secret: string;
+}
+
 export interface SignerListInfo {
-  signer?: Signer;
   signerQuorum: number;
   signerList: Signer[];
 }
@@ -35,5 +37,7 @@ export interface XrplContextOptions {
 export interface MultiSignOptions {
   quorum?: number;
   weight?: number;
+  signerCount?: number;
   voteTimeout?: number;
+  txOptions?: any;
 }

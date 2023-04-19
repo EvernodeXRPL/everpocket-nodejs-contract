@@ -6,22 +6,46 @@ const masterAddress = "ryniL5Jm5jPdusnkNBi3jaG747zrktZFR";
 const masterSecret = "shexbsCShq6yuU4va9LV2x8RYvuj2";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const destinationSecret = "ssXtkhrooqhEhjZDsHXPW5cvexFG7";
+const signerWeight = 1;
 
 const testContract = async (ctx) => {
-    const voteContext = new evp.VoteContext(ctx);
-    const xrplContext = new evp.XrplContext(ctx, masterAddress, masterSecret, { voteContext: voteContext });
-
     if (!ctx.readonly) {
+        let nonSigners = [];
+        if (ctx.unl.list().length > 3)
+            nonSigners = (ctx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey).map(n => n.publicKey);
+        if (!nonSigners.length || nonSigners.length === ctx.unl.list().length)
+            nonSigners = ctx.unl.list().slice(0, 1).map(n => n.publicKey);
+
+        const signerToAdd = nonSigners.length ? nonSigners[0] : null;
+        const signerCount = ctx.unl.list().length - nonSigners.length;
+        const quorum = signerCount * signerWeight;
+
+        const voteContext = new evp.VoteContext(ctx);
+
         // Listen to incoming unl messages and feed them to elector.
         ctx.unl.onMessage((node, msg) => {
             voteContext.feedUnlMessage(node, msg);
-        })
+        });
+
+        ///////// TODO: This part is temporary for preparing multisig /////////
+        if (!fs.existsSync('multisig')) {
+            fs.writeFileSync('multisig', '');
+
+            const isSigner = !nonSigners.includes(ctx.publicKey);
+
+            await prepareMultiSigner(new evp.XrplContext(ctx, masterAddress, masterSecret, { voteContext: voteContext }), signerCount, isSigner, quorum);
+        }
+        ///////////////////////////////////////////////////////////////////////
+
+        const xrplContext = new evp.XrplContext(ctx, masterAddress, null, { voteContext: voteContext });
 
         const tests = [
             () => testVote(voteContext),
-            () => prepareMultiSigner(xrplContext), // TODO: This is a temporary function and will be removed in the future
-            () => multiSignTransaction(xrplContext),
+            () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
             () => renewSignerList(xrplContext),
+            () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
+            () => getSignerList(xrplContext),
+            () => multiSignTransaction(xrplContext),
         ];
 
         for (const test of tests) {
@@ -40,22 +64,16 @@ const testVote = async (voteContext) => {
     console.log('Second round votes', (await r2).map(v => v.data));
 }
 
-const multiSignTransaction = async (xrplContext) => {
-    const tx = {
-        TransactionType: "Payment",
-        Account: masterAddress,
-        Destination: destinationAddress,
-        Amount: "1000",
-        Fee: "12",
-        Flags: 2147483648
-    };
+const addXrplSigner = async (xrplContext, publickey, quorum = null) => {
+    if (!publickey || xrplContext.hpContext.lclSeqNo % 3 !== 1)
+        return;
 
     await xrplContext.init();
 
     try {
-        console.log("----------- Multi-Signing Test");
-        await xrplContext.multiSignAndSubmitTransaction(tx);
-        console.log("Transaction submitted");
+        console.log(`----------- Adding ${publickey} to signer list`);
+        await xrplContext.addXrplSigner(publickey, signerWeight, { quorum: quorum });
+        console.log("Signer added");
 
     } catch (e) {
         console.error(e);
@@ -65,6 +83,8 @@ const multiSignTransaction = async (xrplContext) => {
 }
 
 const renewSignerList = async (xrplContext) => {
+    if (xrplContext.hpContext.lclSeqNo % 3 !== 2)
+        return;
 
     await xrplContext.init();
 
@@ -80,27 +100,88 @@ const renewSignerList = async (xrplContext) => {
     }
 }
 
-////// TODO: This is a temporary function and will be removed in the future //////
-const prepareMultiSigner = async (xrplContext) => {
-    const keyPath = `../${masterAddress}.key`;
-    if (fs.existsSync(keyPath))
+const removeXrplSigner = async (xrplContext, publickey, quorum = null) => {
+    if (!publickey || xrplContext.hpContext.lclSeqNo % 3 !== 0)
         return;
 
     await xrplContext.init();
 
     try {
-        const signer = xrplContext.multiSigner.generateSigner();
+        console.log(`----------- Removing ${publickey} from signer list`);
+        await xrplContext.removeXrplSigner(publickey, { quorum: quorum });
+        console.log("Signer removed");
 
-        // Generate and collect signer list if signer list isn't provided.
-        const signerList = (await xrplContext.voteContext.vote(`multiSignerPrepare`, [{
-            account: signer.account,
-            weight: 1
-        }], new evp.AllVoteElector(xrplContext.hpContext.unl.list().length, 4000))).map(ob => ob.data);
+    } catch (e) {
+        console.error(e);
+    } finally {
+        await xrplContext.deinit();
+    }
+}
+
+const getSignerList = async (xrplContext) => {
+    await xrplContext.init();
+
+    try {
+        console.log("----------- Getting the signer list");
+        const signerList = await xrplContext.getSignerList();
+        console.log(signerList);
+
+    } catch (e) {
+        console.error(e);
+    } finally {
+        await xrplContext.deinit();
+    }
+}
+
+const multiSignTransaction = async (xrplContext) => {
+    const tx = {
+        TransactionType: "Payment",
+        Account: masterAddress,
+        Destination: destinationAddress,
+        Amount: "1000",
+        Fee: "12",
+        Flags: 2147483648
+    };
+
+    await xrplContext.init();
+
+    try {
+        console.log("----------- Multi-Signing Transaction");
+        await xrplContext.multiSignAndSubmitTransaction(tx);
+        console.log("Transaction submitted");
+
+    } catch (e) {
+        console.error(e);
+    } finally {
+        await xrplContext.deinit();
+    }
+}
+
+////// TODO: This is a temporary function and will be removed in the future //////
+const prepareMultiSigner = async (xrplContext, signerCount, isSigner, quorum) => {
+    await xrplContext.init();
+
+    try {
+        const elector = new evp.AllVoteElector(signerCount, 4000);
+
+        let signerList;
+        let signer;
+        if (isSigner) {
+            signer = xrplContext.multiSigner.generateSigner();
+
+            signerList = (await xrplContext.voteContext.vote(`multiSignerPrepare`, [{
+                account: signer.account,
+                weight: signerWeight
+            }], elector)).map(ob => ob.data);
+        }
+        else {
+            signerList = (await xrplContext.voteContext.subscribe(`multiSignerPrepare`, elector)).map(ob => ob.data);
+        }
 
         const txSubmitInfo = await xrplContext.getTransactionSubmissionInfo();
         if (txSubmitInfo) {
             const res = await xrplContext.xrplAcc.setSignerList(signerList.sort((a, b) => a.account < b.account ? -1 : 1),
-                { signerQuorum: 3, maxLedgerIndex: txSubmitInfo.maxLedgerSequence, sequence: txSubmitInfo.sequence });
+                { signerQuorum: quorum, maxLedgerIndex: txSubmitInfo.maxLedgerSequence, sequence: txSubmitInfo.sequence });
 
             if (res.code === "tesSUCCESS")
                 console.log("Transaction submitted successfully");
@@ -109,7 +190,9 @@ const prepareMultiSigner = async (xrplContext) => {
             else
                 throw res.code;
 
-            xrplContext.multiSigner.setSigner(signer);
+            if (isSigner) {
+                xrplContext.multiSigner.setSigner(signer);
+            }
             console.log('Prepared multi signing');
         }
         else {

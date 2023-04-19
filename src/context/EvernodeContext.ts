@@ -48,31 +48,6 @@ class EvernorContext {
         // let peer = '';// find peer from local state file.
         // await this.hpContext.updatePeers(null, [peer]);
     }
-
-    async addXrplSigner(pubkey: string): Promise<void> {
-        // // If pubkey is my pubkey.
-        // const signer = this.xrplContext.multiSigner.generateSigner();
-
-        // // Add signer to the list and renew the signer list.
-        // const signerList = await this.xrplContext.multiSigner.getSignerList();
-        // signerList?.signerList.push(signer);
-        // this.xrplContext.setSignerList(signerList!);
-
-        // this.xrplContext.multiSigner.setSigner(signer);
-    }
-
-    async removeXrplSigner(pubkey: string): Promise<void> {
-        // // If pubkey is my pubkey.
-        // const signer = this.xrplContext.multiSigner.generateSigner();
-
-        // // Remove signer from the list and renew the signer list.
-        // const signerList = await this.xrplContext.multiSigner.getSignerList();
-        // signerList.signerList = signerList?.signerList.filter(s => s != signer);
-        // this.xrplContext.setSignerList(signerList!);
-
-
-        // this.xrplContext.multiSigner.removeSigner();
-    }
 }
 
 export default EvernorContext;

@@ -55,13 +55,28 @@ class VoteContext {
      */
     public async vote(electionName: string, votes: any[], elector: AllVoteElector): Promise<any[]> {
         // Start the election.
-        const election = elector.election(electionName, this.eventEmitter, this);
+        const election = this.subscribe(electionName, elector);
 
         // Cast our vote(s).
         await Promise.all(new Array().concat(votes).map(v => {
             const msg = this.voteSerializer.serializeVote(electionName, v);
             return this.hpContext.unl.send(msg);
         }));
+
+        // Get election result.
+        return await election;
+    }
+
+    /**
+     * Send the votes to a election.
+     * @param electionName Election identifier to vote for.
+     * @param votes Votes for the election.
+     * @param elector Elector which evaluates the votes.
+     * @returns Evaluated votes as a promise.
+     */
+    public async subscribe(electionName: string, elector: AllVoteElector): Promise<any[]> {
+        // Start the election.
+        const election = elector.election(electionName, this.eventEmitter, this);
 
         // Get election result.
         return await election;
