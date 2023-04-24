@@ -1,5 +1,5 @@
 import * as EventEmitter from 'events';
-import { BaseContext } from '../../context';
+import VoteContext from '../../context/VoteContext';
 
 class AllVoteElector {
     desiredVoteCount: number;
@@ -16,7 +16,7 @@ class AllVoteElector {
      * @param voteEmitter Event emitter which the votes are fed into,
      * @returns Evaluated votes as a promise.
      */
-    election(electionName: string, voteEmitter: EventEmitter, context: BaseContext): Promise<any[]> {
+    election(electionName: string, voteEmitter: EventEmitter, context: VoteContext): Promise<any[]> {
         return new Promise((resolve) => {
             // Fire up the timeout if we didn't receive enough votes.
             const timer = setTimeout(() => resolve(context.resolveVotes(electionName)), this.timeout);

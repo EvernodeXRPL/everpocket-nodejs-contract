@@ -1,2 +1,2 @@
 export * from './common'
-export * from './multi-sign'
+export * from './xrpl'
