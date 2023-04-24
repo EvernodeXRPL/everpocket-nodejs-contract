@@ -7,6 +7,8 @@ const masterSecret = "shexbsCShq6yuU4va9LV2x8RYvuj2";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const destinationSecret = "ssXtkhrooqhEhjZDsHXPW5cvexFG7";
 const signerWeight = 1;
+const ip = "192.158.1.38";
+const port = 443;
 
 const testContract = async (ctx) => {
     if (!ctx.readonly) {
@@ -39,6 +41,8 @@ const testContract = async (ctx) => {
 
         const xrplContext = new evp.XrplContext(ctx, masterAddress, null, { voteContext: voteContext });
 
+        const evernodeContext = new evp.EvernodeContext(ctx, masterAddress);
+
         const tests = [
             () => testVote(voteContext),
             () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
@@ -46,6 +50,7 @@ const testContract = async (ctx) => {
             () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
             () => getSignerList(xrplContext),
             () => multiSignTransaction(xrplContext),
+            () => checkLiveness(evernodeContext, ip, port)
         ];
 
         for (const test of tests) {
@@ -155,6 +160,13 @@ const multiSignTransaction = async (xrplContext) => {
     } finally {
         await xrplContext.deinit();
     }
+}
+
+ // Checking Hot Pocket liveness.
+ const checkLiveness = async (evernodeContext, ip, port) => {
+    const checkLiveness = await evernodeContext.checkLiveness(ip, port);
+
+    console.log('Check Liveness', checkLiveness);
 }
 
 ////// TODO: This is a temporary function and will be removed in the future //////

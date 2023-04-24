@@ -48,6 +48,42 @@ class EvernodeContext {
         // let peer = '';// find peer from local state file.
         // await this.hpContext.updatePeers(null, [peer]);
     }
+
+    public async checkLiveness(ip: string, port: number) {
+        const server = `wss://${ip}:${port}`;
+        console.log(`Checking Hot Pocket liveness at ${server}`);
+
+        const keys = await this.hpContext.generateKeys();
+        const hpclient = await this.hpContext.createClient([server], keys);
+
+        return new Promise(async (resolve) => {
+
+            const timer = setTimeout(async () => {
+                console.log(`Timeout waiting for Hot Pocket liveness of ${server}`)
+                await hpclient.close();
+                resolve(false);
+            }, 120000);
+
+            try {
+                if (await hpclient.connect()) {
+                    console.log(`Hot Pocket live at ${server}`);
+                    clearTimeout(timer);
+                    await hpclient.close();
+                    resolve(true)
+                }
+                else {
+                    console.log(`Hot Pocket connection failed for ${server}`);
+                    clearTimeout(timer);
+                    resolve(false);
+                }
+            }
+            catch (err) {
+                console.log(`Exception on Hot Pocket connection to ${server}`, err);
+                clearTimeout(timer);
+                resolve(false);
+            }
+        })
+    }
 }
 
 export default EvernodeContext;
