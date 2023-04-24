@@ -2,7 +2,7 @@ import { XrplContext } from ".";
 import { ClusterManager } from "../cluster";
 import { AcquireOptions, EvernodeContextOptions } from "../models/evernode";
 
-class EvernorContext {
+class EvernodeContext {
     public hpContext: any;
     public xrplContext: XrplContext;
     public clusterManager: ClusterManager;
@@ -50,4 +50,4 @@ class EvernorContext {
     }
 }
 
-export default EvernorContext;
+export default EvernodeContext;
