@@ -157,7 +157,6 @@ class XrplContext {
     public async setSignerList(signerListInfo: SignerListInfo, options: MultiSignOptions = {}): Promise<void> {
         const signerListTx =
         {
-            ...options.txOptions,
             Flags: 0,
             TransactionType: "SignerListSet",
             Account: this.xrplAcc.address,
