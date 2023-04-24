@@ -49,14 +49,14 @@ class EvernodeContext {
         // await this.hpContext.updatePeers(null, [peer]);
     }
 
-    public async checkLiveness(ip: string, port: number) {
+    public async checkLiveness(ip: string, port: number) : Promise<boolean>  {
         const server = `wss://${ip}:${port}`;
         console.log(`Checking Hot Pocket liveness at ${server}`);
 
         const keys = await this.hpContext.generateKeys();
         const hpclient = await this.hpContext.createClient([server], keys);
 
-        return new Promise(async (resolve) => {
+        return new Promise<boolean>(async (resolve) => {
 
             const timer = setTimeout(async () => {
                 console.log(`Timeout waiting for Hot Pocket liveness of ${server}`)
