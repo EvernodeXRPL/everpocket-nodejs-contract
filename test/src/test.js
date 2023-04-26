@@ -8,6 +8,8 @@ const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const destinationSecret = "ssXtkhrooqhEhjZDsHXPW5cvexFG7";
 const signerWeight = 1;
 
+const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
+
 const testContract = async (ctx) => {
     if (!ctx.readonly) {
         let nonSigners = [];
@@ -40,12 +42,13 @@ const testContract = async (ctx) => {
         const xrplContext = new evp.XrplContext(ctx, masterAddress, null, { voteContext: voteContext });
 
         const tests = [
-            () => testVote(voteContext),
-            () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
-            () => renewSignerList(xrplContext),
-            () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
-            () => getSignerList(xrplContext),
-            () => multiSignTransaction(xrplContext),
+            // () => testVote(voteContext),
+            // () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
+            // () => renewSignerList(xrplContext),
+            // () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
+            // () => getSignerList(xrplContext),
+            // () => multiSignTransaction(xrplContext),
+            () => addNewNode(xrplContext)
         ];
 
         for (const test of tests) {
@@ -79,6 +82,27 @@ const addXrplSigner = async (xrplContext, publickey, quorum = null) => {
         console.error(e);
     } finally {
         await xrplContext.deinit();
+    }
+}
+
+
+const addNewNode = async (xrplContext) => {
+    const evernodeCtx = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
+    try {
+        const options = {
+            host: "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
+            instanceCfg: {
+                owner_pubkey: "ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50",
+                contract_id: "dc411912-bcdd-4f73-af43-32ec45844b9a",
+                image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
+                config: {}
+            }
+        }
+        await evernodeCtx.addNode(options);
+        console.log("acquired a node.");
+
+    } catch (e) {
+        console.error(e);
     }
 }
 

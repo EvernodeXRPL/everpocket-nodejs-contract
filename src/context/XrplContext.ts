@@ -1,4 +1,4 @@
-import { XrplContextOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate } from '../models';
+import { XrplContextOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter } from '../models';
 import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
@@ -155,7 +155,7 @@ class XrplContext {
     }
 
     public async setSignerList(signerListInfo: SignerListInfo, options: MultiSignOptions = {}): Promise<void> {
-        const signerListTx =
+        const tx =
         {
             Flags: 0,
             TransactionType: "SignerListSet",
@@ -171,7 +171,7 @@ class XrplContext {
             ]
         };
 
-        await this.multiSignAndSubmitTransaction(signerListTx, options);
+        await this.multiSignAndSubmitTransaction(tx, options);
     }
 
     public async renewSignerList(options: MultiSignOptions = {}): Promise<void> {
@@ -265,6 +265,26 @@ class XrplContext {
 
     public isSigner(): boolean {
         return this.multiSigner.isSignerNode();
+    }
+
+    public async buyURIToken(uriToken: URIToken, memos: Memo[] = [], hookParams: HookParameter[] = [], options: MultiSignOptions = {}): Promise<void> {
+
+        const tx = {
+            Account: this.xrplAcc.address,
+            TransactionType: "URITokenBuy",
+            Amount: uriToken.Amount,
+            URITokenID: uriToken.index,
+            Memos: undefined,
+            HookParameters: undefined
+        }
+
+        if (memos)
+            tx.Memos = evernode.TransactionHelper.formatMemos(memos);
+
+        if (hookParams)
+            tx.HookParameters = evernode.TransactionHelper.formatHookParams(hookParams);
+
+        await this.multiSignAndSubmitTransaction(tx, options);
     }
 }
 
