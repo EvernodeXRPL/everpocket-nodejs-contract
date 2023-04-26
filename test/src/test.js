@@ -202,6 +202,11 @@ const prepareMultiSigner = async (xrplContext, signerCount, isSigner, quorum) =>
             signerList = (await xrplContext.voteContext.subscribe(`multiSignerPrepare`, elector)).map(ob => ob.data);
         }
 
+        // Set a MessageKey for the account that performs acquire.
+        if (! await xrplContext.xrplAcc.getMessageKey()) {
+            await xrplContext.xrplAcc.setAccountFields({ MessageKey: xrplContext.xrplAcc.wallet.publicKey });
+        }
+
         const txSubmitInfo = await xrplContext.getTransactionSubmissionInfo();
         if (txSubmitInfo) {
             const res = await xrplContext.xrplAcc.setSignerList(signerList.sort((a, b) => a.account < b.account ? -1 : 1),

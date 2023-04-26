@@ -105,10 +105,6 @@ class EvernodeContext {
             ephemPrivateKey: seed.slice(0, 32),
         });
 
-        // Set a MessageKey for the account that performs acquire.
-        const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, this.xrplContext.xrplAcc.secret);
-        await tenantClient.prepareAccount();
-
         await this.xrplContext.buyURIToken(
             leaseOffers[0],
             [
