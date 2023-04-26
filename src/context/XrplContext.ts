@@ -66,7 +66,7 @@ class XrplContext {
      * @param transaction Transaction to submit.
      * @param timeout Optional timeout for votes to resolve.
      */
-    public async multiSignAndSubmitTransaction(transaction: any, options: MultiSignOptions = {}): Promise<void> {
+    public async multiSignAndSubmitTransaction(transaction: any, options: MultiSignOptions = {}): Promise<any> {
         const txSubmitInfo = await this.getTransactionSubmissionInfo(options.voteTimeout);
         if (!txSubmitInfo)
             throw 'Could not get transaction submission info';
@@ -112,6 +112,8 @@ class XrplContext {
             console.log("Proceeding with pre-submitted transaction");
         else
             throw `Transaction failed with error ${res.result.engine_result}`;
+
+        return res.result;
     }
 
     public async generateNewSignerList(options: MultiSignOptions = {}): Promise<[SignerListInfo, SignerPrivate]> {
@@ -284,7 +286,7 @@ class XrplContext {
         if (hookParams)
             tx.HookParameters = evernode.TransactionHelper.formatHookParams(hookParams);
 
-        await this.multiSignAndSubmitTransaction(tx, options);
+        return await this.multiSignAndSubmitTransaction(tx, options);
     }
 }
 

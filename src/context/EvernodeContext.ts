@@ -1,11 +1,20 @@
 import { VoteContext, XrplContext } from ".";
 import { ClusterManager } from "../cluster";
-import { AcquireOptions, EvernodeContextOptions } from "../models/evernode";
+import { AcquireOptions, EvernodeContextOptions, Instance } from "../models/evernode";
 import * as evernode from 'evernode-js-client';
 import { Buffer } from 'buffer';
 import { AllVoteElector } from "../vote/vote-electors";
 import { URIToken } from "../models";
+import * as fs from 'fs';
 
+
+const ACQUIRE_MANAGEMENT_CONFIG = {
+    pendingAcquires: [],
+    acquiredNodes: []
+};
+
+const TARGET_NODE_COUNT = 10;
+const NODE_ACQUIRE_INFO_FILE = "node_acquire_info.json";
 
 class EvernodeContext {
     public hpContext: any;
@@ -24,6 +33,17 @@ class EvernodeContext {
             xrplApi: this.xrplContext.xrplApi,
             governorAddress: governorAddress
         });
+
+        const jsonData = JSON.stringify(ACQUIRE_MANAGEMENT_CONFIG, null, 4);
+        if (!fs.existsSync(NODE_ACQUIRE_INFO_FILE)) {
+            fs.writeFile(NODE_ACQUIRE_INFO_FILE, jsonData, err => {
+                if (err) {
+                    console.error(err);
+                    return;
+                }
+                console.log('Created the information file.');
+            });
+        }
     }
 
     async #getRegistryClient() {
@@ -34,8 +54,37 @@ class EvernodeContext {
         return this.registryClient;
     }
 
+    /**
+     * Pending function
+     */
     async init(): Promise<void> {
-        // Check for pending transactions and their completion.
+
+        try {
+            await this.xrplContext.init();
+            // Check for pending transactions and their completion.
+            const pendingAcquires = this.getPendingAcquires();
+            const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address);
+
+            const res = await Promise.all((pendingAcquires).map(async (item: { txHash: any; }) => {
+                try {
+                    // TODO : Not a published command in JS Library
+                    const txnInfo = await this.xrplContext.xrplApi.getTxnInfo(item.txHash, {});
+                    // TODO : Have an issue in decrypting instance data as private key is not kept inside the instance.
+                    const data = await tenantClient.watchAcquireResponse({ id: txnInfo.hash, details: txnInfo });
+                    await this.updateAcquiredNodeInfo(data.instance);
+
+                } catch (error) {
+                    console.error(error);
+                } finally {
+                    await this.updatePendingAcquireInfo(item, "DELETE");
+                }
+            }));
+
+        } catch (e) {
+            console.error(e);
+        } finally {
+            await this.xrplContext.deinit();
+        }
     }
 
     async addNode(pubkey: string, options = {}): Promise<void> {
@@ -46,13 +95,24 @@ class EvernodeContext {
         try {
             await this.xrplContext.init();
 
+            const pendingAcquires = this.getPendingAcquires();
+            console.log(pendingAcquires);
+            if (pendingAcquires?.length >= 2)
+                throw { reason: 'PENDING_ACQUIRES_LIMIT_EXCEEDED', error: "Pending Acquires are there." };
+
+            const acquiredNodes = this.getPendingAcquires();
+            if (acquiredNodes?.length >= TARGET_NODE_COUNT)
+                throw { reason: 'NODE_TARGET_REACHED', error: "Pending Acquires are there." };
+
             // Use provided host or select a host randomly.
             const hostAddress = options.host || await this.decideHost();
             // Choose the lease offer
             const leaseOffer = await this.decideLeaseOffer(hostAddress);
 
             // Perform acquire txn on the selected host.
-            await this.acquireSubmit(hostAddress, leaseOffer, this.hpContext.lclHash, options);
+            const res = await this.acquireSubmit(hostAddress, leaseOffer, this.hpContext.lclHash, options);
+
+            await this.updatePendingAcquireInfo({ host: hostAddress, leaseOfferIdx: leaseOffer.index, txHash: res.tx_json.hash });
 
             // Record as a pending transaction.
         } catch (e) {
@@ -128,7 +188,7 @@ class EvernodeContext {
             ephemPrivateKey: seed.slice(0, 32),
         });
 
-        await this.xrplContext.buyURIToken(
+        return await this.xrplContext.buyURIToken(
             leaseOffer,
             [
                 { type: evernode.EventTypes.ACQUIRE_LEASE, format: 'base64', data: ecrypted }
@@ -144,6 +204,88 @@ class EvernodeContext {
         const registryClient = await this.#getRegistryClient();
         const allHosts = await registryClient.getActiveHosts();
         return allHosts.filter((h: { maxInstances: number; activeInstances: number; }) => (h.maxInstances - h.activeInstances) > 0);
+    }
+
+    getAcquiredNodes(): any {
+        try {
+            const rawData = fs.readFileSync(NODE_ACQUIRE_INFO_FILE, 'utf8');
+            const data = JSON.parse(rawData.toString());
+            return data.acquiredNodes;
+        } catch (error) {
+            console.error(`Error reading file ${NODE_ACQUIRE_INFO_FILE}: ${error}`);
+            return undefined;
+        }
+    }
+
+    getPendingAcquires(): any {
+        try {
+            const rawData = fs.readFileSync(NODE_ACQUIRE_INFO_FILE, 'utf8');
+            const data = JSON.parse(rawData.toString());
+            return data.pendingAcquires;
+        } catch (error) {
+            console.error(`Error reading file ${NODE_ACQUIRE_INFO_FILE}: ${error}`);
+            return undefined;
+        }
+    }
+
+    async updatePendingAcquireInfo(element: any, mode: string = 'INSERT') {
+        fs.readFile(NODE_ACQUIRE_INFO_FILE, 'utf8', (err, data) => {
+            if (err) {
+                console.error(err);
+                return;
+            }
+            const jsonData = JSON.parse(data);
+            if (mode === 'INSERT')
+                jsonData.pendingAcquires.push(element); // modify the array as needed
+            else {
+                // Find the index of the record to remove
+                const indexToRemove = jsonData.pendingAcquires.findIndex((record: { leaseOfferIdx: string; }) => record.leaseOfferIdx === element.leaseOfferIdx);
+
+                // Check if the record exists in the array, and remove it if found
+                if (indexToRemove !== -1) {
+                    jsonData.pendingAcquires.splice(indexToRemove, 1);
+                }
+            }
+            const updatedData = JSON.stringify(jsonData, null, 2); // convert the updated data back to JSON string
+            fs.writeFile(NODE_ACQUIRE_INFO_FILE, updatedData, err => { // write the updated data back to the file
+                if (err) {
+                    console.error(err);
+                    return;
+                }
+                console.log('JSON data updated in file');
+            });
+        });
+    }
+
+    async updateAcquiredNodeInfo(element: Instance, mode: string = 'INSERT') {
+        fs.readFile(NODE_ACQUIRE_INFO_FILE, 'utf8', (err, data) => {
+            if (err) {
+                console.error(err);
+                return;
+            }
+            const jsonData = JSON.parse(data);
+
+            if (mode === 'INSERT')
+                jsonData.acquiredNodes.push(element); // modify the array as needed
+            else {
+                // Find the index of the record to remove
+                const indexToRemove = jsonData.acquiredNodes.findIndex(((record: { name: string; }) => record.name === element.name));
+
+                // Check if the record exists in the array, and remove it if found
+                if (indexToRemove !== -1) {
+                    jsonData.acquiredNodes.splice(indexToRemove, 1);
+                }
+            }
+
+            const updatedData = JSON.stringify(jsonData, null, 2); // convert the updated data back to JSON string
+            fs.writeFile(NODE_ACQUIRE_INFO_FILE, updatedData, err => { // write the updated data back to the file
+                if (err) {
+                    console.error(err);
+                    return;
+                }
+                console.log('JSON data updated in file');
+            });
+        });
     }
 }
 

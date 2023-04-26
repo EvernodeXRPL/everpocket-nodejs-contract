@@ -20,3 +20,13 @@ export interface ClusterNode {
   isUNL: boolean;
   isQuorum: boolean;
 }
+
+export interface Instance {
+  name: string;
+  ip: string;
+  pubKey: string;
+  contractId: string;
+  peerPort: string;
+  userPort: string;
+  extended?: boolean;
+}
