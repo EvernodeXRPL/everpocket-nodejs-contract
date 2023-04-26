@@ -1,4 +1,4 @@
-import { XrplContext } from "../../context";
+import { VoteContext, XrplContext } from "../../context";
 import { Peer } from "../common";
 import { XrplContextOptions } from "../xrpl";
 
@@ -9,7 +9,7 @@ export interface EvernodeContextOptions {
 
 export interface AcquireOptions {
   host?: string;
-  instanceCfg?: any,
+  instanceCfg?: any;
   txOptions?: any;
 }
 

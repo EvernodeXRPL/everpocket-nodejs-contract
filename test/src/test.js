@@ -48,7 +48,7 @@ const testContract = async (ctx) => {
             // () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
             // () => getSignerList(xrplContext),
             // () => multiSignTransaction(xrplContext),
-            () => addNewNode(xrplContext)
+            () => acquireNewNode(xrplContext)
         ];
 
         for (const test of tests) {
@@ -86,7 +86,7 @@ const addXrplSigner = async (xrplContext, publickey, quorum = null) => {
 }
 
 
-const addNewNode = async (xrplContext) => {
+const acquireNewNode = async (xrplContext) => {
     const evernodeCtx = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
     try {
         const options = {
@@ -98,7 +98,7 @@ const addNewNode = async (xrplContext) => {
                 config: {}
             }
         }
-        await evernodeCtx.addNode(options);
+        await evernodeCtx.acquireNode(options);
         console.log("acquired a node.");
 
     } catch (e) {
