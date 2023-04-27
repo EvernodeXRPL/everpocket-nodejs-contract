@@ -89,7 +89,7 @@ const addXrplSigner = async (xrplContext, publickey, quorum = null) => {
 const acquireNewNode = async (xrplContext) => {
     const evernodeContext = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
     try {
-        // await evernodeCtx.init();
+        // await evernodeContext.init();
         const options = {
             host: "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
             instanceCfg: {
