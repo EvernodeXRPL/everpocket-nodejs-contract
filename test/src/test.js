@@ -10,22 +10,22 @@ const signerWeight = 1;
 
 const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 
-const testContract = async (ctx) => {
-    if (!ctx.readonly) {
+const testContract = async (hpContext) => {
+    if (!hpContext.readonly) {
         let nonSigners = [];
-        if (ctx.unl.list().length > 3)
-            nonSigners = (ctx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
-        if (!nonSigners.length || nonSigners.length === ctx.unl.list().length)
-            nonSigners = ctx.unl.list().slice(0, 1).map(n => n.publicKey);
+        if (hpContext.unl.list().length > 3)
+            nonSigners = (hpContext.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
+        if (!nonSigners.length || nonSigners.length === hpContext.unl.list().length)
+            nonSigners = hpContext.unl.list().slice(0, 1).map(n => n.publicKey);
 
         const signerToAdd = nonSigners.length ? nonSigners[0] : null;
-        const signerCount = ctx.unl.list().length - nonSigners.length;
+        const signerCount = hpContext.unl.list().length - nonSigners.length;
         const quorum = signerCount * signerWeight;
 
-        const voteContext = new evp.VoteContext(ctx);
+        const voteContext = new evp.VoteContext(hpContext);
 
         // Listen to incoming unl messages and feed them to elector.
-        ctx.unl.onMessage((node, msg) => {
+        hpContext.unl.onMessage((node, msg) => {
             voteContext.feedUnlMessage(node, msg);
         });
 
@@ -33,13 +33,13 @@ const testContract = async (ctx) => {
         if (!fs.existsSync('multisig')) {
             fs.writeFileSync('multisig', '');
 
-            const isSigner = !nonSigners.includes(ctx.publicKey);
+            const isSigner = !nonSigners.includes(hpContext.publicKey);
 
-            await prepareMultiSigner(new evp.XrplContext(ctx, masterAddress, masterSecret, { voteContext: voteContext }), signerCount, isSigner, quorum);
+            await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret, { voteContext: voteContext }), signerCount, isSigner, quorum);
         }
         ///////////////////////////////////////////////////////////////////////
 
-        const xrplContext = new evp.XrplContext(ctx, masterAddress, null, { voteContext: voteContext });
+        const xrplContext = new evp.XrplContext(hpContext, masterAddress, null, { voteContext: voteContext });
 
         const tests = [
             // () => testVote(voteContext),
@@ -87,7 +87,7 @@ const addXrplSigner = async (xrplContext, publickey, quorum = null) => {
 
 
 const acquireNewNode = async (xrplContext) => {
-    const evernodeCtx = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
+    const evernodeContext = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
     try {
         // await evernodeCtx.init();
         const options = {
@@ -99,7 +99,7 @@ const acquireNewNode = async (xrplContext) => {
                 config: {}
             }
         }
-        await evernodeCtx.acquireNode(options);
+        await evernodeContext.acquireNode(options);
         console.log("acquired a node.");
 
     } catch (e) {
