@@ -1,11 +1,10 @@
-import { EvernodeContextOptions } from "../models/evernode";
 // @ts-ignore
 const HotPocket = require('hotpocket-js-client');
 
 class HotPocketContext {
     private hpContext: any;
 
-    constructor(hpContext: any, options: EvernodeContextOptions = {}) {
+    constructor(hpContext: any) {
         this.hpContext = hpContext;
     }
 
