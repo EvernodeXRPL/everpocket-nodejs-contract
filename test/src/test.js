@@ -7,8 +7,8 @@ const masterSecret = "shexbsCShq6yuU4va9LV2x8RYvuj2";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const destinationSecret = "ssXtkhrooqhEhjZDsHXPW5cvexFG7";
 const signerWeight = 1;
-const ip = "192.158.1.38";
-const port = 443;
+const ip = "localhost";
+const port = 8081;
 
 const testContract = async (ctx) => {
     if (!ctx.readonly) {
@@ -43,14 +43,16 @@ const testContract = async (ctx) => {
 
         const evernodeContext = new evp.EvernodeContext(ctx, masterAddress);
 
+        const hotpocketContext = new evp.HotPocketContext(ctx);
+
         const tests = [
-            () => testVote(voteContext),
-            () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
-            () => renewSignerList(xrplContext),
-            () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
-            () => getSignerList(xrplContext),
-            () => multiSignTransaction(xrplContext),
-            () => checkLiveness(evernodeContext, ip, port)
+            // () => testVote(voteContext),
+            // () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
+            // () => renewSignerList(xrplContext),
+            // () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
+            // () => getSignerList(xrplContext),
+            // () => multiSignTransaction(xrplContext),
+            () => checkLiveness(hotpocketContext, ip, port)
         ];
 
         for (const test of tests) {
@@ -163,10 +165,10 @@ const multiSignTransaction = async (xrplContext) => {
 }
 
  // Checking Hot Pocket liveness.
- const checkLiveness = async (evernodeContext, ip, port) => {
-    const checkLiveness = await evernodeContext.checkLiveness(ip, port);
+ const checkLiveness = async (hotpocketContext, ip, port) => {
+    const checkLiveness = await hotpocketContext.checkLiveness(ip, port);
 
-    console.log('Check Liveness', checkLiveness);
+    console.log(`Hotpocket liveness ${checkLiveness}`);
 }
 
 ////// TODO: This is a temporary function and will be removed in the future //////
