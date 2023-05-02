@@ -24,6 +24,13 @@ class EvernodeContext {
     public voteContext: VoteContext;
     private registryClient: any;
 
+    /**
+     * 
+     * @param hpContext HotPocket context for this context.
+     * @param address Address of the master account.
+     * @param governorAddress Relevant Governor address
+     * @param options 
+     */
     constructor(hpContext: any, address: string, governorAddress: string, options: EvernodeContextOptions = {}) {
         this.hpContext = hpContext;
         this.xrplContext = options.xrplContext || new XrplContext(this.hpContext, address, null, options.xrplOptions);
@@ -47,6 +54,10 @@ class EvernodeContext {
         }
     }
 
+    /**
+     * Creates a registry clients for this environment
+     * @returns Created client.
+     */
     async #getRegistryClient() {
         if (!this.registryClient) {
             this.registryClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
@@ -56,7 +67,7 @@ class EvernodeContext {
     }
 
     /**
-     * Pending function
+     * Find and record acquired instance details.
      */
     async init(): Promise<void> {
 
@@ -103,6 +114,11 @@ class EvernodeContext {
         // Steps related to adding an acquired node to a cluster after performing the liveliness
     }
 
+    /**
+     * Acquires a node based on the provided options.
+     * @param options Options related to a particular acquire operation.
+     */
+
     async acquireNode(options: AcquireOptions = {}): Promise<void> {
         try {
             await this.xrplContext.init();
@@ -111,11 +127,11 @@ class EvernodeContext {
 
             // Temporary upper bound.
             if (pendingAcquires?.length >= 1)
-                throw { reason: 'PENDING_ACQUIRES_LIMIT_EXCEEDED', error: "Pending Acquires are there." };
+                throw 'PENDING_ACQUIRES_LIMIT_EXCEEDED';
 
             const acquiredNodes = this.getPendingAcquires();
             if (acquiredNodes?.length >= TARGET_NODE_COUNT)
-                throw { reason: 'NODE_TARGET_REACHED', error: "Pending Acquires are there." };
+                throw 'NODE_TARGET_REACHED';
 
             // Use provided host or select a host randomly.
             const hostAddress = options.host || await this.decideHost();
@@ -150,6 +166,11 @@ class EvernodeContext {
         // await this.hpContext.updatePeers(null, [peer]);
     }
 
+    /**
+     * Decides a lease offer collectively.
+     * @param hostAddress Host that should be used to take lease offers.
+     * @returns URIToken related to the lease offer.
+     */
     async decideLeaseOffer(hostAddress: string): Promise<URIToken> {
 
         // Get transaction details to use for xrpl tx submission.
@@ -174,6 +195,10 @@ class EvernodeContext {
         return sortCollection[0];
     }
 
+    /**
+     * Decides a host collectively.
+     * @returns Decided host address.
+     */
     async decideHost(): Promise<string> {
 
         const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
@@ -202,7 +227,10 @@ class EvernodeContext {
         return sortCollection[0];
     }
 
-
+    /**
+     * Decide a encryption key pair collectively
+     * @returns Public key of the decided key pair.
+     */
     async decideMessageKey(): Promise<string> {
 
         const seed = kp.generateSeed();
@@ -229,6 +257,14 @@ class EvernodeContext {
         return collection[0];
     }
 
+    /**
+     * Submits the acquire transaction
+     * @param hostAddress Relevant host address
+     * @param leaseOffer Relevant URIToken of the lease offer
+     * @param messageKey Encryption key of the tenant.
+     * @param options 
+     * @returns Result of the submitted transaction.
+     */
     async acquireSubmit(hostAddress: string, leaseOffer: URIToken, messageKey: string, options: AcquireOptions = {}): Promise<any> {
 
         // Get transaction details to use for xrpl tx submission.
@@ -258,12 +294,20 @@ class EvernodeContext {
         );
     }
 
+    /**
+     * Fetches registered hosts
+     * @returns An array of hosts that are having vacant leases.
+     */
     async getHosts() {
         const registryClient = await this.#getRegistryClient();
         const allHosts = await registryClient.getActiveHosts();
         return allHosts.filter((h: { maxInstances: number; activeInstances: number; }) => (h.maxInstances - h.activeInstances) > 0);
     }
 
+    /**
+     * Fetches details of successful acquires.
+     * @returns an array of instance acquisitions that are completed.
+     */
     getAcquiredNodes(): any {
         try {
             const rawData = fs.readFileSync(NODE_ACQUIRE_INFO_FILE, 'utf8');
@@ -275,6 +319,10 @@ class EvernodeContext {
         }
     }
 
+    /**
+     * Fetches details of pending acquires.
+     * @returns an array of instance acquisitions that are in progress.
+     */
     getPendingAcquires(): any {
         try {
             const rawData = fs.readFileSync(NODE_ACQUIRE_INFO_FILE, 'utf8');
@@ -285,6 +333,13 @@ class EvernodeContext {
             return undefined;
         }
     }
+
+    /**
+     * Updates the detail file with inserts and deletes of 
+     * pending acquires
+     * @param element Element to be added or removed
+     * @param mode Type of operation ("INSERT" or "DELETE")
+     */
 
     async updatePendingAcquireInfo(element: any, mode: string = 'INSERT') {
         try {
@@ -312,6 +367,12 @@ class EvernodeContext {
         }
     }
 
+    /**
+     * Updates the detail file with inserts and deletes of 
+     * successful acquires
+     * @param element Element to be added or removed
+     * @param mode Type of operation ("INSERT" or "DELETE")
+     */
     async updateAcquiredNodeInfo(element: any, mode: string = 'INSERT') {
 
         try {
@@ -340,7 +401,14 @@ class EvernodeContext {
         }
     }
 
-    async extractTransaction(tx: any, messageKey: string) {
+    /**
+     * Extracts information for a given transaction.
+     * NOTE: Currently this supports for acquire related operations.
+     * @param tx Transaction to be extracted.
+     * @param messageKey Encryption key (optional)
+     * @returns An object with extracted data.
+     */
+    async extractTransaction(tx: any, messageKey: string = "") {
 
         let eventType;
         let eventData;
@@ -418,6 +486,9 @@ class EvernodeContext {
         }
     }
 
+    /**
+     * View the content of the files which contains acquire details.
+     */
     async viewNodeDetails() {
         const rawData = fs.readFileSync(NODE_ACQUIRE_INFO_FILE, 'utf8');
         const data = JSON.parse(rawData);

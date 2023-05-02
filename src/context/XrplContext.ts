@@ -269,6 +269,15 @@ class XrplContext {
         return this.multiSigner.isSignerNode();
     }
 
+    /**
+     * Perform URITokenBuy transaction
+     * @param uriToken URIToken object to be bought.
+     * @param memos Memos for the transaction (optional).
+     * @param hookParams HookParameters for the transaction (optional).
+     * @param options Options to be added to the multi signed submission (optional).
+     * @returns Result of the submitted transaction.
+     */
+
     public async buyURIToken(uriToken: URIToken, memos: Memo[] = [], hookParams: HookParameter[] = [], options: MultiSignOptions = {}): Promise<void> {
 
         const tx = {
