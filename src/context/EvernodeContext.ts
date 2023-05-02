@@ -218,10 +218,10 @@ class EvernodeContext {
         let collection = (await voteRound).map(v => v.data);
 
         let sortCollection = collection.sort((a, b) => {
-            if (a.index === b.index) {
+            if (a === b) {
                 return 0;
             }
-            return a.index > b.index ? 1 : -1;
+            return a > b ? 1 : -1;
         });
 
         return sortCollection[0];
@@ -241,7 +241,10 @@ class EvernodeContext {
         let collection = (await voteRound).map(v => v.data);
 
         let sortCollection = collection.sort((a, b) => {
-            return parseInt(a, 16) - parseInt(b, 16);
+            if (a === b) {
+                return 0;
+            }
+            return a > b ? 1 : -1;
         });
 
         if (sortCollection[0] === keyPair.publicKey) {
