@@ -46,12 +46,12 @@ const testContract = async (ctx) => {
         const hotpocketContext = new evp.HotPocketContext(ctx);
 
         const tests = [
-            // () => testVote(voteContext),
-            // () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
-            // () => renewSignerList(xrplContext),
-            // () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
-            // () => getSignerList(xrplContext),
-            // () => multiSignTransaction(xrplContext),
+            () => testVote(voteContext),
+            () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
+            () => renewSignerList(xrplContext),
+            () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
+            () => getSignerList(xrplContext),
+            () => multiSignTransaction(xrplContext),
             () => checkLiveness(hotpocketContext, ip, port)
         ];
 
