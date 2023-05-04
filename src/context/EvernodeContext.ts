@@ -83,17 +83,25 @@ class EvernodeContext {
             if (pendingAcquires.length > 0) {
                 const item = pendingAcquires[0];
                 try {
-                    // TODO : Not a published command in JS Library
                     const txnInfo = await this.xrplContext.xrplApi.getTxnInfo(item.txHash, {});
                     if (txnInfo && txnInfo.validated) {
                         const txList = await this.xrplContext.xrplAcc.getAccountTrx(txnInfo.ledger_index);
                         for (let t of txList) {
                             t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
                             t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
-                            const res = await this.extractTransaction(t.tx, item.messageKey);
-                            if (res && (res?.name === 'AcquireSuccess') && (res?.data?.acquireRefId === item.txHash)) {
-                                await this.updateAcquiredNodeInfo(res.data.payload.content);
+
+                            const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
+                                fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
+                            const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
+                            const res = await tenantClient.extractEvernodeEvent(t.tx);
+                            if (res && (res?.name === evernode.TenantEvents.AcquireSuccess) && (res?.data?.acquireRefId === item.txHash)) {
+                                const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
+                                const elector = new AllVoteElector(1, 1000);
+                                const payload = (privateKey ? await this.voteContext.vote(electionName, [res.data.payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+                                await this.updateAcquiredNodeInfo(payload.content);
                                 await this.updatePendingAcquireInfo(item, "DELETE");
+                                if (privateKey)
+                                    fs.unlinkSync(`../${item.messageKey}.txt`);
                             }
                         }
                     }
@@ -280,15 +288,17 @@ class EvernodeContext {
 
         // Derive a seed buffer from the lclHash.
         const seed = Buffer.from(this.hpContext.lclHash, "hex");
-        const ecrypted = await evernode.EncryptionHelper.encrypt(encKey, { ...options.instanceCfg, messageKey: messageKey }, {
+        const encrypted = await evernode.EncryptionHelper.encrypt(encKey, { ...options.instanceCfg, messageKey: messageKey }, {
             iv: seed.slice(0, 16),
             ephemPrivateKey: seed.slice(0, 32)
         });
+        // Set encrypted prefix flag and data.
+        const data = Buffer.concat([Buffer.from([0x01]), Buffer.from(encrypted, 'base64')]).toString('base64');
 
         return await this.xrplContext.buyURIToken(
             leaseOffer,
             [
-                { type: evernode.EventTypes.ACQUIRE_LEASE, format: 'base64', data: ecrypted }
+                { type: evernode.EventTypes.ACQUIRE_LEASE, format: 'base64', data: data }
             ],
             [
                 { name: evernode.HookParamKeys.PARAM_EVENT_TYPE_KEY, value: evernode.EventTypes.ACQUIRE_LEASE }
@@ -401,91 +411,6 @@ class EvernodeContext {
         } catch (e) {
             console.log(e);
 
-        }
-    }
-
-    /**
-     * Extracts information for a given transaction.
-     * NOTE: Currently this supports for acquire related operations.
-     * @param tx Transaction to be extracted.
-     * @param messageKey Encryption key (optional)
-     * @returns An object with extracted data.
-     */
-    async extractTransaction(tx: any, messageKey: string = "") {
-
-        let eventType;
-        let eventData;
-        if (tx.HookParameters.length) {
-            eventType = tx.HookParameters.find((p: { name: any; }) => p.name === evernode.HookParamKeys.PARAM_EVENT_TYPE_KEY)?.value;
-            eventData = tx.HookParameters.find((p: { name: any; }) => p.name === evernode.HookParamKeys.PARAM_EVENT_DATA1_KEY)?.value ?? '';
-            eventData += tx.HookParameters.find((p: { name: any; }) => p.name === evernode.HookParamKeys.PARAM_EVENT_DATA2_KEY)?.value ?? '';
-        }
-
-        if (eventType === evernode.EventTypes.ACQUIRE_SUCCESS && eventData && tx.Memos.length &&
-            tx.Memos[0].type === evernode.EventTypes.ACQUIRE_SUCCESS && tx.Memos[0].data) {
-
-            let payload = tx.Memos[0].data;
-            const acquireRefId = eventData;
-
-            // If our account is the destination user account, then decrypt the payload if it is encrypted.
-            if (tx.Memos[0].format === 'base64' && tx.Destination === this.xrplContext.xrplAcc.address) {
-                const prefixBuf = (Buffer.from(payload, 'base64')).slice(0, 1);
-                if (prefixBuf.readInt8() == 1) { // 1 denoted the data is encrypted
-
-                    const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
-                    const elector = new AllVoteElector(1, 1000);
-
-                    if (fs.existsSync(`../${messageKey}.txt`)) {
-
-                        const privateKey = fs.readFileSync(`../${messageKey}.txt`, { encoding: 'utf8', flag: 'r' });
-
-                        payload = Buffer.from(payload, 'base64').slice(1).toString('base64');
-                        const decrypted = await evernode.EncryptionHelper.decrypt(privateKey, payload);
-                        if (decrypted)
-                            payload = decrypted;
-                        else
-                            throw 'Failed to decrypt instance data.';
-
-                        await this.voteContext.vote(electionName, [payload], elector);
-                        fs.unlinkSync(`../${messageKey}.txt`);
-
-                    } else {
-                        payload = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
-                    }
-
-                }
-                else {
-                    payload = JSON.parse(Buffer.from(payload, 'base64').slice(1).toString());
-                }
-            }
-
-            return {
-                name: 'AcquireSuccess',
-                data: {
-                    transaction: tx,
-                    acquireRefId: acquireRefId,
-                    payload: payload
-                }
-            }
-
-        }
-        else if (eventType === evernode.EventTypes.ACQUIRE_ERROR && eventData && tx.Memos.length &&
-            tx.Memos[0].type === evernode.EventTypes.ACQUIRE_ERROR && tx.Memos[0].data) {
-
-            let error = tx.Memos[0].data;
-            const acquireRefId = eventData;
-
-            if (tx.Memos[0].format === 'text/json')
-                error = JSON.parse(error).reason;
-
-            return {
-                name: 'AcquireError',
-                data: {
-                    transaction: tx,
-                    acquireRefId: acquireRefId,
-                    reason: error
-                }
-            }
         }
     }
 

@@ -9,6 +9,7 @@ export interface EvernodeContextOptions {
 
 export interface AcquireOptions {
   host?: string;
+  hostMessageKey?: string;
   instanceCfg?: any;
   txOptions?: any;
 }
