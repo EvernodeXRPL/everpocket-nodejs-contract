@@ -41,3 +41,23 @@ export interface MultiSignOptions {
   voteTimeout?: number;
   txOptions?: any;
 }
+
+export interface URIToken {
+  Flags: number;
+  Issuer: string;
+  Owner?: string;
+  Amount?: any;
+  index: string;
+  URI: string;
+}
+
+export interface Memo {
+  type: string;
+  format: string;
+  data: string;
+}
+
+export interface HookParameter {
+  name: string;
+  value: string;
+}

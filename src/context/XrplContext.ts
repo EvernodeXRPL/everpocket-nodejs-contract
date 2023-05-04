@@ -1,4 +1,4 @@
-import { XrplContextOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate } from '../models';
+import { XrplContextOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter } from '../models';
 import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
@@ -66,7 +66,7 @@ class XrplContext {
      * @param transaction Transaction to submit.
      * @param timeout Optional timeout for votes to resolve.
      */
-    public async multiSignAndSubmitTransaction(transaction: any, options: MultiSignOptions = {}): Promise<void> {
+    public async multiSignAndSubmitTransaction(transaction: any, options: MultiSignOptions = {}): Promise<any> {
         const txSubmitInfo = await this.getTransactionSubmissionInfo(options.voteTimeout);
         if (!txSubmitInfo)
             throw 'Could not get transaction submission info';
@@ -106,12 +106,14 @@ class XrplContext {
 
         // Submit the multi-signed transaction.
         const res = await this.submitMultisignedTx(transaction).catch(console.error);
-        if (res.result.engine_result === "tesSUCCESS")
+        if (res?.result?.engine_result === "tesSUCCESS")
             console.log("Transaction submitted successfully");
-        else if (res.result.engine_result === "tefPAST_SEQ" || res.result.engine_result === "tefALREADY")
+        else if (res?.result?.engine_result === "tefPAST_SEQ" || res?.result?.engine_result === "tefALREADY")
             console.log("Proceeding with pre-submitted transaction");
         else
-            throw `Transaction failed with error ${res.result.engine_result}`;
+            throw res?.result?.engine_result ? `Transaction failed with error ${res.result.engine_result}` : 'Transaction failed';
+
+        return res.result;
     }
 
     public async generateNewSignerList(options: MultiSignOptions = {}): Promise<[SignerListInfo, SignerPrivate]> {
@@ -155,7 +157,7 @@ class XrplContext {
     }
 
     public async setSignerList(signerListInfo: SignerListInfo, options: MultiSignOptions = {}): Promise<void> {
-        const signerListTx =
+        const tx =
         {
             Flags: 0,
             TransactionType: "SignerListSet",
@@ -171,7 +173,7 @@ class XrplContext {
             ]
         };
 
-        await this.multiSignAndSubmitTransaction(signerListTx, options);
+        await this.multiSignAndSubmitTransaction(tx, options);
     }
 
     public async renewSignerList(options: MultiSignOptions = {}): Promise<void> {
@@ -265,6 +267,35 @@ class XrplContext {
 
     public isSigner(): boolean {
         return this.multiSigner.isSignerNode();
+    }
+
+    /**
+     * Perform URITokenBuy transaction
+     * @param uriToken URIToken object to be bought.
+     * @param memos Memos for the transaction (optional).
+     * @param hookParams HookParameters for the transaction (optional).
+     * @param options Options to be added to the multi signed submission (optional).
+     * @returns Result of the submitted transaction.
+     */
+
+    public async buyURIToken(uriToken: URIToken, memos: Memo[] = [], hookParams: HookParameter[] = [], options: MultiSignOptions = {}): Promise<void> {
+
+        const tx = {
+            Account: this.xrplAcc.address,
+            TransactionType: "URITokenBuy",
+            Amount: uriToken.Amount,
+            URITokenID: uriToken.index,
+            Memos: undefined,
+            HookParameters: undefined
+        }
+
+        if (memos)
+            tx.Memos = evernode.TransactionHelper.formatMemos(memos);
+
+        if (hookParams)
+            tx.HookParameters = evernode.TransactionHelper.formatHookParams(hookParams);
+
+        return await this.multiSignAndSubmitTransaction(tx, options);
     }
 }
 

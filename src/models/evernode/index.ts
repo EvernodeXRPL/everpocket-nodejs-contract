@@ -1,4 +1,4 @@
-import { XrplContext } from "../../context";
+import { VoteContext, XrplContext } from "../../context";
 import { Peer } from "../common";
 import { XrplContextOptions } from "../xrpl";
 
@@ -9,6 +9,8 @@ export interface EvernodeContextOptions {
 
 export interface AcquireOptions {
   host?: string;
+  hostMessageKey?: string;
+  instanceCfg?: any;
   txOptions?: any;
 }
 
@@ -18,4 +20,14 @@ export interface ClusterNode {
   account: string;
   isUNL: boolean;
   isQuorum: boolean;
+}
+
+export interface Instance {
+  name: string;
+  ip: string;
+  pubKey: string;
+  contractId: string;
+  peerPort: string;
+  userPort: string;
+  extended?: boolean;
 }
