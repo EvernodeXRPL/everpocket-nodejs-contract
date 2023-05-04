@@ -1,4 +1,5 @@
 const HotPocket = require('hotpocket-nodejs-contract');
+const HotPocketClient = require('hotpocket-js-client');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
@@ -41,9 +42,11 @@ const testContract = async (ctx) => {
 
         const xrplContext = new evp.XrplContext(ctx, masterAddress, null, { voteContext: voteContext });
 
-        const evernodeContext = new evp.EvernodeContext(ctx, masterAddress);
+        const server = `wss://${ip}:${port}`;
+        const keys = await HotPocketClient.generateKeys();
+        const hpClient = await HotPocketClient.createClient([server], keys);
 
-        const hotpocketContext = new evp.HotPocketContext(ctx);
+        const utilityContext = new evp.UtilityContext(ctx, hpClient);
 
         const tests = [
             () => testVote(voteContext),
@@ -52,7 +55,7 @@ const testContract = async (ctx) => {
             () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
             () => getSignerList(xrplContext),
             () => multiSignTransaction(xrplContext),
-            () => checkLiveness(hotpocketContext, ip, port)
+            () => checkLiveness(utilityContext, ip, port)
         ];
 
         for (const test of tests) {
@@ -165,8 +168,8 @@ const multiSignTransaction = async (xrplContext) => {
 }
 
  // Checking Hot Pocket liveness.
- const checkLiveness = async (hotpocketContext, ip, port) => {
-    const checkLiveness = await hotpocketContext.checkLiveness(ip, port);
+ const checkLiveness = async (utilityContext, ip, port) => {
+    const checkLiveness = await utilityContext.checkLiveness(ip, port);
 
     console.log(`Hotpocket liveness ${checkLiveness}`);
 }

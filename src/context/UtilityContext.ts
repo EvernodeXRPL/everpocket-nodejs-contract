@@ -1,33 +1,29 @@
-// @ts-ignore
-const HotPocket = require('hotpocket-js-client');
-
-class HotPocketContext {
+class UtilityContext {
     private hpContext: any;
+    private hpClient: any;
 
-    constructor(hpContext: any) {
+    constructor(hpContext: any, hpClient: any) {
         this.hpContext = hpContext;
+        this.hpClient = hpClient;
     }
 
     public async checkLiveness(ip: string, port: number): Promise<boolean> {
         const server = `wss://${ip}:${port}`;
         console.log(`Checking Hot Pocket liveness at ${server}`);
 
-        const keys = await HotPocket.generateKeys();
-        const hpclient = await HotPocket.createClient([server], keys);
-
         return new Promise<boolean>(async (resolve) => {
 
             const timer = setTimeout(async () => {
                 console.log(`Timeout waiting for Hot Pocket liveness of ${server}`)
-                await hpclient.close();
+                await this.hpClient.close();
                 resolve(false);
             }, 120000);
 
             try {
-                if (await hpclient.connect()) {
+                if (await this.hpClient.connect()) {
                     console.log(`Hot Pocket live at ${server}`);
                     clearTimeout(timer);
-                    await hpclient.close();
+                    await this.hpClient.close();
                     resolve(true)
                 }
                 else {
@@ -45,4 +41,4 @@ class HotPocketContext {
     }
 }
 
-export default HotPocketContext;
+export default UtilityContext;
