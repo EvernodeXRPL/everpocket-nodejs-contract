@@ -1,4 +1,5 @@
 const HotPocket = require('hotpocket-nodejs-contract');
+const HotPocketClient = require('hotpocket-js-client');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
@@ -7,6 +8,8 @@ const masterSecret = "shexbsCShq6yuU4va9LV2x8RYvuj2";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const destinationSecret = "ssXtkhrooqhEhjZDsHXPW5cvexFG7";
 const signerWeight = 1;
+const ip = "localhost";
+const port = 8081;
 
 const evernodeGovernor = "raVhw4Q8FQr296jdaDLDfZ4JDhh7tFG7SF";
 
@@ -41,6 +44,12 @@ const testContract = async (hpContext) => {
 
         const xrplContext = new evp.XrplContext(hpContext, masterAddress, null, { voteContext: voteContext });
 
+        const server = `wss://${ip}:${port}`;
+        const keys = await HotPocketClient.generateKeys();
+        const hpClient = await HotPocketClient.createClient([server], keys);
+
+        const utilityContext = new evp.UtilityContext(hpContext, hpClient);
+
         const tests = [
             // () => testVote(voteContext),
             // () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
@@ -48,7 +57,9 @@ const testContract = async (hpContext) => {
             // () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
             // () => getSignerList(xrplContext),
             // () => multiSignTransaction(xrplContext),
-            () => acquireNewNode(xrplContext)
+            // () => checkLiveness(utilityContext, ip, port)
+            // () => acquireNewNode(xrplContext),
+
         ];
 
         for (const test of tests) {
@@ -179,6 +190,13 @@ const multiSignTransaction = async (xrplContext) => {
     } finally {
         await xrplContext.deinit();
     }
+}
+
+// Checking Hot Pocket liveness.
+const checkLiveness = async (utilityContext, ip, port) => {
+    const checkLiveness = await utilityContext.checkLiveness(ip, port);
+
+    console.log(`Hotpocket liveness ${checkLiveness}`);
 }
 
 ////// TODO: This is a temporary function and will be removed in the future //////
