@@ -95,10 +95,17 @@ class EvernodeContext {
                             const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
                             const res = await tenantClient.extractEvernodeEvent(t.tx);
                             if (res && (res?.name === evernode.TenantEvents.AcquireSuccess) && (res?.data?.acquireRefId === item.txHash)) {
+                                let payload = null;
                                 const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
                                 const elector = new AllVoteElector(1, 1000);
-                                const payload = (privateKey ? await this.voteContext.vote(electionName, [res.data.payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
-                                await this.updateAcquiredNodeInfo(payload.content);
+                                if (typeof res.data.payload == "object" && 'content' in res.data.payload) {
+                                    payload = res.data.payload;
+                                    await this.voteContext.vote(electionName, [payload], elector);
+
+                                } else
+                                    payload = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+
+                                await this.updateAcquiredNodeInfo({ host: item.host, ...payload.content });
                                 await this.updatePendingAcquireInfo(item, "DELETE");
                                 if (privateKey)
                                     fs.unlinkSync(`../${item.messageKey}.txt`);

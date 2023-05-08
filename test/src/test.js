@@ -58,7 +58,7 @@ const testContract = async (hpContext) => {
             // () => getSignerList(xrplContext),
             // () => multiSignTransaction(xrplContext),
             // () => checkLiveness(utilityContext, ip, port)
-            // () => acquireNewNode(xrplContext),
+            () => acquireNewNode(xrplContext),
 
         ];
 
