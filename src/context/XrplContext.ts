@@ -297,6 +297,23 @@ class XrplContext {
 
         return await this.multiSignAndSubmitTransaction(tx, options);
     }
+    public async makePayment(toAddr: any, amount: any, currency:any, issuer : any = null, memos: Memo[] | null = null, hookParams: HookParameter[] = [], options: MultiSignOptions = {} ){
+        const amountObj = this.makeAmountObject(amount, currency, issuer);
+        const tx = {
+            TransactionType: 'Payment',
+            Account: this.xrplAcc.address,
+            Amount: amountObj,
+            Destination: toAddr,
+            Memos: undefined,
+            HookParameters: undefined
+        }
+        if (memos)
+            tx.Memos = evernode.TransactionHelper.formatMemos(memos);
+
+        if (hookParams)
+            tx.HookParameters = evernode.TransactionHelper.formatHookParams(hookParams);
+        return await this.multiSignAndSubmitTransaction(tx,options);
+    }
 }
 
 export default XrplContext;
