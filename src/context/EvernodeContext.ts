@@ -307,6 +307,25 @@ class EvernodeContext {
         );
     }
 
+    async extendSubmit(hostAddress: string, amount: number, tokenID:string,messageKey: string, options: ExtendOptions = {}): Promise<any> {
+
+        // Get transaction details to use for xrpl tx submission.
+        const hostClient = new evernode.HostClient(hostAddress);
+
+        return this.xrplContext.makePayment(
+            hostClient.address, amount.toString(),
+            evernode.EvernodeConstants.EVR,
+            evernode.config.evrIssuerAddress,
+            null,
+            [
+                { name: evernode.HookParamKeys.PARAM_EVENT_TYPE_KEY, value: evernode.EventTypes.EXTEND_LEASE },
+                { name: evernode.HookParamKeys.PARAM_EVENT_DATA1_KEY, value: tokenID }
+            ],
+            options
+            
+        );  
+    } 
+
     /**
      * Fetches registered hosts
      * @returns An array of hosts that are having vacant leases.
