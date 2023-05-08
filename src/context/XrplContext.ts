@@ -269,6 +269,20 @@ class XrplContext {
         return this.multiSigner.isSignerNode();
     }
 
+    public makeAmountObject(amount:any, currency:any, issuer:any) {
+        if (typeof amount !== 'string')
+            throw "Amount must be a string.";
+        if (currency !== evernode.XrplConstants.XRP && !issuer)
+            throw "Non-XRP currency must have an issuer.";
+    
+        const amountObj = (currency == evernode.XrplConstants.XRP) ? amount : {
+            currency: currency,
+            issuer: issuer,
+            value: amount
+        }
+        return amountObj;
+    }
+
     /**
      * Perform URITokenBuy transaction
      * @param uriToken URIToken object to be bought.
