@@ -62,7 +62,7 @@ export interface HookParameter {
   value: string;
 }
 
-export interface Transaction  {
+export interface Transaction {
   TransactionType: string;
   Account: string;
   Amount: any;

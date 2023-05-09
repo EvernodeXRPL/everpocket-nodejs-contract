@@ -7,7 +7,6 @@ const masterAddress = "rNC3aBTwEVJXdHo5yP73H8hCJNju4GqvJ1";
 const masterSecret = "snCUGkxT4bEZMPTf6WArK9itc2yYK";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const destinationSecret = "ssXtkhrooqhEhjZDsHXPW5cvexFG7";
-const extendingNodeName = "2B897BC2014CACB74641C084661662680189686ED902A9786EBDC162F7CB241A";
 const signerWeight = 1;
 const ip = "localhost";
 const port = 8081;
@@ -119,14 +118,16 @@ const acquireNewNode = async (xrplContext) => {
     }
 }
 
-const extendNode = async(xrplContext) => {
+const extendNode = async (xrplContext) => {
     const evernodeContext = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
-    try{
-        // await evernodeContext.init();
-        await evernodeContext.extendSubmit(masterAddress, 1, extendingNodeName,{});
-    }catch (e) {
+    try {
+        // change the extendingNodeName to an acquired node name. And change the host address to its host.
+        const extendingNodeName = "2B897BC2014CACB74641C084661662680189686ED902A9786EBDC162F7CB241A";
+        const hostAddress = "rQKQDgKttdzyW6mc1CGerZUk7C1AtbuSKL";
+        await evernodeContext.extendSubmit(hostAddress, 1, extendingNodeName, {});
+    } catch (e) {
         console.error(e);
-    } 
+    }
 }
 
 const renewSignerList = async (xrplContext) => {
