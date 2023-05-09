@@ -1,4 +1,4 @@
-import { XrplContextOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter } from '../models';
+import { XrplContextOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter, Transaction } from '../models';
 import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
@@ -101,10 +101,13 @@ class XrplContext {
             signatures = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
         }
 
+
         transaction.Signers = [...signatures];
+        console.log(transaction.Signers);
         transaction.SigningPubKey = "";
 
         // Submit the multi-signed transaction.
+        console.log(transaction);
         const res = await this.submitMultisignedTx(transaction).catch(console.error);
         if (res?.result?.engine_result === "tesSUCCESS")
             console.log("Transaction submitted successfully");
@@ -313,16 +316,15 @@ class XrplContext {
     }
     public async makePayment(toAddr: any, amount: any, currency:any, issuer : any = null, memos: Memo[] | null = null, hookParams: HookParameter[] = [], options: MultiSignOptions = {} ){
         const amountObj = this.makeAmountObject(amount, currency, issuer);
-        const tx = {
+        const tx  = {
             TransactionType: 'Payment',
             Account: this.xrplAcc.address,
             Amount: amountObj,
             Destination: toAddr,
-            Memos: undefined,
             HookParameters: undefined
         }
-        if (memos)
-            tx.Memos = evernode.TransactionHelper.formatMemos(memos);
+        // if (memos)
+        //     tx.Memos = evernode.TransactionHelper.formatMemos(memos);
 
         if (hookParams)
             tx.HookParameters = evernode.TransactionHelper.formatHookParams(hookParams);

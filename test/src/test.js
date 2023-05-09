@@ -3,10 +3,11 @@ const HotPocketClient = require('hotpocket-js-client');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "ryniL5Jm5jPdusnkNBi3jaG747zrktZFR";
-const masterSecret = "shexbsCShq6yuU4va9LV2x8RYvuj2";
+const masterAddress = "rNC3aBTwEVJXdHo5yP73H8hCJNju4GqvJ1";
+const masterSecret = "snCUGkxT4bEZMPTf6WArK9itc2yYK";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const destinationSecret = "ssXtkhrooqhEhjZDsHXPW5cvexFG7";
+const extendingNodeName = "2B897BC2014CACB74641C084661662680189686ED902A9786EBDC162F7CB241A";
 const signerWeight = 1;
 const ip = "localhost";
 const port = 8081;
@@ -59,6 +60,7 @@ const testContract = async (hpContext) => {
             // () => multiSignTransaction(xrplContext),
             // () => checkLiveness(utilityContext, ip, port)
             // () => acquireNewNode(xrplContext),
+            () => extendNode(xrplContext),
 
         ];
 
@@ -115,6 +117,16 @@ const acquireNewNode = async (xrplContext) => {
     } catch (e) {
         console.error(e);
     }
+}
+
+const extendNode = async(xrplContext) => {
+    const evernodeContext = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
+    try{
+        // await evernodeContext.init();
+        await evernodeContext.extendSubmit(masterAddress, 1, extendingNodeName,{});
+    }catch (e) {
+        console.error(e);
+    } 
 }
 
 const renewSignerList = async (xrplContext) => {

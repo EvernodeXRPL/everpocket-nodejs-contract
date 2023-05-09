@@ -95,10 +95,17 @@ class EvernodeContext {
                             const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
                             const res = await tenantClient.extractEvernodeEvent(t.tx);
                             if (res && (res?.name === evernode.TenantEvents.AcquireSuccess) && (res?.data?.acquireRefId === item.txHash)) {
+                                let payload = null;
                                 const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
                                 const elector = new AllVoteElector(1, 1000);
-                                const payload = (privateKey ? await this.voteContext.vote(electionName, [res.data.payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
-                                await this.updateAcquiredNodeInfo(payload.content);
+                                if (typeof res.data.payload == "object" && 'content' in res.data.payload) {
+                                    payload = res.data.payload;
+                                    await this.voteContext.vote(electionName, [payload], elector);
+
+                                } else
+                                    payload = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+
+                                await this.updateAcquiredNodeInfo({ host: item.host, ...payload.content });
                                 await this.updatePendingAcquireInfo(item, "DELETE");
                                 if (privateKey)
                                     fs.unlinkSync(`../${item.messageKey}.txt`);
@@ -306,16 +313,27 @@ class EvernodeContext {
             options
         );
     }
+    /**
+     * This function is called by a tenant client to submit the extend lease transaction in certain host. This function will be called inside extendLease function. This function can take four parameters as follows.
+     * @param {string} hostAddress XRPL account address of the host.
+     * @param {number} amount Cost for the extended moments , in EVRs.
+     * @param {string} tokenID Tenant received instance name. this name can be retrieve by performing acquire Lease.
+     * @param {object} options This is an optional field and contains necessary details for the transactions.
+     * @returns The transaction result.
+     */
 
-    async extendSubmit(hostAddress: string, amount: number, tokenID:string,messageKey: string, options: ExtendOptions = {}): Promise<any> {
+    async extendSubmit(hostAddress: string, amount: number, tokenID:string, options: any = {}): Promise<any> {
 
         // Get transaction details to use for xrpl tx submission.
         const hostClient = new evernode.HostClient(hostAddress);
-
+        await hostClient.connect()
+        const evrIssuer = hostClient.config.evrIssuerAddress;
+        await hostClient.disconnect()
+        console.log(evrIssuer);
         return this.xrplContext.makePayment(
-            hostClient.address, amount.toString(),
+            hostClient.xrplAcc.address, amount.toString(),
             evernode.EvernodeConstants.EVR,
-            evernode.config.evrIssuerAddress,
+            evrIssuer,
             null,
             [
                 { name: evernode.HookParamKeys.PARAM_EVENT_TYPE_KEY, value: evernode.EventTypes.EXTEND_LEASE },
