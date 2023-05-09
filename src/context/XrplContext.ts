@@ -101,7 +101,6 @@ class XrplContext {
             signatures = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
         }
 
-
         transaction.Signers = [...signatures];
         transaction.SigningPubKey = "";
 
