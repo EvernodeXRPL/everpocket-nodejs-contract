@@ -28,47 +28,49 @@ class ClusterContext {
 
     public async init(): Promise<void> {
         await this.evernodeContext.init();
-
-        console.log("NODES >> \n", this.clusterManager.nodes)
+        console.log("NODES >> \n", this.clusterManager.nodes);
 
         if (this.clusterManager.nodes.length <= this.contract.targetNodeCount) {
-            const rawData = fs.readFileSync(this.evernodeContext.acquireDataFile, 'utf8');
-            const data = JSON.parse(rawData);
-            const nodePubkeys = this.clusterManager.nodes.map(x => x.publicKey);
-
-            if (data.pendingAcquires.length < 1 && data.acquiredNodes.length < this.contract.targetNodeCount) {
-                const options: AcquireOptions = {
-                    instanceCfg: {
-                        owner_pubkey: this.publicKey,
-                        contract_id: this.contract.contractId,
-                        image: this.contract.image,
-                        config: this.contract.config
-                    }
-                }
-                const hpconfig = await this.hpContext.getConfig();
-                const unl = hpconfig.unl;
-
-                options.instanceCfg.config.contract = {
-                    // Take only first unl pubkey to keep xrpl memo size within 1KB.
-                    // Ths instance will automatically fetch full UNL when syncing.
-                    unl: unl.sort().slice(0, 1),
-                    roundtime: hpconfig.roundtime
-                }
-                await this.evernodeContext.acquireNode(options);
-            }
-
-            const acquiredNode = data.acquiredNodes.find((n: { pubkey: string; }) => !nodePubkeys.includes(n.pubkey));
-            if (acquiredNode && (await this.utilityContext.checkLiveness(acquiredNode.ip, acquiredNode.user_port))) {
-                await this.hpContext.updatePeers([`${acquiredNode.ip}:${acquiredNode.peer_port}`], []);
-                this.clusterManager.addNode(acquiredNode.pubkey, { ip: acquiredNode.ip, port: acquiredNode.peer_port }, acquiredNode.host, this.hpContext.lclSeqNo);
-            }
+            await this.grow();
         }
 
-        await this.syncNodes();
-        this.clusterManager.persistNodes();
+        await this.updateSyncedNodes();
     }
 
-    public async syncNodes() {
+    public async grow(): Promise<void> {
+        const rawData = fs.readFileSync(this.evernodeContext.acquireDataFile, 'utf8');
+        const data = JSON.parse(rawData);
+        const nodePubkeys = this.clusterManager.nodes.map(x => x.publicKey);
+
+        if (data.pendingAcquires.length < 1 && data.acquiredNodes.length < this.contract.targetNodeCount) {
+            const options: AcquireOptions = {
+                instanceCfg: {
+                    owner_pubkey: this.publicKey,
+                    contract_id: this.contract.contractId,
+                    image: this.contract.image,
+                    config: this.contract.config
+                }
+            }
+            const hpconfig = await this.hpContext.getConfig();
+            const unl = hpconfig.unl;
+
+            options.instanceCfg.config.contract = {
+                // Take only first unl pubkey to keep xrpl memo size within 1KB.
+                // Ths instance will automatically fetch full UNL when syncing.
+                unl: unl.sort().slice(0, 1),
+                roundtime: hpconfig.roundtime
+            }
+            await this.evernodeContext.acquireNode(options);
+        }
+
+        const acquiredNode = data.acquiredNodes.find((n: { pubkey: string; }) => !nodePubkeys.includes(n.pubkey));
+        if (acquiredNode && (await this.utilityContext.checkLiveness(acquiredNode.ip, acquiredNode.user_port))) {
+            await this.hpContext.updatePeers([`${acquiredNode.ip}:${acquiredNode.peer_port}`], []);
+            this.clusterManager.addNode(acquiredNode.pubkey, { ip: acquiredNode.ip, port: acquiredNode.peer_port }, acquiredNode.host, this.hpContext.lclSeqNo);
+        }
+    }
+
+    public async updateSyncedNodes(): Promise<void> {
         const nonUnl = this.clusterManager.nodes.filter(n => !n.isUNL);
 
         const waitFulfilled = nonUnl.filter(n => n.createdOn <= (this.hpContext.lclSeqNo - 5));
@@ -81,6 +83,8 @@ class ClusterContext {
                 this.clusterManager.markAsUnl(n.publicKey, this.hpContext.lclSeqNo);
             }
         }
+
+        this.clusterManager.persistNodes();
     }
 }
 
