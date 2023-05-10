@@ -4,8 +4,7 @@ import { Contract } from "../models";
 import { EvernodeContext, UtilityContext, VoteContext } from "../context";
 import { ClusterManager } from "../cluster";
 
-const MAX_SUPPORTED_NODE_LIMIT = 10;
-const MIN_NODE_REQUIREMENT = 2;
+const EXTENDED_ROUNDTIME = 10000;
 
 class ClusterContext {
     public hpContext: any;
@@ -43,32 +42,50 @@ class ClusterContext {
         const nodePubkeys = this.clusterManager.nodes.map(x => x.publicKey);
 
         if (data.pendingAcquires.length < 1 && data.acquiredNodes.length < this.contract.targetNodeCount) {
-            const options: AcquireOptions = {
+            await this.purchaseNode({
                 instanceCfg: {
                     owner_pubkey: this.publicKey,
                     contract_id: this.contract.contractId,
                     image: this.contract.image,
                     config: this.contract.config
                 }
-            }
-            const hpconfig = await this.hpContext.getConfig();
-            const unl = hpconfig.unl;
-
-            options.instanceCfg.config.contract = {
-                // Take only first unl pubkey to keep xrpl memo size within 1KB.
-                // Ths instance will automatically fetch full UNL when syncing.
-                unl: unl.sort().slice(0, 1),
-                roundtime: hpconfig.roundtime
-            }
-            await this.evernodeContext.acquireNode(options);
+            });
         }
 
         const acquiredNode = data.acquiredNodes.find((n: { pubkey: string; }) => !nodePubkeys.includes(n.pubkey));
         if (acquiredNode && (await this.utilityContext.checkLiveness(acquiredNode.ip, acquiredNode.user_port))) {
+            // Extend if needed.
             await this.hpContext.updatePeers([`${acquiredNode.ip}:${acquiredNode.peer_port}`], []);
-            this.clusterManager.addNode(acquiredNode.pubkey, { ip: acquiredNode.ip, port: acquiredNode.peer_port }, acquiredNode.host, this.hpContext.lclSeqNo);
+
+            this.clusterManager.addNode(<ClusterNode>{
+                publicKey: acquiredNode.pubkey,
+                peer: { ip: acquiredNode.ip, port: acquiredNode.peer_port },
+                account: acquiredNode.host,
+                createdOn: this.hpContext.lclSeqNo,
+                isUNL: false,
+                isQuorum: false
+            });
         }
     }
+
+    public async purchaseNode(options: AcquireOptions): Promise<any> {
+        const hpconfig = await this.hpContext.getConfig();
+        const unl = hpconfig.unl;
+
+        options.instanceCfg.config.contract = {
+            // Take only first unl pubkey to keep xrpl memo size within 1KB.
+            // Ths instance will automatically fetch full UNL when syncing.
+            unl: unl.sort().slice(0, 1),
+            consensus: {
+                mode: "public",
+                roundtime: hpconfig.consensus.roundtime,
+                stage_slice: 25,
+                threshold: 80
+            }
+        }
+        await this.evernodeContext.acquireNode(options);
+    }
+
 
     public async updateSyncedNodes(): Promise<void> {
         const nonUnl = this.clusterManager.nodes.filter(n => !n.isUNL);

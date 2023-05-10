@@ -20,8 +20,8 @@ class ClusterManager {
         fs.writeFileSync(this.clusterPath, JSON.stringify(this.nodes.map(o => JSONHelpers.castFromModel(o))));
     }
 
-    public addNode(publicKey: string, peer: Peer, account: string, createdLcl: number, isUNL: boolean = false, isQuorum: boolean = false): void {
-        this.nodes.push(<ClusterNode>{ publicKey: publicKey, peer: peer, account: account, createdOn: createdLcl, isUNL: isUNL, isQuorum: isQuorum });
+    public addNode(node: ClusterNode): void {
+        this.nodes.push(node);
     }
 
     public removeNode(publicKey: string): void {

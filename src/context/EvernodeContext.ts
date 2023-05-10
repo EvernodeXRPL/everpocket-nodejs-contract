@@ -94,7 +94,7 @@ class EvernodeContext {
                                 const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
                                 const elector = new AllVoteElector(1, 1000);
                                 const payload = (privateKey ? await this.voteContext.vote(electionName, [res.data.payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
-                                await this.updateAcquiredNodeInfo(payload.content);
+                                await this.updateAcquiredNodeInfo({ host: item.host, ...payload.content });
                                 await this.updatePendingAcquireInfo(item, "DELETE");
                                 if (privateKey)
                                     fs.unlinkSync(`../${item.messageKey}.txt`);

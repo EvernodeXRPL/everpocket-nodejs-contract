@@ -123,7 +123,7 @@ const createCluster = async (xrplContext, utilityContext) => {
 
     const contract = {
         name: "test-contract",
-        contractId: "dc411912-bcdd-4f73-af43-32ec45844b9a",
+        contractId: evernodeContext.hpContext.contractId,
         image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
         targetNodeCount: 2,
         targetLifeTime: 1,
