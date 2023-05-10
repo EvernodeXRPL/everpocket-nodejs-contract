@@ -1,5 +1,4 @@
 import { VoteContext, XrplContext } from ".";
-import { ClusterManager } from "../cluster";
 import { AcquireOptions, EvernodeContextOptions, Instance } from "../models/evernode";
 import * as evernode from 'evernode-js-client';
 import { Buffer } from 'buffer';
@@ -7,6 +6,7 @@ import { AllVoteElector } from "../vote/vote-electors";
 import { URIToken } from "../models";
 import * as fs from 'fs';
 import * as kp from 'ripple-keypairs';
+import { ClusterManager } from "../cluster";
 
 
 const ACQUIRE_MANAGEMENT_CONFIG = {
@@ -15,10 +15,10 @@ const ACQUIRE_MANAGEMENT_CONFIG = {
 };
 
 const TARGET_NODE_COUNT = 10;
-const NODE_ACQUIRE_INFO_FILE = "node_acquire_info.json";
 
 class EvernodeContext {
     public hpContext: any;
+    public acquireDataFile: string;
     public xrplContext: XrplContext;
     public clusterManager: ClusterManager;
     public voteContext: VoteContext;
@@ -36,6 +36,7 @@ class EvernodeContext {
         this.xrplContext = options.xrplContext || new XrplContext(this.hpContext, address, null, options.xrplOptions);
         this.clusterManager = new ClusterManager(hpContext.publicKey);
         this.voteContext = this.xrplContext.voteContext;
+        this.acquireDataFile = "acquires.json"
 
         evernode.Defaults.set({
             xrplApi: this.xrplContext.xrplApi,
@@ -43,14 +44,9 @@ class EvernodeContext {
         });
 
         const jsonData = JSON.stringify(ACQUIRE_MANAGEMENT_CONFIG, null, 4);
-        if (!fs.existsSync(NODE_ACQUIRE_INFO_FILE)) {
-            fs.writeFile(NODE_ACQUIRE_INFO_FILE, jsonData, err => {
-                if (err) {
-                    console.error(err);
-                    return;
-                }
-                console.log('Created the information file.');
-            });
+        if (!fs.existsSync(this.acquireDataFile)) {
+            fs.writeFileSync(this.acquireDataFile, jsonData);
+            console.log('Created the information file.');
         }
     }
 
@@ -95,17 +91,10 @@ class EvernodeContext {
                             const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
                             const res = await tenantClient.extractEvernodeEvent(t.tx);
                             if (res && (res?.name === evernode.TenantEvents.AcquireSuccess) && (res?.data?.acquireRefId === item.txHash)) {
-                                let payload = null;
                                 const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
                                 const elector = new AllVoteElector(1, 1000);
-                                if (typeof res.data.payload == "object" && 'content' in res.data.payload) {
-                                    payload = res.data.payload;
-                                    await this.voteContext.vote(electionName, [payload], elector);
-
-                                } else
-                                    payload = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
-
-                                await this.updateAcquiredNodeInfo({ host: item.host, ...payload.content });
+                                const payload = (privateKey ? await this.voteContext.vote(electionName, [res.data.payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+                                await this.updateAcquiredNodeInfo(payload.content);
                                 await this.updatePendingAcquireInfo(item, "DELETE");
                                 if (privateKey)
                                     fs.unlinkSync(`../${item.messageKey}.txt`);
@@ -140,16 +129,16 @@ class EvernodeContext {
 
             const pendingAcquires = this.getPendingAcquires();
 
-            // Temporary upper bound.
-            if (pendingAcquires?.length >= 1)
-                throw 'PENDING_ACQUIRES_LIMIT_EXCEEDED';
+            // // Temporary upper bound.
+            // if (pendingAcquires?.length >= 1)
+            //     throw 'PENDING_ACQUIRES_LIMIT_EXCEEDED';
 
-            const acquiredNodes = this.getPendingAcquires();
-            if (acquiredNodes?.length >= TARGET_NODE_COUNT)
-                throw 'NODE_TARGET_REACHED';
+            // const acquiredNodes = this.getPendingAcquires();
+            // if (acquiredNodes?.length >= TARGET_NODE_COUNT)
+            //     throw 'NODE_TARGET_REACHED';
 
             // Use provided host or select a host randomly.
-            const hostAddress = options.host || await this.decideHost();
+            const hostAddress = "rQKQDgKttdzyW6mc1CGerZUk7C1AtbuSKL"; //options.host || await this.decideHost();
             // Choose the lease offer
             const leaseOffer = await this.decideLeaseOffer(hostAddress);
 
@@ -330,11 +319,11 @@ class EvernodeContext {
      */
     getAcquiredNodes(): any {
         try {
-            const rawData = fs.readFileSync(NODE_ACQUIRE_INFO_FILE, 'utf8');
+            const rawData = fs.readFileSync(this.acquireDataFile, 'utf8');
             const data = JSON.parse(rawData);
             return data.acquiredNodes;
         } catch (error) {
-            console.error(`Error reading file ${NODE_ACQUIRE_INFO_FILE}: ${error}`);
+            console.error(`Error reading file ${this.acquireDataFile}: ${error}`);
             return undefined;
         }
     }
@@ -345,11 +334,11 @@ class EvernodeContext {
      */
     getPendingAcquires(): any {
         try {
-            const rawData = fs.readFileSync(NODE_ACQUIRE_INFO_FILE, 'utf8');
+            const rawData = fs.readFileSync(this.acquireDataFile, 'utf8');
             const data = JSON.parse(rawData);
             return data.pendingAcquires;
         } catch (error) {
-            console.error(`Error reading file ${NODE_ACQUIRE_INFO_FILE}: ${error}`);
+            console.error(`Error reading file ${this.acquireDataFile}: ${error}`);
             return undefined;
         }
     }
@@ -363,7 +352,7 @@ class EvernodeContext {
 
     async updatePendingAcquireInfo(element: any, mode: string = 'INSERT') {
         try {
-            const data = fs.readFileSync(NODE_ACQUIRE_INFO_FILE);
+            const data = fs.readFileSync(this.acquireDataFile);
 
             if (data) {
                 const jsonData = JSON.parse(data.toString());
@@ -379,7 +368,7 @@ class EvernodeContext {
                     }
                 }
                 const updatedData = JSON.stringify(jsonData, null, 4); // convert the updated data back to JSON string
-                fs.writeFileSync(NODE_ACQUIRE_INFO_FILE, updatedData);
+                fs.writeFileSync(this.acquireDataFile, updatedData);
             }
         } catch (e) {
             console.log(e);
@@ -396,7 +385,7 @@ class EvernodeContext {
     async updateAcquiredNodeInfo(element: any, mode: string = 'INSERT') {
 
         try {
-            const data = fs.readFileSync(NODE_ACQUIRE_INFO_FILE);
+            const data = fs.readFileSync(this.acquireDataFile);
 
             if (data) {
                 const jsonData = JSON.parse(data.toString());
@@ -413,7 +402,7 @@ class EvernodeContext {
                 }
                 const updatedData = JSON.stringify(jsonData, null, 4); // convert the updated data back to JSON string
 
-                fs.writeFileSync(NODE_ACQUIRE_INFO_FILE, updatedData);
+                fs.writeFileSync(this.acquireDataFile, updatedData);
             }
         } catch (e) {
             console.log(e);
@@ -425,7 +414,7 @@ class EvernodeContext {
      * View the content of the files which contains acquire details.
      */
     async viewNodeDetails() {
-        const rawData = fs.readFileSync(NODE_ACQUIRE_INFO_FILE, 'utf8');
+        const rawData = fs.readFileSync(this.acquireDataFile, 'utf8');
         const data = JSON.parse(rawData);
         if (data) {
             console.log("ACQUIRE INFO BEGIN: ______________________________________________________________________");

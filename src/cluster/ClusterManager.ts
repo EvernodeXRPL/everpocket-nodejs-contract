@@ -12,20 +12,31 @@ class ClusterManager {
         this.publicKey = publicKey;
         this.clusterPath = `../nodes.json`;
         if (fs.existsSync(this.clusterPath))
-            this.nodes = JSONHelpers.castToModel<ClusterNode[]>(JSON.parse(fs.readFileSync(this.clusterPath).toString()));
+            this.nodes = JSON.parse(fs.readFileSync(this.clusterPath, 'utf8')).map((o: any) => JSONHelpers.castToModel(o));
+
     }
 
     public persistNodes(): void {
-        fs.writeFileSync(this.clusterPath, JSON.stringify(JSONHelpers.castFromModel(this.nodes)));
+        fs.writeFileSync(this.clusterPath, JSON.stringify(this.nodes.map(o => JSONHelpers.castFromModel(o))));
     }
 
-    public addNode(publicKey: string, peer: Peer): void {
-        this.nodes.push(<ClusterNode>{ publicKey: publicKey, peer: peer });
+    public addNode(publicKey: string, peer: Peer, account: string, createdLcl: number, isUNL: boolean = false, isQuorum: boolean = false): void {
+        this.nodes.push(<ClusterNode>{ publicKey: publicKey, peer: peer, account: account, createdOn: createdLcl, isUNL: isUNL, isQuorum: isQuorum });
     }
 
     public removeNode(publicKey: string): void {
         this.nodes = this.nodes.filter(n => n.publicKey !== publicKey);
     }
+
+    public markAsUnl(pubkey: string, lclSeqNo: number) {
+        const node = this.nodes.find(n => n.publicKey === pubkey);
+
+        if (node) {
+            node.isUNL = true;
+            node.addedToUnl = lclSeqNo;
+        }
+    }
+
 }
 
 export default ClusterManager;

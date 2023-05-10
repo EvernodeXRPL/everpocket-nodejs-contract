@@ -1,4 +1,4 @@
-import { VoteContext, XrplContext } from "../../context";
+import { EvernodeContext, UtilityContext, VoteContext, XrplContext } from "../../context";
 import { Peer } from "../common";
 import { XrplContextOptions } from "../xrpl";
 
@@ -14,10 +14,17 @@ export interface AcquireOptions {
   txOptions?: any;
 }
 
+export interface ClusterContextOptions {
+  evernodeContext: EvernodeContext
+  utilityContext: UtilityContext;
+}
+
 export interface ClusterNode {
   publicKey: string;
   peer: Peer;
   account: string;
+  createdOn: number;
+  addedToUnl?: number;
   isUNL: boolean;
   isQuorum: boolean;
 }
