@@ -10,8 +10,8 @@ import * as kp from 'ripple-keypairs';
 
 
 const ACQUIRE_MANAGEMENT_CONFIG = {
-    pendingAcquires: [],
-    acquiredNodes: []
+  pendingAcquires: [],
+  acquiredNodes: []
 };
 
 const TARGET_NODE_COUNT = 10;
@@ -110,9 +110,9 @@ class EvernodeContext {
 
               const privateKey = fs.existsSync(`../${item.messageKey}.txt`)
                 ? fs.readFileSync(`../${item.messageKey}.txt`, {
-                    encoding: "utf8",
-                    flag: "r",
-                  })
+                  encoding: "utf8",
+                  flag: "r",
+                })
                 : null;
               const tenantClient = new evernode.TenantClient(
                 this.xrplContext.xrplAcc.address,
