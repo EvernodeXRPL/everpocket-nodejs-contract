@@ -31,16 +31,9 @@ class EvernodeContext {
    * @param governorAddress Relevant Governor address
    * @param options
    */
-  constructor(
-    hpContext: any,
-    address: string,
-    governorAddress: string,
-    options: EvernodeContextOptions = {}
-  ) {
+  constructor(hpContext: any, address: string, governorAddress: string, options: EvernodeContextOptions = {}) {
     this.hpContext = hpContext;
-    this.xrplContext =
-      options.xrplContext ||
-      new XrplContext(this.hpContext, address, null, options.xrplOptions);
+    this.xrplContext = options.xrplContext || new XrplContext(this.hpContext, address, null, options.xrplOptions);
     this.clusterManager = new ClusterManager(hpContext.publicKey);
     this.voteContext = this.xrplContext.voteContext;
 
@@ -91,58 +84,28 @@ class EvernodeContext {
       if (pendingAcquires.length > 0) {
         const item = pendingAcquires[0];
         try {
-          const txnInfo = await this.xrplContext.xrplApi.getTxnInfo(
-            item.txHash,
-            {}
-          );
+          const txnInfo = await this.xrplContext.xrplApi.getTxnInfo(item.txHash, {});
           if (txnInfo && txnInfo.validated) {
-            const txList = await this.xrplContext.xrplAcc.getAccountTrx(
-              txnInfo.ledger_index
-            );
+            const txList = await this.xrplContext.xrplAcc.getAccountTrx(txnInfo.ledger_index);
             for (let t of txList) {
-              t.tx.Memos = evernode.TransactionHelper.deserializeMemos(
-                t.tx?.Memos
-              );
-              t.tx.HookParameters =
-                evernode.TransactionHelper.deserializeHookParams(
-                  t.tx?.HookParameters
-                );
+              t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
+              t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
 
               const privateKey = fs.existsSync(`../${item.messageKey}.txt`)
-                ? fs.readFileSync(`../${item.messageKey}.txt`, {
-                  encoding: "utf8",
-                  flag: "r",
-                })
-                : null;
-              const tenantClient = new evernode.TenantClient(
-                this.xrplContext.xrplAcc.address,
-                null,
-                { messagePrivateKey: privateKey }
-              );
+                ? fs.readFileSync(`../${item.messageKey}.txt`, { encoding: "utf8", flag: "r", }) : null;
+              const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
               const res = await tenantClient.extractEvernodeEvent(t.tx);
-              if (
-                res &&
-                res?.name === evernode.TenantEvents.AcquireSuccess &&
-                res?.data?.acquireRefId === item.txHash
-              ) {
+              if (res && res?.name === evernode.TenantEvents.AcquireSuccess && res?.data?.acquireRefId === item.txHash) {
                 let payload = null;
                 const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
                 const elector = new AllVoteElector(1, 1000);
-                if (
-                  typeof res.data.payload == "object" &&
-                  "content" in res.data.payload
-                ) {
+                if (typeof res.data.payload == "object" && "content" in res.data.payload) {
                   payload = res.data.payload;
                   await this.voteContext.vote(electionName, [payload], elector);
                 } else
-                  payload = (
-                    await this.voteContext.subscribe(electionName, elector)
-                  ).map((ob) => ob.data)[0];
+                  payload = (await this.voteContext.subscribe(electionName, elector)).map((ob) => ob.data)[0];
 
-                await this.updateAcquiredNodeInfo({
-                  host: item.host,
-                  ...payload.content,
-                });
+                await this.updateAcquiredNodeInfo({ host: item.host, ...payload.content, });
                 await this.updatePendingAcquireInfo(item, "DELETE");
                 if (privateKey) fs.unlinkSync(`../${item.messageKey}.txt`);
               }
