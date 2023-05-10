@@ -60,9 +60,7 @@ class EvernodeContext {
      */
     async #getRegistryClient() {
         if (!this.registryClient) {
-            this.registryClient = await evernode.HookClientFactory.create(
-                evernode.HookTypes.registry
-            );
+            this.registryClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
             await this.registryClient.connect();
         }
         return this.registryClient;
@@ -91,8 +89,8 @@ class EvernodeContext {
                             t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
                             t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
 
-                            const privateKey = fs.existsSync(`../${item.messageKey}.txt`)
-                                ? fs.readFileSync(`../${item.messageKey}.txt`, { encoding: "utf8", flag: "r", }) : null;
+                            const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
+                                fs.readFileSync(`../${item.messageKey}.txt`, { encoding: "utf8", flag: "r", }) : null;
                             const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
                             const res = await tenantClient.extractEvernodeEvent(t.tx);
                             if (res && res?.name === evernode.TenantEvents.AcquireSuccess && res?.data?.acquireRefId === item.txHash) {
@@ -107,7 +105,8 @@ class EvernodeContext {
 
                                 await this.updateAcquiredNodeInfo({ host: item.host, ...payload.content, });
                                 await this.updatePendingAcquireInfo(item, "DELETE");
-                                if (privateKey) fs.unlinkSync(`../${item.messageKey}.txt`);
+                                if (privateKey)
+                                    fs.unlinkSync(`../${item.messageKey}.txt`);
                             }
                         }
                     }
@@ -138,7 +137,8 @@ class EvernodeContext {
             const pendingAcquires = this.getPendingAcquires();
 
             // Temporary upper bound.
-            if (pendingAcquires?.length >= 1) throw "PENDING_ACQUIRES_LIMIT_EXCEEDED";
+            if (pendingAcquires?.length >= 1)
+                throw "PENDING_ACQUIRES_LIMIT_EXCEEDED";
 
             const acquiredNodes = this.getPendingAcquires();
             if (acquiredNodes?.length >= TARGET_NODE_COUNT)
@@ -152,22 +152,13 @@ class EvernodeContext {
             const messageKey = await this.decideMessageKey();
 
             // Perform acquire txn on the selected host.
-            const res = await this.acquireSubmit(
-                hostAddress,
-                leaseOffer,
-                messageKey,
-                options
-            );
+            const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
 
             // Record as a acquire transaction.
-            await this.updatePendingAcquireInfo({
-                host: hostAddress,
-                leaseOfferIdx: leaseOffer.index,
-                txHash: res.tx_json.hash,
-                messageKey: messageKey,
-            });
+            await this.updatePendingAcquireInfo({ host: hostAddress, leaseOfferIdx: leaseOffer.index, txHash: res.tx_json.hash, messageKey: messageKey, });
 
             console.log("Successfully acquired a node.");
+
         } catch (e) {
             console.error(e);
         } finally {
@@ -178,6 +169,7 @@ class EvernodeContext {
     async removeNode(pubkey: string): Promise<void> {
         // // Update patch config.
         // let config = await this.hpContext.getConfig();
+
         // config.unl = config.unl.filter((p: string) => p != pubkey);
         // await this.hpContext.updateConfig(config);
         // // Update peer list.
@@ -196,14 +188,11 @@ class EvernodeContext {
         const leaseOffers = await hostClient.getLeaseOffers();
         const leaseOffer = leaseOffers && leaseOffers[0];
 
-        if (!leaseOffer) throw "NO_LEASE_OFFER";
+        if (!leaseOffer)
+            throw "NO_LEASE_OFFER";
 
         const electionName = `lease_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(
-            electionName,
-            [leaseOffer],
-            new AllVoteElector(3, 1000)
-        );
+        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(3, 1000));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -224,10 +213,7 @@ class EvernodeContext {
         const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
 
         // Choose from hosts that have available hosts.
-        const vacantHosts = (await this.getHosts()).sort(
-            (a: { address: number }, b: { address: number }) =>
-                a.address > b.address ? -1 : 1
-        );
+        const vacantHosts = (await this.getHosts()).sort((a: { address: number }, b: { address: number }) => a.address > b.address ? -1 : 1);
         const unusedHosts = vacantHosts.filter(
             (h: { address: string }) =>
                 !this.clusterManager.nodes.find((n) => n.account === h.address)
@@ -240,11 +226,7 @@ class EvernodeContext {
         }
 
         const electionName = `host_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(
-            electionName,
-            [hostAddress],
-            new AllVoteElector(3, 1000)
-        );
+        const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(3, 1000));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -266,11 +248,7 @@ class EvernodeContext {
         const keyPair: Record<string, any> = kp.deriveKeypair(seed);
 
         const electionName = `message_key_selection${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(
-            electionName,
-            [keyPair.publicKey],
-            new AllVoteElector(3, 1000)
-        );
+        const voteRound = this.voteContext.vote(electionName, [keyPair.publicKey], new AllVoteElector(3, 1000));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -301,53 +279,31 @@ class EvernodeContext {
      * @param options
      * @returns Result of the submitted transaction.
      */
-    async acquireSubmit(
-        hostAddress: string,
-        leaseOffer: URIToken,
-        messageKey: string,
-        options: AcquireOptions = {}
-    ): Promise<any> {
+    async acquireSubmit(hostAddress: string, leaseOffer: URIToken, messageKey: string, options: AcquireOptions = {}): Promise<any> {
         // Get transaction details to use for xrpl tx submission.
         const hostClient = new evernode.HostClient(hostAddress);
 
         // Get host encryption key (public key).
         const encKey = await hostClient.xrplAcc.getMessageKey();
         if (!encKey)
-            throw {
-                reason: evernode.ErrorReasons.INTERNAL_ERR,
-                error: "Host encryption key not set.",
-            };
+            throw { reason: evernode.ErrorReasons.INTERNAL_ERR, error: "Host encryption key not set.", };
 
         // Derive a seed buffer from the lclHash.
         const seed = Buffer.from(this.hpContext.lclHash, "hex");
-        const encrypted = await evernode.EncryptionHelper.encrypt(
-            encKey,
-            { ...options.instanceCfg, messageKey: messageKey },
-            {
-                iv: seed.slice(0, 16),
-                ephemPrivateKey: seed.slice(0, 32),
-            }
-        );
+        const encrypted = await evernode.EncryptionHelper.encrypt(encKey, { ...options.instanceCfg, messageKey: messageKey }, {
+            iv: seed.slice(0, 16),
+            ephemPrivateKey: seed.slice(0, 32),
+        });
         // Set encrypted prefix flag and data.
-        const data = Buffer.concat([
-            Buffer.from([0x01]),
-            Buffer.from(encrypted, "base64"),
-        ]).toString("base64");
+        const data = Buffer.concat([Buffer.from([0x01]), Buffer.from(encrypted, "base64"),]).toString("base64");
 
         return await this.xrplContext.buyURIToken(
             leaseOffer,
             [
-                {
-                    type: evernode.EventTypes.ACQUIRE_LEASE,
-                    format: "base64",
-                    data: data,
-                },
+                { type: evernode.EventTypes.ACQUIRE_LEASE, format: "base64", data: data, },
             ],
             [
-                {
-                    name: evernode.HookParamKeys.PARAM_EVENT_TYPE_KEY,
-                    value: evernode.EventTypes.ACQUIRE_LEASE,
-                },
+                { name: evernode.HookParamKeys.PARAM_EVENT_TYPE_KEY, value: evernode.EventTypes.ACQUIRE_LEASE, },
             ],
             options
         );
@@ -360,28 +316,14 @@ class EvernodeContext {
      * @param {object} options This is an optional field and contains necessary details for the transactions.
      * @returns The transaction result.
      */
-
-    async extendSubmit(
-        hostAddress: string,
-        amount: number,
-        tokenID: string,
-        options: any = {}
-    ): Promise<any> {
+    async extendSubmit(hostAddress: string, amount: number, tokenID: string, options: any = {}): Promise<any> {
         const hostClient = new evernode.HostClient(hostAddress);
         await hostClient.connect();
         const evrIssuer = hostClient.config.evrIssuerAddress;
         await hostClient.disconnect();
-        return this.xrplContext.makePayment(
-            hostClient.xrplAcc.address,
-            amount.toString(),
-            evernode.EvernodeConstants.EVR,
-            evrIssuer,
-            null,
+        return this.xrplContext.makePayment(hostClient.xrplAcc.address, amount.toString(), evernode.EvernodeConstants.EVR, evrIssuer, null,
             [
-                {
-                    name: evernode.HookParamKeys.PARAM_EVENT_TYPE_KEY,
-                    value: evernode.EventTypes.EXTEND_LEASE,
-                },
+                { name: evernode.HookParamKeys.PARAM_EVENT_TYPE_KEY, value: evernode.EventTypes.EXTEND_LEASE },
                 { name: evernode.HookParamKeys.PARAM_EVENT_DATA1_KEY, value: tokenID },
             ],
             options
@@ -395,10 +337,7 @@ class EvernodeContext {
     async getHosts() {
         const registryClient = await this.#getRegistryClient();
         const allHosts = await registryClient.getActiveHosts();
-        return allHosts.filter(
-            (h: { maxInstances: number; activeInstances: number }) =>
-                h.maxInstances - h.activeInstances > 0
-        );
+        return allHosts.filter((h: { maxInstances: number; activeInstances: number }) => h.maxInstances - h.activeInstances > 0);
     }
 
     /**
@@ -448,10 +387,7 @@ class EvernodeContext {
                     jsonData.pendingAcquires.push(element); // modify the array as needed
                 else {
                     // Find the index of the record to remove
-                    const indexToRemove = jsonData.pendingAcquires.findIndex(
-                        (record: { leaseOfferIdx: string }) =>
-                            record.leaseOfferIdx === element.leaseOfferIdx
-                    );
+                    const indexToRemove = jsonData.pendingAcquires.findIndex((record: { leaseOfferIdx: string }) => record.leaseOfferIdx === element.leaseOfferIdx);
 
                     // Check if the record exists in the array, and remove it if found
                     if (indexToRemove !== -1) {
@@ -482,9 +418,7 @@ class EvernodeContext {
                     jsonData.acquiredNodes.push(element); // modify the array as needed
                 else {
                     // Find the index of the record to remove
-                    const indexToRemove = jsonData.acquiredNodes.findIndex(
-                        (record: { name: string }) => record.name === element.name
-                    );
+                    const indexToRemove = jsonData.acquiredNodes.findIndex((record: { name: string }) => record.name === element.name);
 
                     // Check if the record exists in the array, and remove it if found
                     if (indexToRemove !== -1) {
@@ -507,13 +441,9 @@ class EvernodeContext {
         const rawData = fs.readFileSync(NODE_ACQUIRE_INFO_FILE, "utf8");
         const data = JSON.parse(rawData);
         if (data) {
-            console.log(
-                "ACQUIRE INFO BEGIN: ______________________________________________________________________"
-            );
+            console.log("ACQUIRE INFO BEGIN: ______________________________________________________________________");
             console.log(data);
-            console.log(
-                "ACQUIRE INFO END  : ______________________________________________________________________"
-            );
+            console.log("ACQUIRE INFO END  : ______________________________________________________________________");
         }
     }
 }
