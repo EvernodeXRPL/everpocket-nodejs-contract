@@ -323,16 +323,16 @@ class XrplContext {
      * @param options Options to be added to the multi signed submission (optional).
      * @returns Result of the submitted transaction.
      */
-    public async makePayment(toAddr: any, amount: any, currency: any, issuer: any = null, memos: Memo[] | null = null, hookParams: HookParameter[] = [], options: MultiSignOptions = {}) {
+    public async makePayment(toAddr: any, amount: any, currency: any, issuer: any = null, memos: Memo[] | null = null, hookParams: HookParameter[] | null = null, options: MultiSignOptions = {}) {
         const amountObj = this.makeAmountObject(amount, currency, issuer);
-        const tx = {
+        const tx : Transaction = {
             TransactionType: 'Payment',
             Account: this.xrplAcc.address,
             Amount: amountObj,
             Destination: toAddr,
-            HookParameters: undefined
         }
-
+        if (memos)
+            tx.Memos = evernode.TransactionHelper.formatMemos(memos);
         if (hookParams)
             tx.HookParameters = evernode.TransactionHelper.formatHookParams(hookParams);
         return await this.multiSignAndSubmitTransaction(tx, options);

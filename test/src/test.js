@@ -121,9 +121,12 @@ const acquireNewNode = async (xrplContext) => {
 const extendNode = async (xrplContext) => {
     const evernodeContext = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
     try {
-        // change the extendingNodeName to an acquired node name. And change the host address to its host.
-        const extendingNodeName = "2B897BC2014CACB74641C084661662680189686ED902A9786EBDC162F7CB241A";
-        const hostAddress = "rQKQDgKttdzyW6mc1CGerZUk7C1AtbuSKL";
+        await xrplContext.init();
+        const tokens = await xrplContext.xrplAcc.getURITokens();
+        await xrplContext.deinit();
+        const token = tokens[0];
+        const extendingNodeName = token.index;
+        const hostAddress = token.Issuer;
         await evernodeContext.extendSubmit(hostAddress, 1, extendingNodeName, {});
     } catch (e) {
         console.error(e);
