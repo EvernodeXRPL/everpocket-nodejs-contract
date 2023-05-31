@@ -44,11 +44,7 @@ const testContract = async (hpContext) => {
 
         const xrplContext = new evp.XrplContext(hpContext, masterAddress, null, { voteContext: voteContext });
 
-        const server = `wss://${ip}:${port}`;
-        const keys = await HotPocketClient.generateKeys();
-        const hpClient = await HotPocketClient.createClient([server], keys);
-
-        const utilityContext = new evp.UtilityContext(hpContext, hpClient);
+        const utilityContext = new evp.UtilityContext(hpContext);
 
         const tests = [
             // () => testVote(voteContext),

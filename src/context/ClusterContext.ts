@@ -53,7 +53,8 @@ class ClusterContext {
         }
 
         const acquiredNode = data.acquiredNodes.find((n: { pubkey: string; }) => !nodePubkeys.includes(n.pubkey));
-        if (acquiredNode && (await this.utilityContext.checkLiveness(acquiredNode.ip, acquiredNode.user_port))) {
+        const isAlive = acquiredNode ? await this.utilityContext.checkLiveness(acquiredNode.ip, acquiredNode.user_port) : false;
+        if (acquiredNode && isAlive) {
             // Extend if needed.
             await this.hpContext.updatePeers([`${acquiredNode.ip}:${acquiredNode.peer_port}`], []);
 
