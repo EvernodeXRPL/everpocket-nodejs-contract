@@ -3,15 +3,15 @@ const HotPocketClient = require('hotpocket-js-client');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rNC3aBTwEVJXdHo5yP73H8hCJNju4GqvJ1";
-const masterSecret = "snCUGkxT4bEZMPTf6WArK9itc2yYK";
+const masterAddress = "rBgLcLFcn3pygsKjH4jZFq3gtaBmSGTFrd";
+const masterSecret = "shmCAPQwMZGirbMXycSCEnZAUd7L4";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const destinationSecret = "ssXtkhrooqhEhjZDsHXPW5cvexFG7";
 const signerWeight = 1;
 const ip = "localhost";
 const port = 8081;
 
-const evernodeGovernor = "raVhw4Q8FQr296jdaDLDfZ4JDhh7tFG7SF";
+const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 
 const testContract = async (hpContext) => {
     if (!hpContext.readonly) {
@@ -54,8 +54,8 @@ const testContract = async (hpContext) => {
             // () => getSignerList(xrplContext),
             // () => multiSignTransaction(xrplContext),
             // () => checkLiveness(utilityContext, ip, port)
-            // () => acquireNewNode(xrplContext),
-            () => createCluster(xrplContext, utilityContext)
+            () => acquireNewNode(xrplContext),
+            // () => createCluster(xrplContext, utilityContext)
         ];
 
         for (const test of tests) {
@@ -98,7 +98,7 @@ const acquireNewNode = async (xrplContext) => {
     try {
         await evernodeContext.init();
         const options = {
-            host: "rQKQDgKttdzyW6mc1CGerZUk7C1AtbuSKL",
+            host: "rMJNjFm3qWMSpKfiN6REiTKWUK9aNBgDwM",
             instanceCfg: {
                 owner_pubkey: "ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50",
                 contract_id: "dc411912-bcdd-4f73-af43-32ec45844b9a",
