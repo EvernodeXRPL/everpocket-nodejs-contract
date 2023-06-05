@@ -29,11 +29,23 @@ class ClusterContext {
         await this.evernodeContext.init();
         console.log("NODES >> \n", this.clusterManager.nodes);
 
-        if (this.clusterManager.nodes.length <= this.contract.targetNodeCount) {
+        // Grow the cluster if it does not meet the node target.
+        if (this.clusterManager.nodes.length < this.contract.targetNodeCount) {
             await this.grow();
         }
 
-        await this.updateSyncedNodes();
+        // If this is a new Node (non-UNL), then acknowledge the maturity to be a UNL node in the cluster.
+        const amINewNode = this.clusterManager.nodes.find(n => n.publicKey === this.hpContext.publicKey && !n.isUnl);
+        if (amINewNode)
+            await this.acknowledgeMaturity();
+        else {
+            const hpconfig = await this.hpContext.getConfig();
+            if (hpconfig.unl.includes(this.hpContext.publicKey))
+                // Enable user input channel.
+                await this.#traceInputs();
+        }
+
+        this.clusterManager.persistNodes();
     }
 
     public async grow(): Promise<void> {
@@ -55,15 +67,17 @@ class ClusterContext {
         const acquiredNode = data.acquiredNodes.find((n: { pubkey: string; }) => !nodePubkeys.includes(n.pubkey));
         const isAlive = acquiredNode ? await this.utilityContext.checkLiveness(acquiredNode.ip, acquiredNode.user_port) : false;
         if (acquiredNode && isAlive) {
-            // Extend if needed.
+            // TODO Perform a lease extension as per the requirement.
             await this.hpContext.updatePeers([`${acquiredNode.ip}:${acquiredNode.peer_port}`], []);
 
             this.clusterManager.addNode(<ClusterNode>{
                 publicKey: acquiredNode.pubkey,
+                ip: acquiredNode.ip,
+                userPort: acquiredNode.user_port,
                 peer: { ip: acquiredNode.ip, port: acquiredNode.peer_port },
                 account: acquiredNode.host,
                 createdOn: this.hpContext.lclSeqNo,
-                isUNL: false,
+                isUnl: false,
                 isQuorum: false
             });
         }
@@ -87,22 +101,76 @@ class ClusterContext {
         await this.evernodeContext.acquireNode(options);
     }
 
+    async #traceInputs() {
+        // Collection of per-user promises to wait for. Each promise completes when inputs for that user is processed.
+        const userHandlers = [];
 
-    public async updateSyncedNodes(): Promise<void> {
-        const nonUnl = this.clusterManager.nodes.filter(n => !n.isUNL);
+        for (const user of this.hpContext.users.list()) {
+            console.log("YAY.. User", user);
 
-        const waitFulfilled = nonUnl.filter(n => n.createdOn <= (this.hpContext.lclSeqNo - 5));
+            // This user's hex pubkey can be accessed from 'user.pubKey'
 
-        if (waitFulfilled.length > 0) {
-            const hpconfig = await this.hpContext.getConfig();
-            for (const n of waitFulfilled) {
-                hpconfig.unl.push(n.publicKey);
-                await this.hpContext.updateConfig(hpconfig);
-                this.clusterManager.markAsUnl(n.publicKey, this.hpContext.lclSeqNo);
+            // For each user we add a promise to list of promises.
+            userHandlers.push(new Promise<void>(async (resolve) => {
+
+                // The contract need to ensure that all outputs for a particular user is emitted
+                // in deterministic order. Hence, we are processing all inputs for each user sequentially.
+                for (const input of user.inputs) {
+
+                    console.log("Found an input");
+                    const buf = await this.hpContext.users.read(input);
+                    const output = await this.#handleInput(user, buf);
+                    output && await user.send(output);
+                }
+
+                // The promise gets completed when all inputs for this user are processed.
+                resolve();
+            }));
+        }
+
+        // Wait until all user promises are complete.
+        await Promise.all(userHandlers);
+    }
+
+    async #handleInput(user: any, inputBuf: any) {
+
+        const message = JSON.parse(inputBuf);
+
+        if (message.type == "status") {
+            return "Cluster is online!";
+        }
+        else if (message.type === "addMe") {
+            if (!this.hpContext.readonly) {
+                await this.addNode(user.publicKey);
+                this.clusterManager.addNode(user.publicKey);
+            }
+        }
+        else if (message.type === "addNode" && this.clusterManager.publicKey === user.publicKey) {
+            if (!this.hpContext.readonly) {
+                await this.addNode(message.node);
+                this.clusterManager.addNode(message.node);
             }
         }
 
-        this.clusterManager.persistNodes();
+        return null;
+    }
+
+    public async addNode(publicKey: string) {
+
+        const addingNode = this.clusterManager.nodes.find(n => !n.isUnl && n.publicKey === publicKey);
+
+        if (addingNode) {
+            const hpconfig = await this.hpContext.getConfig();
+            hpconfig.unl.push(addingNode.publicKey);
+            await this.hpContext.updateConfig(hpconfig);
+            this.clusterManager.markAsUnl(addingNode.publicKey, this.hpContext.lclSeqNo);
+        }
+    }
+
+    public async acknowledgeMaturity() {
+        const unlNode = this.clusterManager.nodes.find(n => n.isUnl);
+        if (unlNode)
+            await this.utilityContext.sendMessage(JSON.stringify({ type: "addMe" }), unlNode);
     }
 }
 

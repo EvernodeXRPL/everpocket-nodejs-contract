@@ -1,0 +1,44 @@
+[
+    {
+        "account": "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
+        "public_key": "ed7f900599bcf652813ee742e30c91161c5d1092bb6b1166aeaca9500b231bac21",
+        "ip": "dapps-dev.geveo.com",
+        "user_port": 26201,
+        "peer": {
+            "ip": "dapps-dev.geveo.com",
+            "port": 22861
+        },
+        "created_on": 0,
+        "added_to_unl": 0,
+        "is_unl": true,
+        "is_quorum": true
+    },
+    {
+        "account": "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
+        "public_key": "ed4cdd1148b1d475343458d20d31b897cb92dd945f3049b604a07b461238b62566",
+        "ip": "dapps-dev.geveo.com",
+        "user_port": 26203,
+        "peer": {
+            "ip": "dapps-dev.geveo.com",
+            "port": 22863
+        },
+        "created_on": 0,
+        "added_to_unl": 0,
+        "is_unl": true,
+        "is_quorum": true
+    },
+    {
+        "account": "rMJNjFm3qWMSpKfiN6REiTKWUK9aNBgDwM",
+        "public_key": "ed9b8c13ce6fc447bdfb97dfd8b126a81c4eaf9a281f5323c5fbadccd93052fb30",
+        "ip": "geveoeb1.everdecent.org",
+        "user_port": 26201,
+        "peer": {
+            "ip": "geveoeb1.everdecent.org",
+            "port": 22861
+        },
+        "created_on": 0,
+        "added_to_unl": 0,
+        "is_unl": true,
+        "is_quorum": true
+    }
+]
