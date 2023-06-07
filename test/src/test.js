@@ -38,7 +38,7 @@ const testContract = async (hpContext) => {
 
             await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret, { voteContext: voteContext }), signerCount, isSigner, quorum);
 
-            fs.writeFileSync('multisig', '');
+            fs.writeFileSync('multisig', 'MULTISIG');
         }
         ///////////////////////////////////////////////////////////////////////
 

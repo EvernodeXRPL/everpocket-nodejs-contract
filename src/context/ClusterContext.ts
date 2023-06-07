@@ -26,23 +26,21 @@ class ClusterContext {
     }
 
     public async init(): Promise<void> {
+        // If this is a new Node (non-UNL), then acknowledge the maturity to be a UNL node in the cluster.
+        const myNode = this.clusterManager.nodes.find(n => n.publicKey === this.hpContext.publicKey);
+        if (myNode?.isUnl)
+            // Enable user input channel.
+            await this.#traceInputs();
+        else
+            await this.acknowledgeMaturity();
+
         await this.evernodeContext.init();
+
         console.log("NODES >> \n", this.clusterManager.nodes);
 
         // Grow the cluster if it does not meet the node target.
         if (this.clusterManager.nodes.length < this.contract.targetNodeCount) {
             await this.grow();
-        }
-
-        // If this is a new Node (non-UNL), then acknowledge the maturity to be a UNL node in the cluster.
-        const amINewNode = this.clusterManager.nodes.find(n => n.publicKey === this.hpContext.publicKey && !n.isUnl);
-        if (amINewNode)
-            await this.acknowledgeMaturity();
-        else {
-            const hpconfig = await this.hpContext.getConfig();
-            if (hpconfig.unl.includes(this.hpContext.publicKey))
-                // Enable user input channel.
-                await this.#traceInputs();
         }
 
         this.clusterManager.persistNodes();
@@ -136,26 +134,29 @@ class ClusterContext {
 
         const message = JSON.parse(inputBuf);
 
-        if (message.type == "status") {
-            return "Cluster is online!";
-        }
-        else if (message.type === "addMe") {
-            if (!this.hpContext.readonly) {
-                await this.addNode(user.publicKey);
-                this.clusterManager.addNode(user.publicKey);
-            }
-        }
-        else if (message.type === "addNode" && this.clusterManager.publicKey === user.publicKey) {
-            if (!this.hpContext.readonly) {
-                await this.addNode(message.node);
-                this.clusterManager.addNode(message.node);
-            }
-        }
+        switch (message.type) {
 
-        return null;
+            case "status": {
+                return JSON.stringify({ type: "status", status: "Cluster is online!" });
+            }
+            case "addMe": {
+                if (!this.hpContext.readonly && await this.addNode(user.publicKey)) {
+                    return JSON.stringify({ type: "addMe", status: "ok" });
+                }
+                return JSON.stringify({ type: "addMe", status: "not_ok" });
+            }
+            case "addNode": {
+                if (!this.hpContext.readonly && await this.addNode(message.node)) {
+                    return JSON.stringify({ type: "addNode", status: "ok" });
+                }
+                return JSON.stringify({ type: "addNode", status: "not_ok" });
+            }
+            default:
+                return null;
+        }
     }
 
-    public async addNode(publicKey: string) {
+    public async addNode(publicKey: string): Promise<boolean> {
 
         const addingNode = this.clusterManager.nodes.find(n => !n.isUnl && n.publicKey === publicKey);
 
@@ -164,13 +165,16 @@ class ClusterContext {
             hpconfig.unl.push(addingNode.publicKey);
             await this.hpContext.updateConfig(hpconfig);
             this.clusterManager.markAsUnl(addingNode.publicKey, this.hpContext.lclSeqNo);
+            return true;
         }
+        return false;
     }
 
-    public async acknowledgeMaturity() {
+    public async acknowledgeMaturity(): Promise<boolean> {
         const unlNode = this.clusterManager.nodes.find(n => n.isUnl);
         if (unlNode)
-            await this.utilityContext.sendMessage(JSON.stringify({ type: "addMe" }), unlNode);
+            return await this.utilityContext.sendMessage(JSON.stringify({ type: "addMe" }), unlNode);
+        return false;
     }
 }
 
