@@ -104,7 +104,6 @@ class ClusterContext {
         const userHandlers = [];
 
         for (const user of this.hpContext.users.list()) {
-            console.log("YAY.. User", user);
 
             // This user's hex pubkey can be accessed from 'user.pubKey'
 
@@ -115,7 +114,6 @@ class ClusterContext {
                 // in deterministic order. Hence, we are processing all inputs for each user sequentially.
                 for (const input of user.inputs) {
 
-                    console.log("Found an input");
                     const buf = await this.hpContext.users.read(input);
                     const output = await this.#handleInput(user, buf);
                     output && await user.send(output);

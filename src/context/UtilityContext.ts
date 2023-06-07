@@ -103,10 +103,8 @@ class UtilityContext {
                     });
 
                     if (!readOnly) {
-                        console.log("my-message", message)
                         const input = await this.hpClient.submitContractInput(message);
                         const submission = await input.submissionStatus;
-                        console.log(submission);
                         if (submission.status != "accepted") {
                             console.log("Submission failed. reason: " + submission.reason);
                             handleFailure();
