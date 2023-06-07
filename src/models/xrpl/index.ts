@@ -61,3 +61,12 @@ export interface HookParameter {
   name: string;
   value: string;
 }
+
+export interface Transaction {
+  TransactionType: string;
+  Account: string;
+  Amount: any;
+  Destination: string;
+  Memos?: Memo[];
+  HookParameters?: HookParameter[];
+}
