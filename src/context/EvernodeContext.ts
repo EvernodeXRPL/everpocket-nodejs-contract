@@ -159,16 +159,6 @@ class EvernodeContext {
         }
     }
 
-    async removeNode(pubkey: string): Promise<void> {
-        // // Update patch config.
-        // let config = await this.hpContext.getConfig();
-        // config.unl = config.unl.filter((p: string) => p != pubkey);
-        // await this.hpContext.updateConfig(config);
-
-        // // Update peer list.
-        // let peer = '';// find peer from local state file.
-        // await this.hpContext.updatePeers(null, [peer]);
-    }
 
     /**
      * Decides a lease offer collectively.

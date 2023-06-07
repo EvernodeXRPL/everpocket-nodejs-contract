@@ -10,6 +10,7 @@ const destinationSecret = "ssXtkhrooqhEhjZDsHXPW5cvexFG7";
 const signerWeight = 1;
 const ip = "localhost";
 const port = 8081;
+const nodeCount = 3;
 
 const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 
@@ -54,8 +55,9 @@ const testContract = async (hpContext) => {
             // () => getSignerList(xrplContext),
             // () => multiSignTransaction(xrplContext),
             // () => checkLiveness(utilityContext, ip, port)
-            () => acquireNewNode(xrplContext),
-            // () => createCluster(xrplContext, utilityContext)
+            // () => acquireNewNode(xrplContext),
+            // () => createCluster(xrplContext, utilityContext),
+            () => removeNode(hpContext),
         ];
 
         for (const test of tests) {
@@ -131,6 +133,32 @@ const createCluster = async (xrplContext, utilityContext) => {
     } catch (e) {
         console.error(e);
     }
+}
+
+const removeNode = async (hpContext) => {
+    const ownerPubkey = "ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50";
+
+    const contract = {
+        name: "test-contract",
+        contractId: hpContext.contractId,
+        image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
+        targetNodeCount: 2,
+        targetLifeTime: 1,
+        config: {}
+    }
+    const clusterContext = new evp.ClusterContext(hpContext, ownerPubkey, contract);
+    let config = await hpContext.getConfig();
+    let nodeToRemove = config.unl[0];
+
+    try {
+        if(config.unl.length >= nodeCount){
+            await clusterContext.removeNode(nodeToRemove);
+        }
+        
+    } catch (e) {
+        console.error(e);
+    }
+    
 }
 
 const renewSignerList = async (xrplContext) => {
