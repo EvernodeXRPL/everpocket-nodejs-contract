@@ -187,8 +187,6 @@ class ClusterContext {
         await this.hpContext.updatePeers(null, [peer]);
 
         this.clusterManager.removeNode(pubkey);
-
-        this.clusterManager.persistNodes();
     }
 }
 

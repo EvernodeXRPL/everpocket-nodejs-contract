@@ -56,6 +56,7 @@ const testContract = async (hpContext) => {
             // () => multiSignTransaction(xrplContext),
             // () => checkLiveness(utilityContext, ip, port)
             // () => acquireNewNode(xrplContext),
+            // () => extendNode(xrplContext),
             // () => createCluster(xrplContext, utilityContext),
             () => removeNode(hpContext),
         ];
@@ -94,7 +95,6 @@ const addXrplSigner = async (xrplContext, publickey, quorum = null) => {
     }
 }
 
-
 const acquireNewNode = async (xrplContext) => {
     const evernodeContext = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
     try {
@@ -109,6 +109,21 @@ const acquireNewNode = async (xrplContext) => {
         }
         await evernodeContext.acquireNode(options);
 
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+const extendNode = async (xrplContext) => {
+    const evernodeContext = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
+    try {
+        await xrplContext.init();
+        const tokens = await xrplContext.xrplAcc.getURITokens();
+        await xrplContext.deinit();
+        const token = tokens[0];
+        const extendingNodeName = token.index;
+        const hostAddress = token.Issuer;
+        await evernodeContext.extendSubmit(hostAddress, 1, extendingNodeName, {});
     } catch (e) {
         console.error(e);
     }
@@ -129,6 +144,7 @@ const createCluster = async (xrplContext, utilityContext) => {
     const clusterContext = new evp.ClusterContext(xrplContext.hpContext, ownerPubkey, contract, { evernodeContext: evernodeContext, utilityContext: utilityContext });
     try {
         await clusterContext.init();
+
     } catch (e) {
         console.error(e);
     }
