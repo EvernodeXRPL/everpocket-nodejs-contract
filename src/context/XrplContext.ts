@@ -1,4 +1,4 @@
-import { XrplContextOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter } from '../models';
+import { XrplContextOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter, Transaction } from '../models';
 import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
@@ -269,6 +269,20 @@ class XrplContext {
         return this.multiSigner.isSignerNode();
     }
 
+    public makeAmountObject(amount: any, currency: any, issuer: any) {
+        if (typeof amount !== 'string')
+            throw "Amount must be a string.";
+        if (currency !== evernode.XrplConstants.XRP && !issuer)
+            throw "Non-XRP currency must have an issuer.";
+
+        const amountObj = (currency == evernode.XrplConstants.XRP) ? amount : {
+            currency: currency,
+            issuer: issuer,
+            value: amount
+        }
+        return amountObj;
+    }
+
     /**
      * Perform URITokenBuy transaction
      * @param uriToken URIToken object to be bought.
@@ -295,6 +309,32 @@ class XrplContext {
         if (hookParams)
             tx.HookParameters = evernode.TransactionHelper.formatHookParams(hookParams);
 
+        return await this.multiSignAndSubmitTransaction(tx, options);
+    }
+
+    /**
+     * Perform a payment
+     * @param toAddr receiver address
+     * @param amount Amount to be send
+     * @param currency currency type
+     * @param issuer currency issuer
+     * @param memos Memos for the transaction (optional).
+     * @param hookParams HookParameters for the transaction (optional).
+     * @param options Options to be added to the multi signed submission (optional).
+     * @returns Result of the submitted transaction.
+     */
+    public async makePayment(toAddr: any, amount: any, currency: any, issuer: any = null, memos: Memo[] | null = null, hookParams: HookParameter[] | null = null, options: MultiSignOptions = {}) {
+        const amountObj = this.makeAmountObject(amount, currency, issuer);
+        const tx : Transaction = {
+            TransactionType: 'Payment',
+            Account: this.xrplAcc.address,
+            Amount: amountObj,
+            Destination: toAddr,
+        }
+        if (memos)
+            tx.Memos = evernode.TransactionHelper.formatMemos(memos);
+        if (hookParams)
+            tx.HookParameters = evernode.TransactionHelper.formatHookParams(hookParams);
         return await this.multiSignAndSubmitTransaction(tx, options);
     }
 }
