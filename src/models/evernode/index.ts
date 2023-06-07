@@ -21,11 +21,13 @@ export interface ClusterContextOptions {
 
 export interface ClusterNode {
   publicKey: string;
+  ip: string;
   peer: Peer;
+  userPort: number;
   account: string;
   createdOn: number;
   addedToUnl?: number;
-  isUNL: boolean;
+  isUnl: boolean;
   isQuorum: boolean;
 }
 

@@ -3,8 +3,8 @@ const HotPocketClient = require('hotpocket-js-client');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rBgLcLFcn3pygsKjH4jZFq3gtaBmSGTFrd";
-const masterSecret = "shmCAPQwMZGirbMXycSCEnZAUd7L4";
+const masterAddress = "rJGhusq1rSWfJXW6CkwtBrJ8uv3x8UGDgw";
+const masterSecret = "sstHzDphQceKxL7eHtfFu3bGjN5Cu";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const destinationSecret = "ssXtkhrooqhEhjZDsHXPW5cvexFG7";
 const signerWeight = 1;
@@ -35,11 +35,11 @@ const testContract = async (hpContext) => {
 
         ///////// TODO: This part is temporary for preparing multisig /////////
         if (!fs.existsSync('multisig')) {
-            fs.writeFileSync('multisig', '');
-
             const isSigner = !nonSigners.includes(hpContext.publicKey);
 
             await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret, { voteContext: voteContext }), signerCount, isSigner, quorum);
+
+            fs.writeFileSync('multisig', 'MULTISIG');
         }
         ///////////////////////////////////////////////////////////////////////
 
@@ -100,9 +100,8 @@ const acquireNewNode = async (xrplContext) => {
     try {
         await evernodeContext.init();
         const options = {
-            host: "rMJNjFm3qWMSpKfiN6REiTKWUK9aNBgDwM",
             instanceCfg: {
-                owner_pubkey: "ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50",
+                owner_pubkey: "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9834bafb",
                 contract_id: "dc411912-bcdd-4f73-af43-32ec45844b9a",
                 image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
                 config: {}
@@ -116,14 +115,14 @@ const acquireNewNode = async (xrplContext) => {
 }
 
 const createCluster = async (xrplContext, utilityContext) => {
-    const ownerPubkey = "ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50";
+    const ownerPubkey = "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9834bafb";
     const evernodeContext = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
 
     const contract = {
         name: "test-contract",
         contractId: evernodeContext.hpContext.contractId,
         image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
-        targetNodeCount: 2,
+        targetNodeCount: 5,
         targetLifeTime: 1,
         config: {}
     }

@@ -32,7 +32,7 @@ class ClusterManager {
         const node = this.nodes.find(n => n.publicKey === pubkey);
 
         if (node) {
-            node.isUNL = true;
+            node.isUnl = true;
             node.addedToUnl = lclSeqNo;
         }
     }
