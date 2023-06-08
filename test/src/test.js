@@ -57,8 +57,8 @@ const testContract = async (hpContext) => {
             // () => checkLiveness(utilityContext, ip, port)
             // () => acquireNewNode(xrplContext),
             // () => extendNode(xrplContext),
-            // () => createCluster(xrplContext, utilityContext),
-            () => removeNode(hpContext),
+            // () => removeNode(hpContext),
+            () => createCluster(xrplContext, utilityContext),
         ];
 
         for (const test of tests) {
