@@ -133,7 +133,7 @@ class EvernodeContext {
             //     throw 'NODE_TARGET_REACHED';
 
             // Use provided host or select a host randomly.
-            const hostAddress = "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N"; //options.host || await this.decideHost();
+            const hostAddress = options.host || await this.decideHost();
             // Choose the lease offer
             const leaseOffer = await this.decideLeaseOffer(hostAddress);
 
