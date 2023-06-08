@@ -15,9 +15,9 @@ class ClusterContext {
     public constructor(hpContext: any, publicKey: string, contract: Contract, options: ClusterContextOptions) {
         this.hpContext = hpContext;
         this.publicKey = publicKey;
-        this.evernodeContext = options.evernodeContext;
-        this.utilityContext = options.utilityContext
-        this.voteContex = this.evernodeContext.voteContext;
+        this.evernodeContext = options?.evernodeContext;
+        this.utilityContext = options?.utilityContext
+        this.voteContex = this.evernodeContext?.voteContext;
         this.contract = contract;
         this.clusterManager = new ClusterManager(publicKey);
     }
@@ -217,6 +217,20 @@ class ClusterContext {
         if (unlNode)
             return await this.utilityContext.sendMessage(JSON.stringify({ type: "addMe" }), unlNode);
         return false;
+    }
+
+    async removeNode(pubkey: string): Promise<void> {
+        // Update patch config.
+        let config = await this.hpContext.getConfig();
+        config.unl = config.unl.filter((p: string) => p != pubkey);
+        await this.hpContext.updateConfig(config);
+
+        // Update peer list.
+        let node = this.clusterManager.nodes.find( n => n.publicKey ===  pubkey)
+        let peer = `${node?.peer.ip}:${node?.peer.port}`
+        await this.hpContext.updatePeers(null, [peer]);
+
+        this.clusterManager.removeNode(pubkey);
     }
 }
 
