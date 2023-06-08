@@ -219,18 +219,24 @@ class ClusterContext {
         return false;
     }
 
-    async removeNode(pubkey: string): Promise<void> {
+    /**
+     * Removes a provided a node from the cluster.
+     * @param publickey Public key of the node to be removed.
+     */
+    async removeNode(publickey: string): Promise<void> {
         // Update patch config.
         let config = await this.hpContext.getConfig();
-        config.unl = config.unl.filter((p: string) => p != pubkey);
+        config.unl = config.unl.filter((p: string) => p != publickey);
         await this.hpContext.updateConfig(config);
 
         // Update peer list.
-        let node = this.clusterManager.nodes.find( n => n.publicKey ===  pubkey)
-        let peer = `${node?.peer.ip}:${node?.peer.port}`
-        await this.hpContext.updatePeers(null, [peer]);
+        let node = this.clusterManager.nodes.find(n => n.publicKey === publickey)
+        if (node) {
+            let peer = `${node?.peer.ip}:${node?.peer.port}`
+            await this.hpContext.updatePeers(null, [peer]);
 
-        this.clusterManager.removeNode(pubkey);
+            this.clusterManager.removeNode(publickey);
+        }
     }
 }
 
