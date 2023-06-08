@@ -1,10 +1,7 @@
 import { AcquireOptions, ClusterNode, ClusterContextOptions } from "../models/evernode";
-import * as fs from 'fs';
 import { Contract } from "../models";
 import { EvernodeContext, UtilityContext, VoteContext } from "../context";
 import { ClusterManager } from "../cluster";
-
-const EXTENDED_ROUNDTIME = 10000;
 
 class ClusterContext {
     public hpContext: any;
@@ -47,8 +44,7 @@ class ClusterContext {
     }
 
     public async grow(): Promise<void> {
-        const rawData = fs.readFileSync(this.evernodeContext.acquireDataFile, 'utf8');
-        const data = JSON.parse(rawData);
+        const data = this.evernodeContext.getNodes();
         const nodePubkeys = this.clusterManager.nodes.map(x => x.publicKey);
 
         if (data.pendingAcquires.length < 1 && data.acquiredNodes.length < this.contract.targetNodeCount) {
