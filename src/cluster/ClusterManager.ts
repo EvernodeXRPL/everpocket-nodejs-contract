@@ -13,7 +13,6 @@ class ClusterManager {
         this.clusterPath = `./nodes.json`;
         if (fs.existsSync(this.clusterPath))
             this.nodes = JSON.parse(fs.readFileSync(this.clusterPath, 'utf8')).map((o: any) => JSONHelpers.castToModel(o));
-
     }
 
     public persistNodes(): void {

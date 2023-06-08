@@ -1,5 +1,5 @@
 import { VoteContext, XrplContext } from ".";
-import { AcquireOptions, EvernodeContextOptions, Instance } from "../models/evernode";
+import { AcquireOptions, EvernodeContextOptions } from "../models/evernode";
 import * as evernode from 'evernode-js-client';
 import { Buffer } from 'buffer';
 import { AllVoteElector } from "../vote/vote-electors";
@@ -113,10 +113,6 @@ class EvernodeContext {
         }
     }
 
-    async addNode(pubkey: string, options = {}): Promise<void> {
-        // Steps related to adding an acquired node to a cluster after performing the liveliness
-    }
-
     /**
      * Acquires a node based on the provided options.
      * @param options Options related to a particular acquire operation.
@@ -156,17 +152,6 @@ class EvernodeContext {
         } finally {
             await this.xrplContext.deinit();
         }
-    }
-
-    async removeNode(pubkey: string): Promise<void> {
-        // // Update patch config.
-        // let config = await this.hpContext.getConfig();
-        // config.unl = config.unl.filter((p: string) => p != pubkey);
-        // await this.hpContext.updateConfig(config);
-
-        // // Update peer list.
-        // let peer = '';// find peer from local state file.
-        // await this.hpContext.updatePeers(null, [peer]);
     }
 
     /**
@@ -323,40 +308,43 @@ class EvernodeContext {
      * Fetches registered hosts
      * @returns An array of hosts that are having vacant leases.
      */
-    async getHosts() {
+    async getHosts(): Promise<any[]> {
         const registryClient = await this.#getRegistryClient();
         const allHosts = await registryClient.getActiveHosts();
         return allHosts.filter((h: { maxInstances: number; activeInstances: number; }) => (h.maxInstances - h.activeInstances) > 0);
     }
 
     /**
-     * Fetches details of successful acquires.
-     * @returns an array of instance acquisitions that are completed.
+     * Fetches details of acquires.
+     * @returns an object containing arrays of pending and in progress instance acquisitions.
      */
-    getAcquiredNodes(): any {
+    getNodes(): any {
         try {
             const rawData = fs.readFileSync(this.acquireDataFile, 'utf8');
             const data = JSON.parse(rawData);
-            return data.acquiredNodes;
+            return data;
         } catch (error) {
             console.error(`Error reading file ${this.acquireDataFile}: ${error}`);
-            return undefined;
+            return null;
         }
+    }
+
+    /**
+     * Fetches details of successful acquires.
+     * @returns an array of instance acquisitions that are completed.
+     */
+    getAcquiredNodes(): any[] {
+        const data = this.getNodes();
+        return data ? data.acquiredNodes : null;
     }
 
     /**
      * Fetches details of pending acquires.
      * @returns an array of instance acquisitions that are in progress.
      */
-    getPendingAcquires(): any {
-        try {
-            const rawData = fs.readFileSync(this.acquireDataFile, 'utf8');
-            const data = JSON.parse(rawData);
-            return data.pendingAcquires;
-        } catch (error) {
-            console.error(`Error reading file ${this.acquireDataFile}: ${error}`);
-            return undefined;
-        }
+    getPendingAcquires(): any[] {
+        const data = this.getNodes();
+        return data ? data.pendingAcquires : null;
     }
 
     /**
@@ -366,7 +354,7 @@ class EvernodeContext {
      * @param mode Type of operation ("INSERT" or "DELETE")
      */
 
-    async updatePendingAcquireInfo(element: any, mode: string = "INSERT") {
+    async updatePendingAcquireInfo(element: any, mode: string = "INSERT"): Promise<void> {
         try {
             const data = fs.readFileSync(this.acquireDataFile);
 
@@ -397,7 +385,7 @@ class EvernodeContext {
      * @param element Element to be added or removed
      * @param mode Type of operation ("INSERT" or "DELETE")
      */
-    async updateAcquiredNodeInfo(element: any, mode: string = "INSERT") {
+    async updateAcquiredNodeInfo(element: any, mode: string = "INSERT"): Promise<void> {
         try {
             const data = fs.readFileSync(this.acquireDataFile);
 
@@ -426,7 +414,7 @@ class EvernodeContext {
     /**
      * View the content of the files which contains acquire details.
      */
-    async viewNodeDetails() {
+    async viewNodeDetails(): Promise<void> {
         const rawData = fs.readFileSync(this.acquireDataFile, 'utf8');
         const data = JSON.parse(rawData);
         if (data) {
