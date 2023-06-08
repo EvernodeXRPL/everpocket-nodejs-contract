@@ -10,6 +10,12 @@ class UtilityContext {
         this.hpContext = hpContext;
     }
 
+    /**
+     * Initiates a client connection for a given ip and a port.
+     * @param ip IP address of a node.
+     * @param port User port of a node.
+     * @param useNewKeyPair If new key pair needs to be utilized.
+     */
     async #initClient(ip: string, port: number, useNewKeyPair: boolean = false) {
         if (this.hpClient)
             await this.hpClient.close();
@@ -23,6 +29,12 @@ class UtilityContext {
         this.hpClient = await HotPocket.createClient([server], keys);
     }
 
+    /**
+     * Checks the liveliness of a node.
+     * @param ip IP address of a node.
+     * @param port User port of a node.
+     * @returns the liveliness as a boolean figure.
+     */
     public async checkLiveness(ip: string, port: number): Promise<boolean> {
         const server = `wss://${ip}:${port}`;
         await this.#initClient(ip, port);
@@ -57,7 +69,13 @@ class UtilityContext {
         })
     }
 
-    public async sendMessage(message: any, node: ClusterNode, readOnly: boolean = false) {
+    /**
+     * Sends a message to a cluster node.
+     * @param message Message to be sent.
+     * @param node Corresponding Node.
+     * @returns the state of the message sending as a boolean figure.
+     */
+    public async sendMessage(message: any, node: ClusterNode) {
         const server = `wss://${node.ip}:${node.userPort}`;
         await this.#initClient(node.ip, node.userPort);
 
@@ -102,7 +120,7 @@ class UtilityContext {
                         });
                     });
 
-                    if (!readOnly) {
+                    if (!this.hpContext.readOnly) {
                         const input = await this.hpClient.submitContractInput(message);
                         const submission = await input.submissionStatus;
                         if (submission.status != "accepted") {

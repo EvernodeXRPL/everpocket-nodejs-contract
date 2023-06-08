@@ -1,5 +1,5 @@
 import { VoteContext, XrplContext } from ".";
-import { AcquireOptions, EvernodeContextOptions } from "../models/evernode";
+import { AcquireOptions, EvernodeContextOptions, LeaseURIInfo } from "../models/evernode";
 import * as evernode from 'evernode-js-client';
 import { Buffer } from 'buffer';
 import { AllVoteElector } from "../vote/vote-electors";
@@ -348,12 +348,20 @@ class EvernodeContext {
     }
 
     /**
+     * Decode the URI of the lease URIToken
+     * @param uri URI of the URIToken
+     * @returns decoded content of the URI
+     */
+    decodeLeaseTokenUri(uri: string): LeaseURIInfo {
+        return evernode.UtilHelpers.decodeLeaseTokenUri(uri);
+    }
+
+    /**
      * Updates the detail file with inserts and deletes of
      * pending acquires
      * @param element Element to be added or removed
      * @param mode Type of operation ("INSERT" or "DELETE")
      */
-
     async updatePendingAcquireInfo(element: any, mode: string = "INSERT"): Promise<void> {
         try {
             const data = fs.readFileSync(this.acquireDataFile);

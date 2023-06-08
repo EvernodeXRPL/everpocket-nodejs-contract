@@ -22,6 +22,9 @@ class ClusterContext {
         this.clusterManager = new ClusterManager(publicKey);
     }
 
+    /**
+     * Initiates the operations regarding the cluster.
+     */
     public async init(): Promise<void> {
         // If this is a new Node (non-UNL), then acknowledge the maturity to be a UNL node in the cluster.
         const myNode = this.clusterManager.nodes.find(n => n.publicKey === this.hpContext.publicKey);
@@ -43,25 +46,36 @@ class ClusterContext {
         this.clusterManager.persistNodes();
     }
 
+    /**
+     * Grow the cluster as per the provide configuration.
+     */
     public async grow(): Promise<void> {
         const data = this.evernodeContext.getNodes();
-        const nodePubkeys = this.clusterManager.nodes.map(x => x.publicKey);
+        const nodePublicKeys = this.clusterManager.nodes.map(x => x.publicKey);
 
-        if (data.pendingAcquires.length < 1 && data.acquiredNodes.length < this.contract.targetNodeCount) {
-            await this.purchaseNode({
-                instanceCfg: {
-                    owner_pubkey: this.publicKey,
-                    contract_id: this.contract.contractId,
-                    image: this.contract.image,
-                    config: this.contract.config
+        // Find newly acquired node.
+        const acquiredNode = data.acquiredNodes.find((n: { pubkey: string; }) => !nodePublicKeys.includes(n.pubkey));
+
+        // Extend the node accordingly.
+        const extension = this.contract.targetLifeTime - 1;
+        if (acquiredNode && extension > 0) {
+            await this.evernodeContext.xrplContext.init();
+            try {
+                const leaseUriToken = (await this.evernodeContext.xrplContext.xrplAcc.getURITokens()).find((n: { index: any; }) => n.index === acquiredNode.name)
+                if (leaseUriToken) {
+                    const uriInfo = this.evernodeContext.decodeLeaseTokenUri(leaseUriToken.URI);
+                    await this.evernodeContext.extendSubmit(acquiredNode.host, (uriInfo.leaseAmount * extension), leaseUriToken.index);
                 }
-            });
+            } catch (e) {
+                console.log(e)
+            } finally {
+                await this.evernodeContext.xrplContext.deinit();
+            }
         }
 
-        const acquiredNode = data.acquiredNodes.find((n: { pubkey: string; }) => !nodePubkeys.includes(n.pubkey));
+        // Check the liveliness and add that to the node list as a non-UNL node.
         const isAlive = acquiredNode ? await this.utilityContext.checkLiveness(acquiredNode.ip, acquiredNode.user_port) : false;
         if (acquiredNode && isAlive) {
-            // TODO Perform a lease extension as per the requirement.
             await this.hpContext.updatePeers([`${acquiredNode.ip}:${acquiredNode.peer_port}`], []);
 
             this.clusterManager.addNode(<ClusterNode>{
@@ -75,8 +89,24 @@ class ClusterContext {
                 isQuorum: false
             });
         }
+
+        // Perform another instance purchase if the node target is not met yet.
+        if (data.pendingAcquires.length < 1 && this.clusterManager.nodes.length < this.contract.targetNodeCount) {
+            await this.purchaseNode({
+                instanceCfg: {
+                    owner_pubkey: this.publicKey,
+                    contract_id: this.contract.contractId,
+                    image: this.contract.image,
+                    config: this.contract.config
+                }
+            });
+        }
     }
 
+    /**
+     * Perform an instance purchase with the provided acquire options.
+     * @param options Options related to a particular acquire operation.
+     */
     public async purchaseNode(options: AcquireOptions): Promise<any> {
         const hpconfig = await this.hpContext.getConfig();
         const unl = hpconfig.unl;
@@ -95,6 +125,9 @@ class ClusterContext {
         await this.evernodeContext.acquireNode(options);
     }
 
+    /**
+     * Tracing the user connections and inputs for the contract.
+     */
     async #traceInputs() {
         // Collection of per-user promises to wait for. Each promise completes when inputs for that user is processed.
         const userHandlers = [];
@@ -124,7 +157,13 @@ class ClusterContext {
         await Promise.all(userHandlers);
     }
 
-    async #handleInput(user: any, inputBuf: any) {
+    /**
+     * 
+     * @param user Connected User.
+     * @param inputBuf Input of the user.
+     * @returns the output of the operation according to the input.
+     */
+    async #handleInput(user: any, inputBuf: any): Promise<any> {
 
         const message = JSON.parse(inputBuf);
 
@@ -150,6 +189,11 @@ class ClusterContext {
         }
     }
 
+    /**
+     * 
+     * @param publicKey Public key of the node to be added.
+     * @returns the status of the addition as a boolean figure.
+     */
     public async addNode(publicKey: string): Promise<boolean> {
 
         const addingNode = this.clusterManager.nodes.find(n => !n.isUnl && n.publicKey === publicKey);
@@ -164,6 +208,10 @@ class ClusterContext {
         return false;
     }
 
+    /**
+     * Acknowledges the maturity of node to a UNL node of parent cluster.
+     * @returns the status of the acknowledgement as a boolean figure.
+     */
     public async acknowledgeMaturity(): Promise<boolean> {
         const unlNode = this.clusterManager.nodes.find(n => n.isUnl);
         if (unlNode)

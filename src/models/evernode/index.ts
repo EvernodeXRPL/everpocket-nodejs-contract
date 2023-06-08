@@ -40,3 +40,10 @@ export interface Instance {
   userPort: string;
   extended?: boolean;
 }
+
+export interface LeaseURIInfo {
+  leaseIndex: number;
+  halfTos: any;
+  leaseAmount: number;
+  identifier: any;
+}

@@ -137,7 +137,7 @@ const createCluster = async (xrplContext, utilityContext) => {
         contractId: evernodeContext.hpContext.contractId,
         image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
         targetNodeCount: 5,
-        targetLifeTime: 1,
+        targetLifeTime: 2,
         config: {}
     }
     const clusterContext = new evp.ClusterContext(xrplContext.hpContext, ownerPubkey, contract, { evernodeContext: evernodeContext, utilityContext: utilityContext });
