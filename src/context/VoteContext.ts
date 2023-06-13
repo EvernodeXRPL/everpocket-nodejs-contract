@@ -12,10 +12,6 @@ class VoteContext {
     private uniqueNumber: number = 0;
     private voteCollection: any = {};
 
-    /**
-     * HotPocket contract context handler.
-     * @param hpContext HotPocket contract context.
-     */
     public constructor(hpContext: any, options: VoteContextOptions = {}) {
         this.hpContext = hpContext;
         this.voteSerializer = options.voteSerializer || new VoteSerializer();

@@ -1,60 +1,62 @@
 import { VoteContext, XrplContext } from ".";
-import { AcquireOptions, EvernodeContextOptions, LeaseURIInfo } from "../models/evernode";
+import { AcquireData, AcquireOptions, AcquiredNode, Instance, LeaseURIInfo, PendingAcquire } from "../models/evernode";
 import * as evernode from 'evernode-js-client';
 import { Buffer } from 'buffer';
 import { AllVoteElector } from "../vote/vote-electors";
 import { URIToken } from "../models";
 import * as fs from 'fs';
 import * as kp from 'ripple-keypairs';
-import { ClusterManager } from "../cluster";
-
-
-const ACQUIRE_MANAGEMENT_CONFIG = {
-    pendingAcquires: [],
-    acquiredNodes: []
-};
-
-const TARGET_NODE_COUNT = 10;
+import { JSONHelpers } from "../utils";
 
 class EvernodeContext {
     public hpContext: any;
-    public acquireDataFile: string;
     public xrplContext: XrplContext;
-    public clusterManager: ClusterManager;
     public voteContext: VoteContext;
+    private acquireDataFile: string = "acquires.json";
+    private acquireData: AcquireData;
     private registryClient: any;
 
-    /**
-     *
-     * @param hpContext HotPocket context for this context.
-     * @param address Address of the master account.
-     * @param governorAddress Relevant Governor address
-     * @param options
-     */
-    constructor(hpContext: any, address: string, governorAddress: string, options: EvernodeContextOptions = {}) {
-        this.hpContext = hpContext;
-        this.xrplContext = options.xrplContext || new XrplContext(this.hpContext, address, null, options.xrplOptions);
-        this.clusterManager = new ClusterManager(hpContext.publicKey);
+    constructor(xrplContext: XrplContext, governorAddress: string) {
+        this.xrplContext = xrplContext;
+        this.hpContext = this.xrplContext.hpContext;
         this.voteContext = this.xrplContext.voteContext;
-        this.acquireDataFile = "acquires.json"
 
         evernode.Defaults.set({
-            xrplApi: this.xrplContext.xrplApi,
+            xrplApi: xrplContext.xrplApi,
             governorAddress: governorAddress,
         });
 
-        const jsonData = JSON.stringify(ACQUIRE_MANAGEMENT_CONFIG, null, 4);
-        if (!fs.existsSync(this.acquireDataFile)) {
-            fs.writeFileSync(this.acquireDataFile, jsonData);
-            console.log('Created the information file.');
+        if (!fs.existsSync(this.acquireDataFile))
+            JSONHelpers.writeToFile(this.acquireDataFile, <AcquireData>{ acquiredNodes: [], pendingAcquires: [] });
+        this.acquireData = JSONHelpers.readFromFile<AcquireData>(this.acquireDataFile);
+    }
+
+    /**
+     * Initialize the context.
+     */
+    async init(): Promise<void> {
+        await this.xrplContext.init();
+
+        try {
+            await this.#checkForCompletedAcquires();
+        } catch (e) {
+            await this.xrplContext.deinit();
+            throw e;
         }
+    }
+
+    /**
+     * Deinitialize the context.
+     */
+    async deinit(): Promise<void> {
+        await this.xrplContext.deinit();
     }
 
     /**
      * Creates a registry clients for this environment
      * @returns Created client.
      */
-    async #getRegistryClient() {
+    private async getRegistryClient(): Promise<any> {
         if (!this.registryClient) {
             this.registryClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
             await this.registryClient.connect();
@@ -63,95 +65,69 @@ class EvernodeContext {
     }
 
     /**
-     * Find and record acquired instance details.
+     * Check whether there're any completed pending acquires.
      */
-    async init(): Promise<void> {
-        try {
-            await this.xrplContext.init();
+    async #checkForCompletedAcquires(): Promise<void> {
+        // Check for pending transactions and their completion.
+        for (const item of this.getPendingAcquires()) {
+            const txnInfo = await this.xrplContext.xrplApi.getTxnInfo(item.refId, {});
+            if (txnInfo && txnInfo.validated) {
+                const txList = await this.xrplContext.xrplAcc.getAccountTrx(txnInfo.ledger_index);
+                for (let t of txList) {
+                    t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
+                    t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
 
-            // Log current node acquisition details.
-            await this.viewNodeDetails();
-
-            // Check for pending transactions and their completion.
-            const pendingAcquires = this.getPendingAcquires();
-
-            if (pendingAcquires.length > 0) {
-                const item = pendingAcquires[0];
-                try {
-                    const txnInfo = await this.xrplContext.xrplApi.getTxnInfo(item.txHash, {});
-                    if (txnInfo && txnInfo.validated) {
-                        const txList = await this.xrplContext.xrplAcc.getAccountTrx(txnInfo.ledger_index);
-                        for (let t of txList) {
-                            t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
-                            t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
-
-                            const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
-                                fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
-                            const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
-                            const res = await tenantClient.extractEvernodeEvent(t.tx);
-                            if (res && (res?.name === evernode.TenantEvents.AcquireSuccess) && (res?.data?.acquireRefId === item.txHash)) {
-                                const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
-                                const elector = new AllVoteElector(1, 1000);
-                                const payload = (privateKey ? await this.voteContext.vote(electionName, [res.data.payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
-                                await this.updateAcquiredNodeInfo({ host: item.host, ...payload.content });
-                                await this.updatePendingAcquireInfo(item, "DELETE");
-                                if (privateKey)
-                                    fs.unlinkSync(`../${item.messageKey}.txt`);
-                            }
-                        }
+                    const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
+                        fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
+                    const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
+                    const res = await tenantClient.extractEvernodeEvent(t.tx);
+                    if (res && (res?.name === evernode.TenantEvents.AcquireSuccess) && (res?.data?.acquireRefId === item.refId)) {
+                        const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
+                        const elector = new AllVoteElector(1, 1000);
+                        const payload = (privateKey ? await this.voteContext.vote(electionName, [res.data.payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+                        await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
+                        await this.updatePendingAcquireInfo(item, "DELETE");
+                        if (privateKey)
+                            fs.unlinkSync(`../${item.messageKey}.txt`);
                     }
-                } catch (error) {
-                    console.error(error);
                 }
-
             }
-
-        } catch (e) {
-            console.error(e);
-        } finally {
-            await this.xrplContext.deinit();
         }
     }
 
     /**
      * Acquires a node based on the provided options.
      * @param options Options related to a particular acquire operation.
+     * @returns Acquire data.
      */
+    async acquireNode(options: AcquireOptions = {}): Promise<PendingAcquire> {
+        // Use provided host or select a host randomly.
+        const hostAddress = options.host || await this.decideHost(options.preferredHosts);
+        // Choose the lease offer
+        const leaseOffer = await this.decideLeaseOffer(hostAddress);
 
-    async acquireNode(options: AcquireOptions = {}): Promise<void> {
-        try {
-            await this.xrplContext.init();
+        const messageKey = await this.decideMessageKey();
 
-            const pendingAcquires = this.getPendingAcquires();
+        // Perform acquire txn on the selected host.
+        const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
 
-            // // Temporary upper bound.
-            // if (pendingAcquires?.length >= 1)
-            //     throw 'PENDING_ACQUIRES_LIMIT_EXCEEDED';
+        const pendingAcquire = <PendingAcquire>{ host: hostAddress, leaseOfferIdx: leaseOffer.index, refId: res.tx_json.hash, messageKey: messageKey };
 
-            // const acquiredNodes = this.getPendingAcquires();
-            // if (acquiredNodes?.length >= TARGET_NODE_COUNT)
-            //     throw 'NODE_TARGET_REACHED';
+        // Record as a acquire transaction.
+        await this.updatePendingAcquireInfo(pendingAcquire);
 
-            // Use provided host or select a host randomly.
-            const hostAddress = options.host || await this.decideHost();
-            // Choose the lease offer
-            const leaseOffer = await this.decideLeaseOffer(hostAddress);
+        return pendingAcquire;
+    }
 
-            const messageKey = await this.decideMessageKey();
-
-            // Perform acquire txn on the selected host.
-            const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
-
-            // Record as a acquire transaction.
-            await this.updatePendingAcquireInfo({ host: hostAddress, leaseOfferIdx: leaseOffer.index, txHash: res.tx_json.hash, messageKey: messageKey });
-
-            console.log("Successfully acquired a node.");
-
-        } catch (e) {
-            console.error(e);
-        } finally {
-            await this.xrplContext.deinit();
-        }
+    /**
+     * Get the acquire info if acquired.
+     * @param options Options related to a particular acquire operation.
+     * @returns Acquire reference.
+     */
+    getIfAcquired(acquireRefId: string): AcquiredNode | null {
+        const acquireData = this.getAcquireData();
+        const node = acquireData.acquiredNodes.find(n => n.refId == acquireRefId);
+        return node ? node : null;
     }
 
     /**
@@ -184,20 +160,21 @@ class EvernodeContext {
 
     /**
      * Decides a host collectively.
+     * @param [preferredHosts=null] List of proffered host addresses.
      * @returns Decided host address.
      */
-    async decideHost(): Promise<string> {
+    async decideHost(preferredHosts: string[] | null = null): Promise<string> {
         const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
 
-        // Choose from hosts that have available hosts.
-        const vacantHosts = (await this.getHosts()).sort((a: { address: number }, b: { address: number }) => a.address > b.address ? -1 : 1);
-        const unusedHosts = vacantHosts.filter((h: { address: string }) => !this.clusterManager.nodes.find((n) => n.account === h.address));
+        // Choose from hosts that have available instances.
+        const vacantHosts = (await this.getHosts()).sort((a, b) => (a.maxInstances - a.activeInstances) > (b.maxInstances - b.activeInstances) ? -1 : 1);
+        const unusedHosts = preferredHosts ? preferredHosts.filter(a => vacantHosts.find(h => a === h.address)) : vacantHosts.map(h => h.address);
 
         let hostAddress = null;
-        if (unusedHosts.length > 0) {
-            console.log(`Selecting a host from ${unusedHosts.length} unused hosts.`);
-            hostAddress = unusedHosts[lclBasedNum % unusedHosts.length].address;
-        }
+        if (unusedHosts.length > 0)
+            hostAddress = unusedHosts[lclBasedNum % unusedHosts.length];
+        else
+            throw 'There are no vacant hosts in the network';
 
         const electionName = `host_selector${this.voteContext.getUniqueNumber()}`;
         const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(3, 1000));
@@ -282,6 +259,7 @@ class EvernodeContext {
             options
         );
     }
+
     /**
      * This function is called by a tenant client to submit the extend lease transaction in certain host. This function will be called directly in test. This function can take four parameters as follows.
      * @param {string} hostAddress XRPL account address of the host.
@@ -309,7 +287,7 @@ class EvernodeContext {
      * @returns An array of hosts that are having vacant leases.
      */
     async getHosts(): Promise<any[]> {
-        const registryClient = await this.#getRegistryClient();
+        const registryClient = await this.getRegistryClient();
         const allHosts = await registryClient.getActiveHosts();
         return allHosts.filter((h: { maxInstances: number; activeInstances: number; }) => (h.maxInstances - h.activeInstances) > 0);
     }
@@ -318,14 +296,18 @@ class EvernodeContext {
      * Fetches details of acquires.
      * @returns an object containing arrays of pending and in progress instance acquisitions.
      */
-    getNodes(): any {
+    getAcquireData(): AcquireData {
+        return this.acquireData;
+    }
+
+    /**
+     * Persist details of acquires.
+     */
+    persistAcquireData(): void {
         try {
-            const rawData = fs.readFileSync(this.acquireDataFile, 'utf8');
-            const data = JSON.parse(rawData);
-            return data;
+            JSONHelpers.writeToFile(this.acquireDataFile, this.acquireData);
         } catch (error) {
-            console.error(`Error reading file ${this.acquireDataFile}: ${error}`);
-            return null;
+            throw `Error writing file ${this.acquireDataFile}: ${error}`;
         }
     }
 
@@ -333,18 +315,16 @@ class EvernodeContext {
      * Fetches details of successful acquires.
      * @returns an array of instance acquisitions that are completed.
      */
-    getAcquiredNodes(): any[] {
-        const data = this.getNodes();
-        return data ? data.acquiredNodes : null;
+    getAcquiredNodes(): AcquiredNode[] {
+        return this.acquireData.acquiredNodes;
     }
 
     /**
      * Fetches details of pending acquires.
      * @returns an array of instance acquisitions that are in progress.
      */
-    getPendingAcquires(): any[] {
-        const data = this.getNodes();
-        return data ? data.pendingAcquires : null;
+    getPendingAcquires(): PendingAcquire[] {
+        return this.acquireData.pendingAcquires;
     }
 
     /**
@@ -362,29 +342,19 @@ class EvernodeContext {
      * @param element Element to be added or removed
      * @param mode Type of operation ("INSERT" or "DELETE")
      */
-    async updatePendingAcquireInfo(element: any, mode: string = "INSERT"): Promise<void> {
-        try {
-            const data = fs.readFileSync(this.acquireDataFile);
+    async updatePendingAcquireInfo(element: PendingAcquire, mode: string = "INSERT"): Promise<void> {
+        if (mode === "INSERT")
+            this.acquireData.pendingAcquires.push(element); // modify the array as needed
+        else {
+            // Find the index of the record to remove
+            const indexToRemove = this.acquireData.pendingAcquires.findIndex((record: { leaseOfferIdx: string; }) => record.leaseOfferIdx === element.leaseOfferIdx);
 
-            if (data) {
-                const jsonData = JSON.parse(data.toString());
-                if (mode === "INSERT")
-                    jsonData.pendingAcquires.push(element); // modify the array as needed
-                else {
-                    // Find the index of the record to remove
-                    const indexToRemove = jsonData.pendingAcquires.findIndex((record: { leaseOfferIdx: string; }) => record.leaseOfferIdx === element.leaseOfferIdx);
-
-                    // Check if the record exists in the array, and remove it if found
-                    if (indexToRemove !== -1) {
-                        jsonData.pendingAcquires.splice(indexToRemove, 1);
-                    }
-                }
-                const updatedData = JSON.stringify(jsonData, null, 4); // convert the updated data back to JSON string
-                fs.writeFileSync(this.acquireDataFile, updatedData);
+            // Check if the record exists in the array, and remove it if found
+            if (indexToRemove !== -1) {
+                this.acquireData.pendingAcquires.splice(indexToRemove, 1);
             }
-        } catch (e) {
-            console.log(e);
         }
+        this.persistAcquireData();
     }
 
     /**
@@ -393,43 +363,19 @@ class EvernodeContext {
      * @param element Element to be added or removed
      * @param mode Type of operation ("INSERT" or "DELETE")
      */
-    async updateAcquiredNodeInfo(element: any, mode: string = "INSERT"): Promise<void> {
-        try {
-            const data = fs.readFileSync(this.acquireDataFile);
+    async updateAcquiredNodeInfo(element: AcquiredNode, mode: string = "INSERT"): Promise<void> {
+        if (mode === "INSERT")
+            this.acquireData.acquiredNodes.push(element); // modify the array as needed
+        else {
+            // Find the index of the record to remove
+            const indexToRemove = this.acquireData.acquiredNodes.findIndex((record: { name: string; }) => record.name === element.name);
 
-            if (data) {
-                const jsonData = JSON.parse(data.toString());
-                if (mode === "INSERT")
-                    jsonData.acquiredNodes.push(element); // modify the array as needed
-                else {
-                    // Find the index of the record to remove
-                    const indexToRemove = jsonData.acquiredNodes.findIndex((record: { name: string; }) => record.name === element.name);
-
-                    // Check if the record exists in the array, and remove it if found
-                    if (indexToRemove !== -1) {
-                        jsonData.acquiredNodes.splice(indexToRemove, 1);
-                    }
-                }
-                const updatedData = JSON.stringify(jsonData, null, 4); // convert the updated data back to JSON string
-
-                fs.writeFileSync(this.acquireDataFile, updatedData);
+            // Check if the record exists in the array, and remove it if found
+            if (indexToRemove !== -1) {
+                this.acquireData.acquiredNodes.splice(indexToRemove, 1);
             }
-        } catch (e) {
-            console.log(e);
         }
-    }
-
-    /**
-     * View the content of the files which contains acquire details.
-     */
-    async viewNodeDetails(): Promise<void> {
-        const rawData = fs.readFileSync(this.acquireDataFile, 'utf8');
-        const data = JSON.parse(rawData);
-        if (data) {
-            console.log("ACQUIRE INFO BEGIN: ______________________________________________________________________");
-            console.log(data);
-            console.log("ACQUIRE INFO END  : ______________________________________________________________________");
-        }
+        this.persistAcquireData();
     }
 }
 

@@ -27,3 +27,12 @@ export interface Contract {
   targetLifeTime: number;
   config: any;
 }
+
+export interface User {
+  publicKey: string;
+  inputs: [number, number]
+}
+
+export interface ConnectionOptions {
+  timeout?: number;
+}

@@ -1,113 +1,158 @@
-import { AcquireOptions, ClusterNode, ClusterContextOptions } from "../models/evernode";
-import { Contract } from "../models";
+import { AcquireOptions } from "../models/evernode";
+import { Contract, User } from "../models";
+import { Buffer } from 'buffer';
 import { EvernodeContext, UtilityContext, VoteContext } from "../context";
+import { ClusterContextOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
 import { ClusterManager } from "../cluster";
 
 class ClusterContext {
+    private clusterManager: ClusterManager;
     public hpContext: any;
     public voteContex: VoteContext;
     public evernodeContext: EvernodeContext;
     public utilityContext: UtilityContext;
-    public publicKey: string;
     public contract: Contract;
-    public clusterManager: ClusterManager;
 
-    public constructor(hpContext: any, publicKey: string, contract: Contract, options: ClusterContextOptions) {
-        this.hpContext = hpContext;
-        this.publicKey = publicKey;
-        this.evernodeContext = options?.evernodeContext;
-        this.utilityContext = options?.utilityContext
-        this.voteContex = this.evernodeContext?.voteContext;
+    public constructor(evernodeContext: EvernodeContext, contract: Contract, options: ClusterContextOptions) {
+        this.evernodeContext = evernodeContext;
+        this.hpContext = this.evernodeContext.hpContext;
         this.contract = contract;
-        this.clusterManager = new ClusterManager(publicKey);
+        this.utilityContext = options?.utilityContext || new UtilityContext(this.hpContext);
+        this.voteContex = this.evernodeContext.voteContext;
+        this.clusterManager = new ClusterManager();
     }
 
     /**
      * Initiates the operations regarding the cluster.
      */
     public async init(): Promise<void> {
-        // If this is a new Node (non-UNL), then acknowledge the maturity to be a UNL node in the cluster.
-        const myNode = this.clusterManager.nodes.find(n => n.publicKey === this.hpContext.publicKey);
-        if (myNode?.isUnl)
-            // Enable user input channel.
-            await this.#traceInputs();
-        else
-            await this.acknowledgeMaturity();
-
         await this.evernodeContext.init();
 
-        console.log("NODES >> \n", this.clusterManager.nodes);
-
-        // Grow the cluster if it does not meet the node target.
-        if (this.clusterManager.nodes.length < this.contract.targetNodeCount) {
-            await this.grow();
+        try {
+            await this.#checkForPendingNodes();
+            await this.#checkForNewNodes();
+            await this.#checkForExtends();
+        } catch (e) {
+            await this.evernodeContext.deinit();
+            throw e;
         }
-
-        this.clusterManager.persistNodes();
     }
 
     /**
-     * Grow the cluster as per the provide configuration.
+     * Deinitiates the operations regarding the cluster.
      */
-    public async grow(): Promise<void> {
-        const data = this.evernodeContext.getNodes();
-        const nodePublicKeys = this.clusterManager.nodes.map(x => x.publicKey);
+    public async deinit(): Promise<void> {
+        await this.evernodeContext.deinit();
+    }
 
-        // Find newly acquired node.
-        const acquiredNode = data.acquiredNodes.find((n: { pubkey: string; }) => !nodePublicKeys.includes(n.pubkey));
+    /**
+     * Check and update node list if there are pending acquired which are completed now.
+     */
+    async #checkForPendingNodes(): Promise<void> {
+        const pendingNodes = this.clusterManager.getPendingNodes();
 
-        // Extend the node accordingly.
-        const extension = this.contract.targetLifeTime - 1;
-        if (acquiredNode && extension > 0) {
-            await this.evernodeContext.xrplContext.init();
+        for (const node of pendingNodes) {
+            const info = this.evernodeContext.getIfAcquired(node.refId);
+            // If acquired, Check the liveliness and add that to the node list as a non-UNL node.
+            if (info && await this.utilityContext.checkLiveness(info.ip, info.userPort)) {
+                await this.hpContext.updatePeers([`${info.ip}:${info.peerPort}`], []);
+
+                this.clusterManager.addNode(<ClusterNode>{
+                    refId: node.refId,
+                    contractId: info.contractId,
+                    createdOnLcl: this.hpContext.lclSeqNo,
+                    host: node.host,
+                    ip: info.ip,
+                    name: info.name,
+                    peerPort: info.peerPort,
+                    pubkey: info.pubkey,
+                    userPort: info.userPort,
+                    isUnl: false,
+                    isQuorum: false,
+                    lifeMoments: 1,
+                    targetLifeMoments: node.targetLifeMoments
+                });
+            }
+        }
+    }
+
+    /**
+     * Check for node which needed to extended.
+     */
+    async #checkForExtends(): Promise<void> {
+        const clusterNodes = this.clusterManager.getClusterNodes();
+
+        for (const node of clusterNodes.filter(n => n.targetLifeMoments > n.lifeMoments)) {
+            const extension = this.contract.targetLifeTime - 1;
             try {
-                const leaseUriToken = (await this.evernodeContext.xrplContext.xrplAcc.getURITokens()).find((n: { index: any; }) => n.index === acquiredNode.name)
+                const leaseUriToken = (await this.evernodeContext.xrplContext.xrplAcc.getURITokens()).find((n: { index: any; }) => n.index === node.name)
                 if (leaseUriToken) {
                     const uriInfo = this.evernodeContext.decodeLeaseTokenUri(leaseUriToken.URI);
-                    await this.evernodeContext.extendSubmit(acquiredNode.host, (uriInfo.leaseAmount * extension), leaseUriToken.index);
+                    const res = await this.evernodeContext.extendSubmit(node.host, (uriInfo.leaseAmount * extension), leaseUriToken.index);
+                    if (res?.engine_result === "tesSUCCESS" || res?.engine_result === "tefPAST_SEQ" || res?.engine_result === "tefALREADY")
+                        this.clusterManager.updateLifeMoments(node.pubkey, node.lifeMoments + extension);
                 }
             } catch (e) {
-                console.log(e)
-            } finally {
-                await this.evernodeContext.xrplContext.deinit();
+                console.error(e)
+            }
+        }
+    }
+
+    /**
+     * Check for new node which are synced and matured.
+     */
+    async #checkForNewNodes(): Promise<void> {
+        const selfNode = this.clusterManager.getClusterNode(this.hpContext.publicKey);
+
+        // If this node is not in UNL acknowledge others to add to UNL.
+        if (selfNode?.isUnl)
+            await this.#acknowledgeMaturity();
+    }
+
+    /**
+     * Acknowledges the maturity of node to a UNL node of parent cluster.
+     * @returns the status of the acknowledgement as a boolean figure.
+     */
+    async #acknowledgeMaturity(): Promise<boolean> {
+        const unlNodes = this.clusterManager.getUnlNodes();
+        if (unlNodes && unlNodes.length > 0) {
+            const addMessage = <ClusterMessage>{ type: ClusterMessageType.MATURED, nodePubkey: this.hpContext.publicKey }
+            await this.utilityContext.sendMessage(JSON.stringify(addMessage), unlNodes[0]);
+        }
+        return false;
+    }
+
+    /**
+     * Feed user messaged to the cluster context.
+     * @param user Contract client user.
+     * @param msg Message sent by the user.
+     * @returns Response for the cluster message with status.
+     */
+    public async feedUserMessage(user: User, msg: Buffer): Promise<ClusterMessageResponse> {
+        const message = JSON.parse(msg.toString()) as ClusterMessage;
+
+        let status = ClusterMessageResponseStatus.UNHANDLED;
+        switch (message.type) {
+            case ClusterMessageType.MATURED: {
+                // Check if node exist in the cluster.
+                // Add to UNL if exist.
+                const node = this.clusterManager.getClusterNode(message.nodePubkey);
+                status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
+                break;
+            }
+            default: {
+                break;
             }
         }
 
-        // Check the liveliness and add that to the node list as a non-UNL node.
-        const isAlive = acquiredNode ? await this.utilityContext.checkLiveness(acquiredNode.ip, acquiredNode.user_port) : false;
-        if (acquiredNode && isAlive) {
-            await this.hpContext.updatePeers([`${acquiredNode.ip}:${acquiredNode.peer_port}`], []);
-
-            this.clusterManager.addNode(<ClusterNode>{
-                publicKey: acquiredNode.pubkey,
-                ip: acquiredNode.ip,
-                userPort: acquiredNode.user_port,
-                peer: { ip: acquiredNode.ip, port: acquiredNode.peer_port },
-                account: acquiredNode.host,
-                createdOn: this.hpContext.lclSeqNo,
-                isUnl: false,
-                isQuorum: false
-            });
-        }
-
-        // Perform another instance purchase if the node target is not met yet.
-        if (data.pendingAcquires.length < 1 && this.clusterManager.nodes.length < this.contract.targetNodeCount) {
-            await this.purchaseNode({
-                instanceCfg: {
-                    owner_pubkey: this.publicKey,
-                    contract_id: this.contract.contractId,
-                    image: this.contract.image,
-                    config: this.contract.config
-                }
-            });
-        }
+        return <ClusterMessageResponse>{ type: message.type, status: status }
     }
 
     /**
-     * Perform an instance purchase with the provided acquire options.
-     * @param options Options related to a particular acquire operation.
+     * Acquire and add new node to the cluster.
+     * @param options Acquire instance options.
      */
-    public async purchaseNode(options: AcquireOptions): Promise<any> {
+    public async addNewClusterNode(lifeMoments: number = 1, options: AcquireOptions = {}): Promise<void> {
         const hpconfig = await this.hpContext.getConfig();
         const unl = hpconfig.unl;
 
@@ -116,106 +161,41 @@ class ClusterContext {
             // Ths instance will automatically fetch full UNL when syncing.
             unl: unl.sort().slice(0, 1),
             consensus: {
-                mode: "public",
-                roundtime: hpconfig.consensus.roundtime,
-                stage_slice: 25,
-                threshold: 80
+                roundtime: hpconfig.consensus.roundtime
             }
         }
-        await this.evernodeContext.acquireNode(options);
+        let acquire = await this.evernodeContext.acquireNode(options) as PendingNode;
+        acquire.targetLifeMoments = lifeMoments;
+
+        this.clusterManager.addPending(acquire);
     }
 
     /**
-     * Tracing the user connections and inputs for the contract.
+     * Add a node to cluster and mark as UNL.
+     * @param node Cluster node to be added.
+     * @returns The status of the addition as a boolean figure.
      */
-    async #traceInputs() {
-        // Collection of per-user promises to wait for. Each promise completes when inputs for that user is processed.
-        const userHandlers = [];
+    public async addToCluster(node: ClusterNode): Promise<boolean> {
+        // Check if node exists in the cluster.
+        const existing = this.clusterManager.getClusterNode(node.pubkey);
+        if (!existing)
+            this.clusterManager.addNode(node);
 
-        for (const user of this.hpContext.users.list()) {
-
-            // This user's hex pubkey can be accessed from 'user.pubKey'
-
-            // For each user we add a promise to list of promises.
-            userHandlers.push(new Promise<void>(async (resolve) => {
-
-                // The contract need to ensure that all outputs for a particular user is emitted
-                // in deterministic order. Hence, we are processing all inputs for each user sequentially.
-                for (const input of user.inputs) {
-
-                    const buf = await this.hpContext.users.read(input);
-                    const output = await this.#handleInput(user, buf);
-                    output && await user.send(output);
-                }
-
-                // The promise gets completed when all inputs for this user are processed.
-                resolve();
-            }));
-        }
-
-        // Wait until all user promises are complete.
-        await Promise.all(userHandlers);
+        return await this.addToUnl(node.pubkey);
     }
 
     /**
-     * 
-     * @param user Connected User.
-     * @param inputBuf Input of the user.
-     * @returns the output of the operation according to the input.
+     * Mark existing node as a UNL node.
+     * @param pubkey Public key of the node.
+     * @returns The status of the addition as a boolean figure.
      */
-    async #handleInput(user: any, inputBuf: any): Promise<any> {
-
-        const message = JSON.parse(inputBuf);
-
-        switch (message.type) {
-
-            case "status": {
-                return JSON.stringify({ type: "status", status: "Cluster is online!" });
-            }
-            case "addMe": {
-                if (!this.hpContext.readonly && await this.addNode(user.publicKey)) {
-                    return JSON.stringify({ type: "addMe", status: "ok" });
-                }
-                return JSON.stringify({ type: "addMe", status: "not_ok" });
-            }
-            case "addNode": {
-                if (!this.hpContext.readonly && await this.addNode(message.node)) {
-                    return JSON.stringify({ type: "addNode", status: "ok" });
-                }
-                return JSON.stringify({ type: "addNode", status: "not_ok" });
-            }
-            default:
-                return null;
-        }
-    }
-
-    /**
-     * 
-     * @param publicKey Public key of the node to be added.
-     * @returns the status of the addition as a boolean figure.
-     */
-    public async addNode(publicKey: string): Promise<boolean> {
-
-        const addingNode = this.clusterManager.nodes.find(n => !n.isUnl && n.publicKey === publicKey);
-
-        if (addingNode) {
+    public async addToUnl(pubkey: string) {
+        if (this.clusterManager.markAsUnl(pubkey, this.hpContext.lclSeqNo)) {
             const hpconfig = await this.hpContext.getConfig();
-            hpconfig.unl.push(addingNode.publicKey);
+            hpconfig.unl.push(pubkey);
             await this.hpContext.updateConfig(hpconfig);
-            this.clusterManager.markAsUnl(addingNode.publicKey, this.hpContext.lclSeqNo);
             return true;
         }
-        return false;
-    }
-
-    /**
-     * Acknowledges the maturity of node to a UNL node of parent cluster.
-     * @returns the status of the acknowledgement as a boolean figure.
-     */
-    public async acknowledgeMaturity(): Promise<boolean> {
-        const unlNode = this.clusterManager.nodes.find(n => n.isUnl);
-        if (unlNode)
-            return await this.utilityContext.sendMessage(JSON.stringify({ type: "addMe" }), unlNode);
         return false;
     }
 
@@ -230,9 +210,9 @@ class ClusterContext {
         await this.hpContext.updateConfig(config);
 
         // Update peer list.
-        let node = this.clusterManager.nodes.find(n => n.publicKey === publickey)
+        const node = this.clusterManager.getClusterNode(publickey);
         if (node) {
-            let peer = `${node?.peer.ip}:${node?.peer.port}`
+            let peer = `${node?.ip}:${node?.peerPort}`
             await this.hpContext.updatePeers(null, [peer]);
 
             this.clusterManager.removeNode(publickey);

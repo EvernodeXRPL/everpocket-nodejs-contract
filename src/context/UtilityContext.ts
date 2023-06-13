@@ -1,5 +1,6 @@
-import { ClusterNode } from "../models/evernode";
 import { Buffer } from 'buffer';
+import { ClusterNode } from '../models/cluster';
+import { ConnectionOptions } from '../models';
 
 const HotPocket = require('hotpocket-js-client');
 class UtilityContext {
@@ -16,7 +17,7 @@ class UtilityContext {
      * @param port User port of a node.
      * @param useNewKeyPair If new key pair needs to be utilized.
      */
-    async #initClient(ip: string, port: number, useNewKeyPair: boolean = false) {
+    async #initClient(ip: string, port: number, useNewKeyPair: boolean = false): Promise<void> {
         if (this.hpClient)
             await this.hpClient.close();
 
@@ -29,6 +30,50 @@ class UtilityContext {
         this.hpClient = await HotPocket.createClient([server], keys);
     }
 
+    async #connectAndHandle(ip: string, port: number, cb: Function | null = null, options: ConnectionOptions = {}): Promise<void> {
+        const server = `wss://${ip}:${port}`;
+        await this.#initClient(ip, port);
+
+        const timer = setTimeout(async () => {
+            this.hpClient.clear(HotPocket.events.contractOutput);
+            await this.hpClient.close();
+            throw `Timeout waiting for Hot Pocket connection`;
+        }, options.timeout || 60000);
+
+        const handleFailure = async () => {
+            clearTimeout(timer);
+            this.hpClient.clear(HotPocket.events.contractOutput);
+            await this.hpClient.close();
+        }
+        const handleSuccess = async () => {
+            clearTimeout(timer);
+            await this.hpClient.close();
+        }
+
+        try {
+            if (await this.hpClient.connect()) {
+                if (cb) {
+                    try {
+                        await cb;
+                    }
+                    catch (e) {
+                        handleFailure();
+                        throw e;
+                    }
+                    handleSuccess();
+                }
+            }
+            else {
+                clearTimeout(timer);
+                throw `Hot Pocket connection failed for ${server}`;
+            }
+        }
+        catch (err) {
+            clearTimeout(timer);
+            throw err;
+        }
+    }
+
     /**
      * Checks the liveliness of a node.
      * @param ip IP address of a node.
@@ -36,37 +81,15 @@ class UtilityContext {
      * @returns the liveliness as a boolean figure.
      */
     public async checkLiveness(ip: string, port: number): Promise<boolean> {
-        const server = `wss://${ip}:${port}`;
-        await this.#initClient(ip, port);
-        console.log(`Checking Hot Pocket liveness at ${server}`);
-
         return new Promise<boolean>(async (resolve) => {
-
-            const timer = setTimeout(async () => {
-                console.log(`Timeout waiting for Hot Pocket liveness of ${server}`)
-                await this.hpClient.close();
+            await this.#connectAndHandle(ip, port, () => {
+                console.log(`Hot Pocket live at wss://${ip}:${port}`);
+                resolve(true);
+            }, { timeout: 120000 }).catch(e => {
+                console.error(e);
                 resolve(false);
-            }, 120000);
-
-            try {
-                if (await this.hpClient.connect()) {
-                    console.log(`Hot Pocket live at ${server}`);
-                    clearTimeout(timer);
-                    await this.hpClient.close();
-                    resolve(true)
-                }
-                else {
-                    console.log(`Hot Pocket connection failed for ${server}`);
-                    clearTimeout(timer);
-                    resolve(false);
-                }
-            }
-            catch (err) {
-                console.log(`Exception on Hot Pocket connection to ${server}`, err);
-                clearTimeout(timer);
-                resolve(false);
-            }
-        })
+            })
+        });
     }
 
     /**
@@ -75,72 +98,22 @@ class UtilityContext {
      * @param node Corresponding Node.
      * @returns the state of the message sending as a boolean figure.
      */
-    public async sendMessage(message: any, node: ClusterNode) {
-        const server = `wss://${node.ip}:${node.userPort}`;
-        await this.#initClient(node.ip, node.userPort);
+    public async sendMessage(message: any, node: ClusterNode): Promise<void> {
+        return new Promise<void>(async (resolve, reject) => {
+            await this.#connectAndHandle(node.ip, node.userPort, async () => {
+                console.log(`Hot Pocket live at wss://${node.ip}:${node.userPort}`);
 
-        return new Promise<boolean>(async (resolve) => {
-
-            const timer = setTimeout(async () => {
-                console.log(`Timeout waiting for Hot Pocket connection`);
-                this.hpClient.clear(HotPocket.events.contractOutput);
-                await this.hpClient.close();
-                resolve(false);
-            }, 60000);
-
-            const handleFailure = async () => {
-                clearTimeout(timer);
-                this.hpClient.clear(HotPocket.events.contractOutput);
-                await this.hpClient.close();
-                resolve(false);
-            }
-            const handleSuccess = async () => {
-                clearTimeout(timer);
-                await this.hpClient.close();
-                resolve(true);
-            }
-
-            try {
-                if (await this.hpClient.connect()) {
-                    console.log(`Hot Pocket live at ${server}`);
-
-                    // This will get fired when contract sends an output.
-                    this.hpClient.on(HotPocket.events.contractOutput, (r: { outputs: any[]; }) => {
-
-                        r.outputs.forEach(async (output: any) => {
-                            let result;
-                            try {
-                                result = JSON.parse(output);
-                                result?.status === "ok" ? handleSuccess() : handleFailure();
-                            }
-                            catch (e) {
-                                console.log("Failed in parsing the result.")
-                                handleFailure()
-                            }
-                        });
-                    });
-
-                    if (!this.hpContext.readOnly) {
-                        const input = await this.hpClient.submitContractInput(message);
-                        const submission = await input.submissionStatus;
-                        if (submission.status != "accepted") {
-                            console.log("Submission failed. reason: " + submission.reason);
-                            handleFailure();
-                        }
-                    }
-
+                if (!this.hpContext.readOnly) {
+                    const input = await this.hpClient.submitContractInput(message);
+                    const submission = await input.submissionStatus;
+                    if (submission.status != "accepted")
+                        reject("Submission failed. reason: " + submission.reason);
+                    else
+                        resolve();
                 }
-                else {
-                    console.log(`Hot Pocket connection failed for ${server}`);
-                    clearTimeout(timer);
-                    resolve(false);
-                }
-            }
-            catch (err) {
-                console.log(`Exception on Hot Pocket connection to ${server}`, err);
-                clearTimeout(timer);
-                resolve(false);
-            }
+            }, { timeout: 60000 }).catch(e => {
+                reject(e);
+            })
         });
     }
 }

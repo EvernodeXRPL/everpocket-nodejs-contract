@@ -1,18 +1,19 @@
 const HotPocket = require('hotpocket-nodejs-contract');
-const HotPocketClient = require('hotpocket-js-client');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rJGhusq1rSWfJXW6CkwtBrJ8uv3x8UGDgw";
-const masterSecret = "sstHzDphQceKxL7eHtfFu3bGjN5Cu";
+const masterAddress = "rnq9njowRVpoz9ZxEMJacuJkHPPwGvA1J9";
+const masterSecret = "spu4HngZ3UMWqHU7FMK6tqLKGtrmk";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
-const destinationSecret = "ssXtkhrooqhEhjZDsHXPW5cvexFG7";
 const signerWeight = 1;
 const ip = "localhost";
 const port = 8081;
 const nodeCount = 3;
+const ownerPubkey = "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9834bafb";
 
 const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
+
+const MAX_ACQUIRES = 5;
 
 const testContract = async (hpContext) => {
     if (!hpContext.readonly) {
@@ -43,9 +44,33 @@ const testContract = async (hpContext) => {
         }
         ///////////////////////////////////////////////////////////////////////
 
-        const xrplContext = new evp.XrplContext(hpContext, masterAddress, null, { voteContext: voteContext });
+        const contract = {
+            name: "test-contract",
+            contractId: hpContext.contractId,
+            image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
+            targetNodeCount: 5,
+            targetLifeTime: 2,
+            config: {}
+        }
 
+        const xrplContext = new evp.XrplContext(hpContext, masterAddress, null, { voteContext: voteContext });
+        const evernodeContext = new evp.EvernodeContext(xrplContext, evernodeGovernor);
         const utilityContext = new evp.UtilityContext(hpContext);
+        const clusterContext = new evp.ClusterContext(evernodeContext, contract, { utilityContext: utilityContext });
+
+        // Listen to incoming user messages and feed them to evernodeContext.
+        const userHandlers = [];
+        for (const user of hpContext.users.list()) {
+            userHandlers.push(new Promise(async (resolve) => {
+                for (const input of user.inputs) {
+                    const buf = await hpContext.users.read(input);
+                    clusterContext.feedUserMessage(user, buf);
+                }
+                resolve();
+            }));
+        }
+        await Promise.all(userHandlers);
+
 
         const tests = [
             // () => testVote(voteContext),
@@ -54,11 +79,11 @@ const testContract = async (hpContext) => {
             // () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
             // () => getSignerList(xrplContext),
             // () => multiSignTransaction(xrplContext),
-            // () => checkLiveness(utilityContext, ip, port)
-            // () => acquireNewNode(xrplContext),
-            // () => extendNode(xrplContext),
-            // () => removeNode(hpContext),
-            () => createCluster(xrplContext, utilityContext),
+            // () => checkLiveness(utilityContext, ip, port),
+            // () => acquireNewNode(evernodeContext),
+            // () => extendNode(evernodeContext),
+            // () => removeNode(evernodeContext),
+            // () => addNewClusterNode(clusterContext),
         ];
 
         for (const test of tests) {
@@ -95,10 +120,23 @@ const addXrplSigner = async (xrplContext, publickey, quorum = null) => {
     }
 }
 
-const acquireNewNode = async (xrplContext) => {
-    const evernodeContext = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
+const acquireNewNode = async (evernodeContext) => {
+    await evernodeContext.init();
+
     try {
-        await evernodeContext.init();
+        const pendingAcquires = evernodeContext.getPendingAcquires();
+        const acquiredNodes = evernodeContext.getAcquiredNodes();
+
+        console.log(`There are ${pendingAcquires.length} pending acquires and ${acquiredNodes.length} acquired nodes.`);
+
+        if (pendingAcquires.length > 0)
+            return;
+
+        if (acquiredNodes.length > MAX_ACQUIRES) {
+            console.log(`Reached max acquire limit ${MAX_ACQUIRES}`);
+            return;
+        }
+
         const options = {
             instanceCfg: {
                 owner_pubkey: "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9834bafb",
@@ -107,46 +145,54 @@ const acquireNewNode = async (xrplContext) => {
                 config: {}
             }
         }
+        console.log('Acquiring a node...');
         await evernodeContext.acquireNode(options);
-
+        console.log('Acquired the node.')
     } catch (e) {
         console.error(e);
+    } finally {
+        await evernodeContext.deinit();
     }
 }
 
-const extendNode = async (xrplContext) => {
-    const evernodeContext = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
+const extendNode = async (evernodeContext) => {
+    await evernodeContext.init();
+
     try {
-        await xrplContext.init();
-        const tokens = await xrplContext.xrplAcc.getURITokens();
-        await xrplContext.deinit();
+        const tokens = await evernodeContext.xrplContext.xrplAcc.getURITokens();
         const token = tokens[0];
         const extendingNodeName = token.index;
         const hostAddress = token.Issuer;
-        await evernodeContext.extendSubmit(hostAddress, 1, extendingNodeName, {});
+        const res = await evernodeContext.extendSubmit(hostAddress, 1, extendingNodeName);
     } catch (e) {
         console.error(e);
+    } finally {
+        await evernodeContext.deinit();
     }
 }
 
-const createCluster = async (xrplContext, utilityContext) => {
-    const ownerPubkey = "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9834bafb";
-    const evernodeContext = new evp.EvernodeContext(xrplContext.hpContext, masterAddress, evernodeGovernor, { xrplContext: xrplContext });
+const addNewClusterNode = async (clusterContext) => {
+    await clusterContext.init();
 
-    const contract = {
-        name: "test-contract",
-        contractId: evernodeContext.hpContext.contractId,
-        image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
-        targetNodeCount: 5,
-        targetLifeTime: 2,
-        config: {}
-    }
-    const clusterContext = new evp.ClusterContext(xrplContext.hpContext, ownerPubkey, contract, { evernodeContext: evernodeContext, utilityContext: utilityContext });
     try {
-        await clusterContext.init();
+        const pendingAcquires = clusterContext.evernodeContext.getPendingAcquires();
+        const acquiredNodes = clusterContext.evernodeContext.getAcquiredNodes();
 
+        console.log(`There are ${pendingAcquires.length} pending acquires and ${acquiredNodes.length} acquired nodes.`);
+
+        if (pendingAcquires.length > 0)
+            return;
+
+        if (acquiredNodes.length > MAX_ACQUIRES) {
+            console.log(`Reached max acquire limit ${MAX_ACQUIRES}`);
+            return;
+        }
+
+        await clusterContext.addNewClusterNode(2);
     } catch (e) {
         console.error(e);
+    } finally {
+        await clusterContext.deinit();
     }
 }
 
@@ -166,14 +212,14 @@ const removeNode = async (hpContext) => {
     let nodeToRemove = config.unl[0];
 
     try {
-        if(config.unl.length >= nodeCount){
+        if (config.unl.length >= nodeCount) {
             await clusterContext.removeNode(nodeToRemove);
         }
-        
+
     } catch (e) {
         console.error(e);
     }
-    
+
 }
 
 const renewSignerList = async (xrplContext) => {
