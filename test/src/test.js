@@ -164,6 +164,7 @@ const extendNode = async (evernodeContext) => {
         const extendingNodeName = token.index;
         const hostAddress = token.Issuer;
         const res = await evernodeContext.extendSubmit(hostAddress, 1, extendingNodeName);
+        console.log(res?.engine_result);
     } catch (e) {
         console.error(e);
     } finally {
