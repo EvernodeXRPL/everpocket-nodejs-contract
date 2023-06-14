@@ -39,8 +39,26 @@ class ClusterManager {
     }
 
     /**
+     * Get the pending nodes.
+     * @returns List of pending nodes.
+     */
+    public getPending(): PendingNode[] {
+        return this.clusterData.pendingNodes;
+    }
+
+    /**
+     * Remove node from pending node list.
+     * @param refId Node reference.
+     */
+    public removePending(refId: string): void {
+        this.clusterData.pendingNodes = this.clusterData.pendingNodes.filter(n => n.refId !== refId);
+
+        this.#persist();
+    }
+
+    /**
      * Add new node to the cluster.
-     * @param node Node to add
+     * @param node Node to add.
      */
     public addNode(node: ClusterNode): void {
         this.clusterData.pendingNodes = this.clusterData.pendingNodes.filter(n => n.refId !== node.refId);
@@ -55,18 +73,10 @@ class ClusterManager {
     }
 
     /**
-     * Get the pending nodes.
-     * @returns List of pending nodes.
-     */
-    public getPendingNodes(): PendingNode[] {
-        return this.clusterData.pendingNodes;
-    }
-
-    /**
      * Get the cluster nodes.
      * @returns List of cluster nodes.
      */
-    public getClusterNodes(): ClusterNode[] {
+    public getNodes(): ClusterNode[] {
         return this.clusterData.nodes;
     }
 
@@ -83,7 +93,7 @@ class ClusterManager {
      * @param pubkey Public key of the node to find.
      * @returns Cluster node if exists, otherwise null.
      */
-    public getClusterNode(pubkey: string): ClusterNode | null {
+    public getNode(pubkey: string): ClusterNode | null {
         const node = this.clusterData.nodes.find(n => n.pubkey === pubkey);
         return node ? node : null;
     }

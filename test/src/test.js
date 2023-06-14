@@ -2,8 +2,8 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rnq9njowRVpoz9ZxEMJacuJkHPPwGvA1J9";
-const masterSecret = "spu4HngZ3UMWqHU7FMK6tqLKGtrmk";
+const masterAddress = "rpCYBHKjgNMjV6usx2sMc7wMZNKZ4G64hJ";
+const masterSecret = "ss5gv5viPPSNLj211DgzmyaCR2S1e";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
 const ip = "localhost";
@@ -14,6 +14,7 @@ const ownerPubkey = "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9
 const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 
 const MAX_ACQUIRES = 5;
+const MAX_CLUSTER = 8;
 
 const testContract = async (hpContext) => {
     if (!hpContext.readonly) {
@@ -80,10 +81,10 @@ const testContract = async (hpContext) => {
             // () => getSignerList(xrplContext),
             // () => multiSignTransaction(xrplContext),
             // () => checkLiveness(utilityContext, ip, port),
-            // () => acquireNewNode(evernodeContext),
+            () => acquireNewNode(evernodeContext),
             // () => extendNode(evernodeContext),
-            // () => removeNode(evernodeContext),
             // () => addNewClusterNode(clusterContext),
+            // () => removeNode(evernodeContext),
         ];
 
         for (const test of tests) {
@@ -132,7 +133,7 @@ const acquireNewNode = async (evernodeContext) => {
         if (pendingAcquires.length > 0)
             return;
 
-        if (acquiredNodes.length > MAX_ACQUIRES) {
+        if (acquiredNodes.length == MAX_ACQUIRES) {
             console.log(`Reached max acquire limit ${MAX_ACQUIRES}`);
             return;
         }
@@ -176,20 +177,23 @@ const addNewClusterNode = async (clusterContext) => {
     await clusterContext.init();
 
     try {
-        const pendingAcquires = clusterContext.evernodeContext.getPendingAcquires();
-        const acquiredNodes = clusterContext.evernodeContext.getAcquiredNodes();
+        const pendingNodes = clusterContext.getPendingNodes();
+        const clusterNodes = clusterContext.evernodeContext.getClusterNodes();
 
-        console.log(`There are ${pendingAcquires.length} pending acquires and ${acquiredNodes.length} acquired nodes.`);
+        console.log(`There are ${pendingNodes.length} pending nodes and ${clusterNodes.length} cluster nodes.`);
 
-        if (pendingAcquires.length > 0)
+        if (pendingNodes.length > 0)
             return;
 
-        if (acquiredNodes.length > MAX_ACQUIRES) {
-            console.log(`Reached max acquire limit ${MAX_ACQUIRES}`);
+        console.log("Cluster nodes: ", clusterNodes);
+        console.log("Unl: ", clusterContext.hpContext.unl.list());
+
+        if (clusterNodes.length == MAX_CLUSTER) {
+            console.log(`Reached max cluster size ${MAX_CLUSTER}`);
             return;
         }
 
-        await clusterContext.addNewClusterNode(2);
+        await clusterContext.addNewClusterNode();
     } catch (e) {
         console.error(e);
     } finally {

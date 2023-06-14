@@ -38,9 +38,12 @@ class EvernodeContext {
         await this.xrplContext.init();
 
         try {
+            this.registryClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
+            await this.registryClient.connect();
+
             await this.#checkForCompletedAcquires();
         } catch (e) {
-            await this.xrplContext.deinit();
+            await this.deinit();
             throw e;
         }
     }
@@ -49,19 +52,9 @@ class EvernodeContext {
      * Deinitialize the context.
      */
     async deinit(): Promise<void> {
+        if (this.registryClient)
+            await this.registryClient.disconnect();
         await this.xrplContext.deinit();
-    }
-
-    /**
-     * Creates a registry clients for this environment
-     * @returns Created client.
-     */
-    private async getRegistryClient(): Promise<any> {
-        if (!this.registryClient) {
-            this.registryClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
-            await this.registryClient.connect();
-        }
-        return this.registryClient;
     }
 
     /**
@@ -81,11 +74,20 @@ class EvernodeContext {
                         fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
                     const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
                     const res = await tenantClient.extractEvernodeEvent(t.tx);
-                    if (res && (res?.name === evernode.TenantEvents.AcquireSuccess) && (res?.data?.acquireRefId === item.refId)) {
+                    let payload = null;
+                    if (res?.name === evernode.TenantEvents.AcquireSuccess && res?.data?.acquireRefId === item.refId)
+                        payload = res.data.payload;
+                    else if (res?.name === evernode.TenantEvents.AcquireError && res?.data?.acquireRefId === item.refId)
+                        payload = 'acquire_error';
+
+                    if (payload) {
                         const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
                         const elector = new AllVoteElector(1, 1000);
-                        const payload = (privateKey ? await this.voteContext.vote(electionName, [res.data.payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
-                        await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
+                        payload = (privateKey ? await this.voteContext.vote(electionName, [payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+
+                        // Updated the acquires if there's a success response.
+                        if (payload !== 'acquire_error')
+                            await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
                         await this.updatePendingAcquireInfo(item, "DELETE");
                         if (privateKey)
                             fs.unlinkSync(`../${item.messageKey}.txt`);
@@ -121,12 +123,21 @@ class EvernodeContext {
 
     /**
      * Get the acquire info if acquired.
-     * @param options Options related to a particular acquire operation.
-     * @returns Acquire reference.
+     * @param acquireRefId Acquire reference.
+     * @returns Acquired node.
      */
     getIfAcquired(acquireRefId: string): AcquiredNode | null {
-        const acquireData = this.getAcquireData();
-        const node = acquireData.acquiredNodes.find(n => n.refId == acquireRefId);
+        const node = this.acquireData.acquiredNodes.find(n => n.refId == acquireRefId);
+        return node ? node : null;
+    }
+
+    /**
+     * Get the acquire info if pending.
+     * @param acquireRefId Acquire reference.
+     * @returns Pending node.
+     */
+    getIfPending(acquireRefId: string): PendingAcquire | null {
+        const node = this.acquireData.pendingAcquires.find(n => n.refId == acquireRefId);
         return node ? node : null;
     }
 
@@ -263,17 +274,19 @@ class EvernodeContext {
     /**
      * This function is called by a tenant client to submit the extend lease transaction in certain host. This function will be called directly in test. This function can take four parameters as follows.
      * @param {string} hostAddress XRPL account address of the host.
-     * @param {number} amount Cost for the extended moments , in EVRs.
+     * @param {number} extension Moments to extend.
      * @param {string} tokenID Tenant received instance name. this name can be retrieve by performing acquire Lease.
      * @param {object} options This is an optional field and contains necessary details for the transactions.
      * @returns The transaction result.
      */
-    async extendSubmit(hostAddress: string, amount: number, tokenID: string, options: any = {}): Promise<any> {
-        const hostClient = new evernode.HostClient(hostAddress);
-        await hostClient.connect();
-        const evrIssuer = hostClient.config.evrIssuerAddress;
-        await hostClient.disconnect();
-        return this.xrplContext.makePayment(hostClient.xrplAcc.address, amount.toString(), evernode.EvernodeConstants.EVR, evrIssuer, null,
+    async extendSubmit(hostAddress: string, extension: number, tokenID: string, options: any = {}): Promise<any> {
+        const leaseToken = (await this.xrplContext.xrplAcc.getURITokens()).find((t: any) => t.index === tokenID);
+        if (!leaseToken)
+            throw 'No lease token for given token id';
+
+        const uriInfo = this.decodeLeaseTokenUri(leaseToken.URI);
+        return this.xrplContext.makePayment(hostAddress, ((uriInfo.leaseAmount * extension)).toString(),
+            evernode.EvernodeConstants.EVR, this.registryClient.config.evrIssuerAddress, null,
             [
                 { name: evernode.HookParamKeys.PARAM_EVENT_TYPE_KEY, value: evernode.EventTypes.EXTEND_LEASE },
                 { name: evernode.HookParamKeys.PARAM_EVENT_DATA1_KEY, value: tokenID }
@@ -287,8 +300,7 @@ class EvernodeContext {
      * @returns An array of hosts that are having vacant leases.
      */
     async getHosts(): Promise<any[]> {
-        const registryClient = await this.getRegistryClient();
-        const allHosts = await registryClient.getActiveHosts();
+        const allHosts = await this.registryClient.getActiveHosts();
         return allHosts.filter((h: { maxInstances: number; activeInstances: number; }) => (h.maxInstances - h.activeInstances) > 0);
     }
 

@@ -33,7 +33,7 @@ class ClusterContext {
             await this.#checkForNewNodes();
             await this.#checkForExtends();
         } catch (e) {
-            await this.evernodeContext.deinit();
+            await this.deinit();
             throw e;
         }
     }
@@ -49,7 +49,7 @@ class ClusterContext {
      * Check and update node list if there are pending acquired which are completed now.
      */
     async #checkForPendingNodes(): Promise<void> {
-        const pendingNodes = this.clusterManager.getPendingNodes();
+        const pendingNodes = this.clusterManager.getNodes();
 
         for (const node of pendingNodes) {
             const info = this.evernodeContext.getIfAcquired(node.refId);
@@ -73,6 +73,9 @@ class ClusterContext {
                     targetLifeMoments: node.targetLifeMoments
                 });
             }
+            // If the pending node is not in the pending acquire, this acquire should be failed.
+            else if (!info && !this.evernodeContext.getIfPending(node.refId))
+                this.clusterManager.removePending(node.refId);
         }
     }
 
@@ -80,18 +83,14 @@ class ClusterContext {
      * Check for node which needed to extended.
      */
     async #checkForExtends(): Promise<void> {
-        const clusterNodes = this.clusterManager.getClusterNodes();
+        const clusterNodes = this.clusterManager.getNodes();
 
         for (const node of clusterNodes.filter(n => n.targetLifeMoments > n.lifeMoments)) {
             const extension = this.contract.targetLifeTime - 1;
             try {
-                const leaseUriToken = (await this.evernodeContext.xrplContext.xrplAcc.getURITokens()).find((n: { index: any; }) => n.index === node.name)
-                if (leaseUriToken) {
-                    const uriInfo = this.evernodeContext.decodeLeaseTokenUri(leaseUriToken.URI);
-                    const res = await this.evernodeContext.extendSubmit(node.host, (uriInfo.leaseAmount * extension), leaseUriToken.index);
-                    if (res?.engine_result === "tesSUCCESS" || res?.engine_result === "tefPAST_SEQ" || res?.engine_result === "tefALREADY")
-                        this.clusterManager.updateLifeMoments(node.pubkey, node.lifeMoments + extension);
-                }
+                const res = await this.evernodeContext.extendSubmit(node.host, extension, node.name);
+                if (res)
+                    this.clusterManager.updateLifeMoments(node.pubkey, node.lifeMoments + extension);
             } catch (e) {
                 console.error(e)
             }
@@ -102,7 +101,7 @@ class ClusterContext {
      * Check for new node which are synced and matured.
      */
     async #checkForNewNodes(): Promise<void> {
-        const selfNode = this.clusterManager.getClusterNode(this.hpContext.publicKey);
+        const selfNode = this.clusterManager.getNode(this.hpContext.publicKey);
 
         // If this node is not in UNL acknowledge others to add to UNL.
         if (selfNode?.isUnl)
@@ -123,6 +122,30 @@ class ClusterContext {
     }
 
     /**
+     * Get all Unl nodes in the cluster.
+     * @returns List of nodes in the cluster which are in Unl.
+     */
+    getClusterUnlNodes(): ClusterNode[] {
+        return this.clusterManager.getUnlNodes();
+    }
+
+    /**
+     * Get all nodes in the cluster.
+     * @returns List of nodes in the cluster.
+     */
+    getClusterNodes(): ClusterNode[] {
+        return this.clusterManager.getNodes();
+    }
+
+    /**
+     * Get all pending nodes.
+     * @returns List of pending nodes.
+     */
+    getPendingNodes(): PendingNode[] {
+        return this.clusterManager.getPending();
+    }
+
+    /**
      * Feed user messaged to the cluster context.
      * @param user Contract client user.
      * @param msg Message sent by the user.
@@ -136,7 +159,7 @@ class ClusterContext {
             case ClusterMessageType.MATURED: {
                 // Check if node exist in the cluster.
                 // Add to UNL if exist.
-                const node = this.clusterManager.getClusterNode(message.nodePubkey);
+                const node = this.clusterManager.getNode(message.nodePubkey);
                 status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
                 break;
             }
@@ -177,7 +200,7 @@ class ClusterContext {
      */
     public async addToCluster(node: ClusterNode): Promise<boolean> {
         // Check if node exists in the cluster.
-        const existing = this.clusterManager.getClusterNode(node.pubkey);
+        const existing = this.clusterManager.getNode(node.pubkey);
         if (!existing)
             this.clusterManager.addNode(node);
 
@@ -210,7 +233,7 @@ class ClusterContext {
         await this.hpContext.updateConfig(config);
 
         // Update peer list.
-        const node = this.clusterManager.getClusterNode(publickey);
+        const node = this.clusterManager.getNode(publickey);
         if (node) {
             let peer = `${node?.ip}:${node?.peerPort}`
             await this.hpContext.updatePeers(null, [peer]);
