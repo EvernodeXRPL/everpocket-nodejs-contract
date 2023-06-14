@@ -16,6 +16,7 @@ export interface ClusterNode extends AcquiredNode {
 
 export interface PendingNode extends PendingAcquire {
   targetLifeMoments: number;
+  aliveCheckCount: number;
 }
 
 export interface ClusterData {

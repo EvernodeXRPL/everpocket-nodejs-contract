@@ -13,8 +13,10 @@ class MultiSigner {
     public constructor(masterAcc: any) {
         this.masterAcc = masterAcc;
         this.keyPath = `../${this.masterAcc.address}.key`;
-        if (fs.existsSync(this.keyPath)) {
-            this.signer = JSONHelpers.castToModel<SignerPrivate>(JSON.parse(fs.readFileSync(this.keyPath).toString()));
+
+        const data = JSONHelpers.readFromFile<SignerPrivate>(this.keyPath);
+        if (data) {
+            this.signer = data;
             this.signerAcc = new evernode.XrplAccount(this.signer.account, this.signer.secret, { xrplApi: this.masterAcc.xrplApi });
         }
     }
@@ -34,7 +36,7 @@ class MultiSigner {
     public setSigner(signer: SignerPrivate): void {
         this.signer = signer;
         this.signerAcc = new evernode.XrplAccount(this.signer.account, this.signer.secret, { xrplApi: this.masterAcc.xrplApi });
-        fs.writeFileSync(this.keyPath, JSON.stringify(JSONHelpers.castFromModel(this.signer)));
+        JSONHelpers.writeToFile(this.keyPath, this.signer);
     }
 
     /**
@@ -72,7 +74,7 @@ class MultiSigner {
     }
 
     public isSignerNode(): boolean {
-        return fs.existsSync(this.keyPath);
+        return !!this.signer;
     }
 }
 

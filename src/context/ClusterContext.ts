@@ -4,11 +4,16 @@ import { Buffer } from 'buffer';
 import { EvernodeContext, UtilityContext, VoteContext } from "../context";
 import { ClusterContextOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
 import { ClusterManager } from "../cluster";
+import { AllVoteElector } from "../vote/vote-electors";
+
+const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
+const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16";
+const ALIVENESS_CHECK_THRESHOLD = 5;
 
 class ClusterContext {
     private clusterManager: ClusterManager;
     public hpContext: any;
-    public voteContex: VoteContext;
+    public voteContext: VoteContext;
     public evernodeContext: EvernodeContext;
     public utilityContext: UtilityContext;
     public contract: Contract;
@@ -18,7 +23,7 @@ class ClusterContext {
         this.hpContext = this.evernodeContext.hpContext;
         this.contract = contract;
         this.utilityContext = options?.utilityContext || new UtilityContext(this.hpContext);
-        this.voteContex = this.evernodeContext.voteContext;
+        this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
     }
 
@@ -29,6 +34,7 @@ class ClusterContext {
         await this.evernodeContext.init();
 
         try {
+            await this.#setupClusterInfo();
             await this.#checkForPendingNodes();
             await this.#checkForNewNodes();
             await this.#checkForExtends();
@@ -45,33 +51,62 @@ class ClusterContext {
         await this.evernodeContext.deinit();
     }
 
+    async #setupClusterInfo() {
+        const clusterNodes = this.getClusterNodes();
+        if (clusterNodes.length === 0) {
+            const electionName = `share_node_info${this.voteContext.getUniqueNumber()}`;
+            const elector = new AllVoteElector(0, 2000);
+            const contrctConfig = await this.hpContext.getConfig();
+            const node = <ClusterNode>{
+                pubkey: this.hpContext.publicKey,
+                contractId: contrctConfig.id,
+                isUnl: !!contrctConfig.unl.find((k: string) => k === this.hpContext.publicKey),
+                isQuorum: this.evernodeContext.xrplContext.isSigner()
+            }
+            const nodes: ClusterNode[] = (await this.voteContext.vote(electionName, [node], elector)).map(ob => ob.data);
+            this.clusterManager.addNodes(nodes);
+        }
+    }
+
     /**
      * Check and update node list if there are pending acquired which are completed now.
      */
     async #checkForPendingNodes(): Promise<void> {
-        const pendingNodes = this.clusterManager.getNodes();
+        const pendingNodes = this.getPendingNodes();
 
         for (const node of pendingNodes) {
             const info = this.evernodeContext.getIfAcquired(node.refId);
             // If acquired, Check the liveliness and add that to the node list as a non-UNL node.
-            if (info && await this.utilityContext.checkLiveness(info.ip, info.userPort)) {
-                await this.hpContext.updatePeers([`${info.ip}:${info.peerPort}`], []);
+            if (info) {
+                // Remove node if aliveness check threshold reached.
+                if (node.aliveCheckCount > ALIVENESS_CHECK_THRESHOLD) {
+                    this.clusterManager.removePending(node.refId);
+                    continue;
+                }
 
-                this.clusterManager.addNode(<ClusterNode>{
-                    refId: node.refId,
-                    contractId: info.contractId,
-                    createdOnLcl: this.hpContext.lclSeqNo,
-                    host: node.host,
-                    ip: info.ip,
-                    name: info.name,
-                    peerPort: info.peerPort,
-                    pubkey: info.pubkey,
-                    userPort: info.userPort,
-                    isUnl: false,
-                    isQuorum: false,
-                    lifeMoments: 1,
-                    targetLifeMoments: node.targetLifeMoments
-                });
+                if (!(await this.utilityContext.checkLiveness(info.ip, info.userPort))) {
+                    this.clusterManager.increaseAliveCheck(node.refId);
+                }
+                else {
+                    await this.hpContext.updatePeers([`${info.ip}:${info.peerPort}`], []);
+
+                    this.clusterManager.addNode(<ClusterNode>{
+                        refId: node.refId,
+                        contractId: info.contractId,
+                        createdOnLcl: this.hpContext.lclSeqNo,
+                        host: node.host,
+                        ip: info.ip,
+                        name: info.name,
+                        peerPort: info.peerPort,
+                        pubkey: info.pubkey,
+                        userPort: info.userPort,
+                        isUnl: false,
+                        isQuorum: false,
+                        lifeMoments: 1,
+                        targetLifeMoments: node.targetLifeMoments
+                    });
+                }
+
             }
             // If the pending node is not in the pending acquire, this acquire should be failed.
             else if (!info && !this.evernodeContext.getIfPending(node.refId))
@@ -83,7 +118,7 @@ class ClusterContext {
      * Check for node which needed to extended.
      */
     async #checkForExtends(): Promise<void> {
-        const clusterNodes = this.clusterManager.getNodes();
+        const clusterNodes = this.getClusterNodes();
 
         for (const node of clusterNodes.filter(n => n.targetLifeMoments > n.lifeMoments)) {
             const extension = this.contract.targetLifeTime - 1;
@@ -104,7 +139,7 @@ class ClusterContext {
         const selfNode = this.clusterManager.getNode(this.hpContext.publicKey);
 
         // If this node is not in UNL acknowledge others to add to UNL.
-        if (selfNode?.isUnl)
+        if (selfNode && !selfNode.isUnl)
             await this.#acknowledgeMaturity();
     }
 
@@ -113,7 +148,7 @@ class ClusterContext {
      * @returns the status of the acknowledgement as a boolean figure.
      */
     async #acknowledgeMaturity(): Promise<boolean> {
-        const unlNodes = this.clusterManager.getUnlNodes();
+        const unlNodes = this.getClusterUnlNodes();
         if (unlNodes && unlNodes.length > 0) {
             const addMessage = <ClusterMessage>{ type: ClusterMessageType.MATURED, nodePubkey: this.hpContext.publicKey }
             await this.utilityContext.sendMessage(JSON.stringify(addMessage), unlNodes[0]);
@@ -173,22 +208,43 @@ class ClusterContext {
 
     /**
      * Acquire and add new node to the cluster.
+     * @param [lifeMoments=1] Amount of life moments for the instance.
      * @param options Acquire instance options.
      */
     public async addNewClusterNode(lifeMoments: number = 1, options: AcquireOptions = {}): Promise<void> {
         const hpconfig = await this.hpContext.getConfig();
         const unl = hpconfig.unl;
 
-        options.instanceCfg.config.contract = {
-            // Take only first unl pubkey to keep xrpl memo size within 1KB.
-            // Ths instance will automatically fetch full UNL when syncing.
-            unl: unl.sort().slice(0, 1),
-            consensus: {
-                roundtime: hpconfig.consensus.roundtime
+        // Override the instance specs.
+        options.instanceCfg = {
+            ...(options.instanceCfg ? options.instanceCfg : {}),
+            contract_id: this.hpContext.contractId,
+            config: {
+                ...(options.instanceCfg?.config ? options.instanceCfg.config : {}),
+                contract: {
+                    ...(options.instanceCfg?.config?.contract ? options.instanceCfg.config.contract : {}),
+                    // Take only first unl pubkey to keep xrpl memo size within 1KB.
+                    // Ths instance will automatically fetch full UNL when syncing.
+                    unl: unl.sort().slice(0, 1),
+                    consensus: {
+                        ...(options.instanceCfg?.config?.contract?.consensus ? options.instanceCfg.config.contract.consensus : {}),
+                        roundtime: hpconfig.consensus.roundtime
+                    }
+                }
             }
         }
-        let acquire = await this.evernodeContext.acquireNode(options) as PendingNode;
+
+        // If owner pubkey is not set, Set a dummy pub key.
+        if (!options.instanceCfg.owner_pubkey)
+            options.instanceCfg.owner_pubkey = DUMMY_OWNER_PUBKEY;
+
+        // If instance image is not set, Set the sashimono node js image.
+        if (!options.instanceCfg.image)
+            options.instanceCfg.image = SASHIMONO_NODEJS_IMAGE;
+
+        let acquire = (await this.evernodeContext.acquireNode(options)) as PendingNode;
         acquire.targetLifeMoments = lifeMoments;
+        acquire.aliveCheckCount = 0;
 
         this.clusterManager.addPending(acquire);
     }

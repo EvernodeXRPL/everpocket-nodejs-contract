@@ -52,16 +52,15 @@ class UtilityContext {
 
         try {
             if (await this.hpClient.connect()) {
-                if (cb) {
-                    try {
-                        await cb;
-                    }
-                    catch (e) {
-                        handleFailure();
-                        throw e;
-                    }
-                    handleSuccess();
+                try {
+                    if (cb)
+                        await cb();
                 }
+                catch (e) {
+                    handleFailure();
+                    throw e;
+                }
+                handleSuccess();
             }
             else {
                 clearTimeout(timer);
@@ -85,7 +84,7 @@ class UtilityContext {
             await this.#connectAndHandle(ip, port, () => {
                 console.log(`Hot Pocket live at wss://${ip}:${port}`);
                 resolve(true);
-            }, { timeout: 120000 }).catch(e => {
+            }, { timeout: 6000 }).catch(e => {
                 console.error(e);
                 resolve(false);
             })

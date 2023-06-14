@@ -48,9 +48,12 @@ class JSONHelpers {
     /**
      * Read a json from given file and cast to T.
      * @param filePath File path of the json.
-     * @returns Casted object.
+     * @returns Casted object or null if file not exist.
      */
-    public static readFromFile<T>(filePath: string): T {
+    public static readFromFile<T>(filePath: string): T | null {
+        if (!fs.existsSync(filePath))
+            return null;
+
         const rawData = fs.readFileSync(filePath, 'utf8');
         const data = rawData ? JSON.parse(rawData) : {};
         return data as T;

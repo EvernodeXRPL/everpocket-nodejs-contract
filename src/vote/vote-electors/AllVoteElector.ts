@@ -23,7 +23,7 @@ class AllVoteElector {
 
             voteEmitter.on(electionName, (collected: any[]) => {
                 // Resolve immediately if we have the required no. of messages.
-                if (collected.length === this.desiredVoteCount) {
+                if (this.desiredVoteCount && collected.length === this.desiredVoteCount) {
                     clearTimeout(timer);
                     resolve(context.resolveVotes(electionName));
                 }

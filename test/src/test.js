@@ -14,7 +14,7 @@ const ownerPubkey = "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9
 const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 
 const MAX_ACQUIRES = 5;
-const MAX_CLUSTER = 8;
+const MAX_CLUSTER = 4;
 
 const testContract = async (hpContext) => {
     if (!hpContext.readonly) {
@@ -46,12 +46,8 @@ const testContract = async (hpContext) => {
         ///////////////////////////////////////////////////////////////////////
 
         const contract = {
-            name: "test-contract",
-            contractId: hpContext.contractId,
-            image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
             targetNodeCount: 5,
             targetLifeTime: 2,
-            config: {}
         }
 
         const xrplContext = new evp.XrplContext(hpContext, masterAddress, null, { voteContext: voteContext });
@@ -65,6 +61,7 @@ const testContract = async (hpContext) => {
             userHandlers.push(new Promise(async (resolve) => {
                 for (const input of user.inputs) {
                     const buf = await hpContext.users.read(input);
+                    console.log("User input", buf);
                     clusterContext.feedUserMessage(user, buf);
                 }
                 resolve();
@@ -81,9 +78,9 @@ const testContract = async (hpContext) => {
             // () => getSignerList(xrplContext),
             // () => multiSignTransaction(xrplContext),
             // () => checkLiveness(utilityContext, ip, port),
-            () => acquireNewNode(evernodeContext),
+            // () => acquireNewNode(evernodeContext),
             // () => extendNode(evernodeContext),
-            // () => addNewClusterNode(clusterContext),
+            () => addNewClusterNode(clusterContext),
             // () => removeNode(evernodeContext),
         ];
 
@@ -178,22 +175,22 @@ const addNewClusterNode = async (clusterContext) => {
 
     try {
         const pendingNodes = clusterContext.getPendingNodes();
-        const clusterNodes = clusterContext.evernodeContext.getClusterNodes();
+        const clusterNodes = clusterContext.getClusterNodes();
 
         console.log(`There are ${pendingNodes.length} pending nodes and ${clusterNodes.length} cluster nodes.`);
 
         if (pendingNodes.length > 0)
             return;
 
-        console.log("Cluster nodes: ", clusterNodes);
-        console.log("Unl: ", clusterContext.hpContext.unl.list());
+        console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
+        console.log("Unl: ", clusterContext.hpContext.unl.list().map(n => n.publicKey));
 
         if (clusterNodes.length == MAX_CLUSTER) {
             console.log(`Reached max cluster size ${MAX_CLUSTER}`);
             return;
         }
 
-        await clusterContext.addNewClusterNode();
+        await clusterContext.addNewClusterNode(1, { host: "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww" });
     } catch (e) {
         console.error(e);
     } finally {

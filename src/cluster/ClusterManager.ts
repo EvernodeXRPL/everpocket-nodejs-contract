@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import { JSONHelpers } from "../utils";
 import { ClusterData, ClusterNode, PendingNode } from '../models/cluster';
 
@@ -7,9 +6,13 @@ class ClusterManager {
     private clusterData: ClusterData;
 
     public constructor() {
-        if (!fs.existsSync(this.clusterDataFile))
-            JSONHelpers.writeToFile(this.clusterDataFile, <ClusterData>{ nodes: [], pendingNodes: [] });
-        this.clusterData = JSONHelpers.readFromFile<ClusterData>(this.clusterDataFile);
+        const data = JSONHelpers.readFromFile<ClusterData>(this.clusterDataFile);
+        if (data)
+            this.clusterData = data;
+        else {
+            this.clusterData = { nodes: [], pendingNodes: [] }
+            JSONHelpers.writeToFile(this.clusterDataFile, this.clusterData);
+        }
     }
 
     /**
@@ -57,6 +60,19 @@ class ClusterManager {
     }
 
     /**
+     * Increase alive check count.
+     * @param refId Node reference.
+     */
+    public increaseAliveCheck(refId: string): void {
+        const index = this.clusterData.pendingNodes.findIndex(n => n.refId === refId);
+
+        if (index > 0) {
+            this.clusterData.pendingNodes[index].aliveCheckCount++;
+            this.#persist();
+        }
+    }
+
+    /**
      * Add new node to the cluster.
      * @param node Node to add.
      */
@@ -64,12 +80,31 @@ class ClusterManager {
         this.clusterData.pendingNodes = this.clusterData.pendingNodes.filter(n => n.refId !== node.refId);
 
         // Return if node already exist.
-        if (this.clusterData.nodes.findIndex(n => n.refId === node.refId && n.name === node.name) > 0)
-            return;
+        if (!this.getNode(node.pubkey)) {
+            this.clusterData.nodes.push(node);
+            this.#persist();
+        }
+    }
 
-        this.clusterData.nodes.push(node);
+    /**
+     * Add new nodes to the cluster.
+     * @param nodes Node list to add.
+     */
+    public addNodes(nodes: ClusterNode[]): void {
+        let updated = false;
+        // Sort the nodes to preserve the order in all the node states.
+        for (const node of nodes.sort((a, b) => a.pubkey.localeCompare(b.pubkey))) {
+            this.clusterData.pendingNodes = this.clusterData.pendingNodes.filter(n => n.refId !== node.refId);
 
-        this.#persist();
+            // Return if node already exist.
+            if (!this.getNode(node.pubkey)) {
+                this.clusterData.nodes.push(node);
+                updated = true;
+            }
+        }
+
+        if (updated)
+            this.#persist();
     }
 
     /**

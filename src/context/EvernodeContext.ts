@@ -26,9 +26,13 @@ class EvernodeContext {
             governorAddress: governorAddress,
         });
 
-        if (!fs.existsSync(this.acquireDataFile))
-            JSONHelpers.writeToFile(this.acquireDataFile, <AcquireData>{ acquiredNodes: [], pendingAcquires: [] });
-        this.acquireData = JSONHelpers.readFromFile<AcquireData>(this.acquireDataFile);
+        const data = JSONHelpers.readFromFile<AcquireData>(this.acquireDataFile);
+        if (data)
+            this.acquireData = data;
+        else {
+            this.acquireData = { acquiredNodes: [], pendingAcquires: [] }
+            JSONHelpers.writeToFile(this.acquireDataFile, this.acquireData);
+        }
     }
 
     /**
@@ -302,14 +306,6 @@ class EvernodeContext {
     async getHosts(): Promise<any[]> {
         const allHosts = await this.registryClient.getActiveHosts();
         return allHosts.filter((h: { maxInstances: number; activeInstances: number; }) => (h.maxInstances - h.activeInstances) > 0);
-    }
-
-    /**
-     * Fetches details of acquires.
-     * @returns an object containing arrays of pending and in progress instance acquisitions.
-     */
-    getAcquireData(): AcquireData {
-        return this.acquireData;
     }
 
     /**

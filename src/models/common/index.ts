@@ -20,12 +20,8 @@ export class Peer {
 }
 
 export interface Contract {
-  name: string;
-  contractId: string;
-  image: string;
   targetNodeCount: number;
   targetLifeTime: number;
-  config: any;
 }
 
 export interface User {
