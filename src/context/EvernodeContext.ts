@@ -256,7 +256,7 @@ class EvernodeContext {
 
         // Derive a seed buffer from the lclHash.
         const seed = Buffer.from(this.hpContext.lclHash, "hex");
-        const encrypted = await evernode.EncryptionHelper.encrypt(encKey, { ...options.instanceCfg, messageKey: messageKey }, {
+        const encrypted = await evernode.EncryptionHelper.encrypt(encKey, { ...(JSONHelpers.castFromModel(options.instanceCfg)), messageKey: messageKey }, {
             iv: seed.slice(0, 16),
             ephemPrivateKey: seed.slice(0, 32)
         });

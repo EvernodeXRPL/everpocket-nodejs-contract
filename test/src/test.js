@@ -62,7 +62,7 @@ const testContract = async (hpContext) => {
                 for (const input of user.inputs) {
                     const buf = await hpContext.users.read(input);
                     console.log("User input", buf);
-                    clusterContext.feedUserMessage(user, buf);
+                    await clusterContext.feedUserMessage(user, buf);
                 }
                 resolve();
             }));
@@ -137,8 +137,8 @@ const acquireNewNode = async (evernodeContext) => {
 
         const options = {
             instanceCfg: {
-                owner_pubkey: "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9834bafb",
-                contract_id: "dc411912-bcdd-4f73-af43-32ec45844b9a",
+                ownerPubkey: "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9834bafb",
+                contractId: "dc411912-bcdd-4f73-af43-32ec45844b9a",
                 image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
                 config: {}
             }
@@ -190,7 +190,15 @@ const addNewClusterNode = async (clusterContext) => {
             return;
         }
 
-        await clusterContext.addNewClusterNode(1, { host: "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww" });
+        await clusterContext.addNewClusterNode(1, {
+            host: "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww", instanceCfg: {
+                config: {
+                    log: {
+                        log_level: "dbg"
+                    }
+                }
+            }
+        });
     } catch (e) {
         console.error(e);
     } finally {

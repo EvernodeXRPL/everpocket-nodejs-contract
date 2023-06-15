@@ -151,7 +151,7 @@ class ClusterContext {
         const unlNodes = this.getClusterUnlNodes();
         if (unlNodes && unlNodes.length > 0) {
             const addMessage = <ClusterMessage>{ type: ClusterMessageType.MATURED, nodePubkey: this.hpContext.publicKey }
-            await this.utilityContext.sendMessage(JSON.stringify(addMessage), unlNodes[0]);
+            await this.utilityContext.sendMessage(JSON.stringify(addMessage), unlNodes[0].ip, unlNodes[0].userPort);
         }
         return false;
     }
@@ -187,23 +187,30 @@ class ClusterContext {
      * @returns Response for the cluster message with status.
      */
     public async feedUserMessage(user: User, msg: Buffer): Promise<ClusterMessageResponse> {
-        const message = JSON.parse(msg.toString()) as ClusterMessage;
-
         let status = ClusterMessageResponseStatus.UNHANDLED;
-        switch (message.type) {
-            case ClusterMessageType.MATURED: {
-                // Check if node exist in the cluster.
-                // Add to UNL if exist.
-                const node = this.clusterManager.getNode(message.nodePubkey);
-                status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
-                break;
-            }
-            default: {
-                break;
+        let messageType = ClusterMessageType.UNKNOWN;
+
+        try {
+            const message = JSON.parse(msg.toString()) as ClusterMessage;
+            messageType = message.type;
+            switch (messageType) {
+                case ClusterMessageType.MATURED: {
+                    // Check if node exist in the cluster.
+                    // Add to UNL if exist.
+                    const node = this.clusterManager.getNode(message.nodePubkey);
+                    status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
+                    break;
+                }
+                default: {
+                    break;
+                }
             }
         }
+        catch (e) {
+            console.error(e);
+        }
 
-        return <ClusterMessageResponse>{ type: message.type, status: status }
+        return <ClusterMessageResponse>{ type: messageType, status: status }
     }
 
     /**
@@ -218,7 +225,11 @@ class ClusterContext {
         // Override the instance specs.
         options.instanceCfg = {
             ...(options.instanceCfg ? options.instanceCfg : {}),
-            contract_id: this.hpContext.contractId,
+            // If owner pubkey is not set, Set a dummy pub key.
+            ownerPubkey: options.instanceCfg?.ownerPubkey ? options.instanceCfg.ownerPubkey : DUMMY_OWNER_PUBKEY,
+            // If instance image is not set, Set the sashimono node js image.
+            image: options.instanceCfg?.image ? options.instanceCfg.image : SASHIMONO_NODEJS_IMAGE,
+            contractId: this.hpContext.contractId,
             config: {
                 ...(options.instanceCfg?.config ? options.instanceCfg.config : {}),
                 contract: {
@@ -233,14 +244,6 @@ class ClusterContext {
                 }
             }
         }
-
-        // If owner pubkey is not set, Set a dummy pub key.
-        if (!options.instanceCfg.owner_pubkey)
-            options.instanceCfg.owner_pubkey = DUMMY_OWNER_PUBKEY;
-
-        // If instance image is not set, Set the sashimono node js image.
-        if (!options.instanceCfg.image)
-            options.instanceCfg.image = SASHIMONO_NODEJS_IMAGE;
 
         let acquire = (await this.evernodeContext.acquireNode(options)) as PendingNode;
         acquire.targetLifeMoments = lifeMoments;

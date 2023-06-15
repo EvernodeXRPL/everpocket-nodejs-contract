@@ -1,5 +1,4 @@
 import { Buffer } from 'buffer';
-import { ClusterNode } from '../models/cluster';
 import { ConnectionOptions } from '../models';
 
 const HotPocket = require('hotpocket-js-client');
@@ -30,47 +29,48 @@ class UtilityContext {
         this.hpClient = await HotPocket.createClient([server], keys);
     }
 
-    async #connectAndHandle(ip: string, port: number, cb: Function | null = null, options: ConnectionOptions = {}): Promise<void> {
+    async #connectAndHandle(ip: string, port: number, action: Function | null = null, cb: Function | null = null, options: ConnectionOptions = {}): Promise<void> {
         const server = `wss://${ip}:${port}`;
         await this.#initClient(ip, port);
 
         const timer = setTimeout(async () => {
-            this.hpClient.clear(HotPocket.events.contractOutput);
-            await this.hpClient.close();
-            throw `Timeout waiting for Hot Pocket connection`;
+            await handleFailure(`Timeout waiting for Hot Pocket connection`);
         }, options.timeout || 60000);
 
-        const handleFailure = async () => {
+        const handleFailure = async (error: any) => {
             clearTimeout(timer);
             this.hpClient.clear(HotPocket.events.contractOutput);
             await this.hpClient.close();
+            if (cb)
+                await cb(null, error);
         }
-        const handleSuccess = async () => {
+        const handleSuccess = async (data: any) => {
             clearTimeout(timer);
             await this.hpClient.close();
+            if (cb)
+                await cb(data, null);
         }
 
         try {
             if (await this.hpClient.connect()) {
                 try {
-                    if (cb)
-                        await cb();
+                    let data = null;
+                    if (action)
+                        data = await action();
+                    await handleSuccess(data);
                 }
                 catch (e) {
-                    handleFailure();
-                    throw e;
+                    await handleFailure(e);
                 }
-                handleSuccess();
             }
             else {
-                clearTimeout(timer);
-                throw `Hot Pocket connection failed for ${server}`;
+                await handleFailure(`Hot Pocket connection failed for ${server}`);
             }
         }
-        catch (err) {
-            clearTimeout(timer);
-            throw err;
+        catch (e) {
+            await handleFailure(e);
         }
+        return;
     }
 
     /**
@@ -83,36 +83,42 @@ class UtilityContext {
         return new Promise<boolean>(async (resolve) => {
             await this.#connectAndHandle(ip, port, () => {
                 console.log(`Hot Pocket live at wss://${ip}:${port}`);
-                resolve(true);
-            }, { timeout: 6000 }).catch(e => {
-                console.error(e);
-                resolve(false);
-            })
+            }, (data: any, error: any) => {
+                if (error) {
+                    console.error(error);
+                    resolve(false);
+                }
+                else
+                    resolve(true);
+            }, { timeout: 6000 });
         });
     }
 
     /**
      * Sends a message to a cluster node.
      * @param message Message to be sent.
-     * @param node Corresponding Node.
      * @returns the state of the message sending as a boolean figure.
      */
-    public async sendMessage(message: any, node: ClusterNode): Promise<void> {
+    public async sendMessage(message: any, ip: string, port: number): Promise<void> {
         return new Promise<void>(async (resolve, reject) => {
-            await this.#connectAndHandle(node.ip, node.userPort, async () => {
-                console.log(`Hot Pocket live at wss://${node.ip}:${node.userPort}`);
+            await this.#connectAndHandle(ip, port, async () => {
+                console.log(`Hot Pocket live at wss://${ip}:${port}`);
 
                 if (!this.hpContext.readOnly) {
                     const input = await this.hpClient.submitContractInput(message);
-                    const submission = await input.submissionStatus;
-                    if (submission.status != "accepted")
-                        reject("Submission failed. reason: " + submission.reason);
-                    else
-                        resolve();
+                    return await input.submissionStatus;
                 }
-            }, { timeout: 60000 }).catch(e => {
-                reject(e);
-            })
+            }, (data: any, error: any) => {
+                if (error)
+                    reject(error);
+                else {
+                    // if (data.status != "accepted")
+                    //     reject("Submission failed. reason: " + data.reason);
+                    // else
+                    resolve();
+                }
+
+            }, { timeout: 5000 });
         });
     }
 }

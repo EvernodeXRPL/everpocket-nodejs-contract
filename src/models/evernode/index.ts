@@ -1,11 +1,16 @@
-import { XrplContextOptions } from "../xrpl";
-
 export interface AcquireOptions {
   host?: string;
   hostMessageKey?: string;
-  instanceCfg?: any;
+  instanceCfg?: InstanceConfig;
   preferredHosts?: string[];
   txOptions?: any;
+}
+
+export interface InstanceConfig {
+  ownerPubkey: string,
+  contractId: string,
+  image: string,
+  config: any
 }
 
 export interface PendingAcquire {

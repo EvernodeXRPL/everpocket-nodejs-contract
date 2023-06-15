@@ -35,7 +35,8 @@ export interface ClusterMessageResponse {
 }
 
 export enum ClusterMessageType {
-  MATURED = "maturity_ack"
+  MATURED = "maturity_ack",
+  UNKNOWN = "unknown"
 }
 
 export enum ClusterMessageResponseStatus {
