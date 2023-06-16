@@ -35,7 +35,6 @@ class ClusterManager {
             return;
 
         this.clusterData.pendingNodes.push(node);
-
         this.#persist();
     }
 
@@ -80,8 +79,9 @@ class ClusterManager {
         // Return if node already exist.
         if (!this.getNode(node.pubkey)) {
             this.clusterData.nodes.push(node);
-            this.#persist();
         }
+
+        this.#persist();
     }
 
     /**
@@ -89,20 +89,16 @@ class ClusterManager {
      * @param nodes Node list to add.
      */
     public addNodes(nodes: ClusterNode[]): void {
-        let updated = false;
         // Sort the nodes to preserve the order in all the node states.
         for (const node of nodes.sort((a, b) => a.pubkey.localeCompare(b.pubkey))) {
             this.clusterData.pendingNodes = this.clusterData.pendingNodes.filter(n => n.refId !== node.refId);
 
             // Return if node already exist.
-            if (!this.getNode(node.pubkey)) {
+            if (!this.getNode(node.pubkey))
                 this.clusterData.nodes.push(node);
-                updated = true;
-            }
         }
 
-        if (updated)
-            this.#persist();
+        this.#persist();
     }
 
     /**
