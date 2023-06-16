@@ -14,7 +14,7 @@ const ownerPubkey = "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9
 const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 
 const MAX_ACQUIRES = 5;
-const MAX_CLUSTER = 4;
+const MAX_CLUSTER = 7;
 
 const testContract = async (hpContext) => {
     if (!hpContext.readonly) {
@@ -184,6 +184,9 @@ const addNewClusterNode = async (clusterContext) => {
 
         console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
         console.log("Unl: ", clusterContext.hpContext.unl.list().map(n => n.publicKey));
+
+        console.log('Pending acquires', clusterContext.evernodeContext.getPendingAcquires().length);
+        console.log('Acquired', clusterContext.evernodeContext.getAcquiredNodes().length);
 
         if (clusterNodes.length == MAX_CLUSTER) {
             console.log(`Reached max cluster size ${MAX_CLUSTER}`);

@@ -3,16 +3,14 @@ import { ClusterData, ClusterNode, PendingNode } from '../models/cluster';
 
 class ClusterManager {
     private clusterDataFile: string = "cluster.json";
-    private clusterData: ClusterData;
+    private clusterData: ClusterData = { nodes: [], pendingNodes: [] };
 
     public constructor() {
         const data = JSONHelpers.readFromFile<ClusterData>(this.clusterDataFile);
         if (data)
             this.clusterData = data;
-        else {
-            this.clusterData = { nodes: [], pendingNodes: [] }
+        else
             JSONHelpers.writeToFile(this.clusterDataFile, this.clusterData);
-        }
     }
 
     /**

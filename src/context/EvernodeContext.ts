@@ -13,7 +13,7 @@ class EvernodeContext {
     public xrplContext: XrplContext;
     public voteContext: VoteContext;
     private acquireDataFile: string = "acquires.json";
-    private acquireData: AcquireData;
+    private acquireData: AcquireData = { acquiredNodes: [], pendingAcquires: [] };
     private registryClient: any;
 
     constructor(xrplContext: XrplContext, governorAddress: string) {
@@ -29,10 +29,8 @@ class EvernodeContext {
         const data = JSONHelpers.readFromFile<AcquireData>(this.acquireDataFile);
         if (data)
             this.acquireData = data;
-        else {
-            this.acquireData = { acquiredNodes: [], pendingAcquires: [] }
+        else
             JSONHelpers.writeToFile(this.acquireDataFile, this.acquireData);
-        }
     }
 
     /**
