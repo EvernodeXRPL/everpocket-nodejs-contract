@@ -112,13 +112,13 @@ class UtilityContext {
                 if (error)
                     reject(error);
                 else {
-                    // if (data.status != "accepted")
-                    //     reject("Submission failed. reason: " + data.reason);
-                    // else
-                    resolve();
+                    if (data.status != "accepted")
+                        reject("Submission failed. reason: " + data.reason);
+                    else
+                        resolve();
                 }
 
-            }, { timeout: 5000 });
+            }, { timeout: 60000 });
         });
     }
 }

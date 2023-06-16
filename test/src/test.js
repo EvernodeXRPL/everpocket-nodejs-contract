@@ -2,8 +2,8 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rpCYBHKjgNMjV6usx2sMc7wMZNKZ4G64hJ";
-const masterSecret = "ss5gv5viPPSNLj211DgzmyaCR2S1e";
+const masterAddress = "rPnKzw9ecZPxaqEPdMfgsCiYreVh4gVhg6";
+const masterSecret = "snMiB1Hrwhmo89TFdoWEXeLfXVM7a";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
 const ip = "localhost";
@@ -80,7 +80,7 @@ const testContract = async (hpContext) => {
             // () => checkLiveness(utilityContext, ip, port),
             // () => acquireNewNode(evernodeContext),
             // () => extendNode(evernodeContext),
-            () => addNewClusterNode(clusterContext),
+            // () => addNewClusterNode(clusterContext),
             // () => removeNode(evernodeContext),
         ];
 
