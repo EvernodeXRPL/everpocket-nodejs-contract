@@ -191,6 +191,7 @@ const addNewClusterNode = async (clusterContext) => {
         }
 
         await clusterContext.addNewClusterNode(1, {
+            host: "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
             instanceCfg: {
                 config: {
                     log: {

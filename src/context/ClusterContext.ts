@@ -225,17 +225,25 @@ class ClusterContext {
                     // Lock the user message processor.
                     await this.#acquireUserMessageProc();
 
-                    // Check if node exist in the cluster.
-                    // Add to UNL if exist. Note: The node's user connection will be made from node's public key.
-                    if (user.publicKey === message.nodePubkey) {
-                        const node = this.clusterManager.getNode(message.nodePubkey);
-                        response.status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
+                    try {
+                        // Check if node exist in the cluster.
+                        // Add to UNL if exist. Note: The node's user connection will be made from node's public key.
+                        if (user.publicKey === message.nodePubkey) {
+                            const node = this.clusterManager.getNode(message.nodePubkey);
+                            response.status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
+                        }
+                        response.status = ClusterMessageResponseStatus.FAIL;
+                        await user.send(JSON.stringify(response));
                     }
-                    response.status = ClusterMessageResponseStatus.FAIL;
-                    await user.send(JSON.stringify(response));
+                    catch (e) {
+                        console.error(e);
+                    }
+                    finally {
+                        // Release the user message processor.
+                        this.#releaseUserMessageProc();
+                    }
 
-                    // Release the user message processor.
-                    this.#releaseUserMessageProc();
+
 
                     break;
                 }
