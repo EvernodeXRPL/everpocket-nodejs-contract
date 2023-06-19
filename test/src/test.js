@@ -61,7 +61,7 @@ const testContract = async (hpContext) => {
             userHandlers.push(new Promise(async (resolve) => {
                 for (const input of user.inputs) {
                     const buf = await hpContext.users.read(input);
-                    console.log("User input", buf);
+                    console.log("Received user input", buf.toString());
                     await clusterContext.feedUserMessage(user, buf);
                 }
                 resolve();
@@ -81,7 +81,7 @@ const testContract = async (hpContext) => {
             // () => acquireNewNode(evernodeContext),
             // () => extendNode(evernodeContext),
             // () => addNewClusterNode(clusterContext),
-            // () => removeNode(evernodeContext),
+            // () => removeNode(clusterContext),
         ];
 
         for (const test of tests) {
@@ -185,16 +185,13 @@ const addNewClusterNode = async (clusterContext) => {
         console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
         console.log("Unl: ", clusterContext.hpContext.unl.list().map(n => n.publicKey));
 
-        console.log('Pending acquires', clusterContext.evernodeContext.getPendingAcquires().length);
-        console.log('Acquired', clusterContext.evernodeContext.getAcquiredNodes().length);
-
         if (clusterNodes.length == MAX_CLUSTER) {
             console.log(`Reached max cluster size ${MAX_CLUSTER}`);
             return;
         }
 
         await clusterContext.addNewClusterNode(1, {
-            host: "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww", instanceCfg: {
+            host: "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N", instanceCfg: {
                 config: {
                     log: {
                         log_level: "dbg"
@@ -209,28 +206,22 @@ const addNewClusterNode = async (clusterContext) => {
     }
 }
 
-const removeNode = async (hpContext) => {
-    const ownerPubkey = "ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50";
-
-    const contract = {
-        name: "test-contract",
-        contractId: hpContext.contractId,
-        image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
-        targetNodeCount: 2,
-        targetLifeTime: 1,
-        config: {}
-    }
-    const clusterContext = new evp.ClusterContext(hpContext, ownerPubkey, contract);
-    let config = await hpContext.getConfig();
-    let nodeToRemove = config.unl[0];
+const removeNode = async (clusterContext) => {
+    await clusterContext.init();
 
     try {
-        if (config.unl.length >= nodeCount) {
-            await clusterContext.removeNode(nodeToRemove);
-        }
+        const unlNodes = clusterContext.getClusterUnlNodes();
 
+        if (unlNodes.length === MAX_CLUSTER) {
+            console.log("Removing node ", unlNodes[unlNodes.length - 1].pubkey);
+            await clusterContext.removeNode(unlNodes[unlNodes.length - 1].pubkey);
+            console.log("Removing node ", unlNodes[unlNodes.length - 2].pubkey);
+            await clusterContext.removeNode(unlNodes[unlNodes.length - 2].pubkey);
+        }
     } catch (e) {
         console.error(e);
+    } finally {
+        await clusterContext.deinit();
     }
 
 }

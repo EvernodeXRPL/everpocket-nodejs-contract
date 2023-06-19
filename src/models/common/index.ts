@@ -26,7 +26,9 @@ export interface Contract {
 
 export interface User {
   publicKey: string;
-  inputs: [number, number]
+  inputs: [number, number];
+
+  send(msg: string): Promise<void>;
 }
 
 export interface ConnectionOptions {

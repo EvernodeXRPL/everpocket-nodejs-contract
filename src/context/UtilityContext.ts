@@ -1,5 +1,6 @@
 import { Buffer } from 'buffer';
 import { ConnectionOptions, Peer } from '../models';
+import { ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType } from '../models/cluster';
 
 const HotPocket = require('hotpocket-js-client');
 class UtilityContext {
@@ -99,19 +100,29 @@ class UtilityContext {
     public async sendMessage(message: any, nodes: Peer[]): Promise<void> {
         return new Promise<void>(async (resolve, reject) => {
             await this.#connectAndHandle(nodes, async () => {
-                if (!this.hpContext.readOnly) {
+                return new Promise<void>(async (resolve2, reject2) => {
+                    this.hpClient.on(HotPocket.events.contractOutput, (res: any) => {
+                        try {
+                            let obj = res as ClusterMessageResponse;
+                            if (obj.type === ClusterMessageType.MATURED && obj.status === ClusterMessageResponseStatus.OK)
+                                resolve2();
+                        }
+                        catch (e) {
+                            console.error(e);
+                        }
+                    });
+
                     const input = await this.hpClient.submitContractInput(message);
-                    return await input.submissionStatus;
-                }
+                    const statRes = await input.submissionStatus;
+                    if (statRes.status != "accepted")
+                        reject2("Submission failed. reason: " + statRes.reason);
+
+                });
             }, (data: any, error: any) => {
                 if (error)
                     reject(error);
-                else {
-                    if (data.status != "accepted")
-                        reject("Submission failed. reason: " + data.reason);
-                    else
-                        resolve();
-                }
+                else
+                    resolve();
 
             }, { timeout: 60000 });
         });

@@ -187,20 +187,24 @@ class ClusterContext {
      * @returns Response for the cluster message with status.
      */
     public async feedUserMessage(user: User, msg: Buffer): Promise<ClusterMessageResponse> {
-        let status = ClusterMessageResponseStatus.UNHANDLED;
-        let messageType = ClusterMessageType.UNKNOWN;
+        let response = <ClusterMessageResponse>{
+            type: ClusterMessageType.UNKNOWN,
+            status: ClusterMessageResponseStatus.UNHANDLED
+        }
 
         try {
             const message = JSON.parse(msg.toString()) as ClusterMessage;
-            messageType = message.type;
-            switch (messageType) {
+            response.type = message.type;
+            switch (response.type) {
                 case ClusterMessageType.MATURED: {
                     // Check if node exist in the cluster.
                     // Add to UNL if exist. Note: The node's user connection will be made from node's public key.
                     if (user.publicKey === message.nodePubkey) {
                         const node = this.clusterManager.getNode(message.nodePubkey);
-                        status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
+                        response.status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
                     }
+                    response.status = ClusterMessageResponseStatus.FAIL;
+                    await user.send(JSON.stringify(response));
                     break;
                 }
                 default: {
@@ -212,7 +216,7 @@ class ClusterContext {
             console.error(e);
         }
 
-        return <ClusterMessageResponse>{ type: messageType, status: status }
+        return response;
     }
 
     /**
