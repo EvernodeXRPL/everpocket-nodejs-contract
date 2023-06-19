@@ -1,5 +1,5 @@
 import { Buffer } from 'buffer';
-import { ConnectionOptions } from '../models';
+import { ConnectionOptions, Peer } from '../models';
 
 const HotPocket = require('hotpocket-js-client');
 class UtilityContext {
@@ -12,26 +12,23 @@ class UtilityContext {
 
     /**
      * Initiates a client connection for a given ip and a port.
-     * @param ip IP address of a node.
-     * @param port User port of a node.
+     * @param nodes List of cluster nodes to connect.
      * @param useNewKeyPair If new key pair needs to be utilized.
      */
-    async #initClient(ip: string, port: number, useNewKeyPair: boolean = false): Promise<void> {
+    async #initClient(nodes: Peer[], useNewKeyPair: boolean = false): Promise<void> {
         if (this.hpClient)
             await this.hpClient.close();
 
-        const server = `wss://${ip}:${port}`;
         const keys = (useNewKeyPair) ? await HotPocket.generateKeys() : {
             privateKey: new Uint8Array(Buffer.from(this.hpContext.privateKey, 'hex')),
             publicKey: new Uint8Array(Buffer.from(this.hpContext.publicKey, 'hex'))
         }
 
-        this.hpClient = await HotPocket.createClient([server], keys);
+        this.hpClient = await HotPocket.createClient(nodes.map(n => `wss://${n.toString()}`), keys);
     }
 
-    async #connectAndHandle(ip: string, port: number, action: Function | null = null, cb: Function | null = null, options: ConnectionOptions = {}): Promise<void> {
-        const server = `wss://${ip}:${port}`;
-        await this.#initClient(ip, port);
+    async #connectAndHandle(nodes: Peer[], action: Function | null = null, cb: Function | null = null, options: ConnectionOptions = {}): Promise<void> {
+        await this.#initClient(nodes);
 
         const timer = setTimeout(async () => {
             await handleFailure(`Timeout waiting for Hot Pocket connection`);
@@ -64,7 +61,7 @@ class UtilityContext {
                 }
             }
             else {
-                await handleFailure(`Hot Pocket connection failed for ${server}`);
+                await handleFailure(`Hot Pocket connection failed for requested nodes`);
             }
         }
         catch (e) {
@@ -75,14 +72,13 @@ class UtilityContext {
 
     /**
      * Checks the liveliness of a node.
-     * @param ip IP address of a node.
-     * @param port User port of a node.
+     * @param node Node to check the connection.
      * @returns the liveliness as a boolean figure.
      */
-    public async checkLiveness(ip: string, port: number): Promise<boolean> {
+    public async checkLiveness(node: Peer): Promise<boolean> {
         return new Promise<boolean>(async (resolve) => {
-            await this.#connectAndHandle(ip, port, () => {
-                console.log(`Hot Pocket live at wss://${ip}:${port}`);
+            await this.#connectAndHandle([node], () => {
+                console.log(`Hot Pocket live at wss://${node.toString()}`);
             }, (data: any, error: any) => {
                 if (error) {
                     console.error(error);
@@ -97,13 +93,12 @@ class UtilityContext {
     /**
      * Sends a message to a cluster node.
      * @param message Message to be sent.
+     * @param nodes Nodes to send the message.
      * @returns the state of the message sending as a boolean figure.
      */
-    public async sendMessage(message: any, ip: string, port: number): Promise<void> {
+    public async sendMessage(message: any, nodes: Peer[]): Promise<void> {
         return new Promise<void>(async (resolve, reject) => {
-            await this.#connectAndHandle(ip, port, async () => {
-                console.log(`Hot Pocket live at wss://${ip}:${port}`);
-
+            await this.#connectAndHandle(nodes, async () => {
                 if (!this.hpContext.readOnly) {
                     const input = await this.hpClient.submitContractInput(message);
                     return await input.submissionStatus;

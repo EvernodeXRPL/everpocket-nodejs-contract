@@ -1,5 +1,5 @@
 import { AcquireOptions } from "../models/evernode";
-import { Contract, User } from "../models";
+import { Contract, Peer, User } from "../models";
 import { Buffer } from 'buffer';
 import { EvernodeContext, UtilityContext, VoteContext } from "../context";
 import { ClusterContextOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
@@ -84,7 +84,7 @@ class ClusterContext {
                     continue;
                 }
 
-                if (!(await this.utilityContext.checkLiveness(info.ip, info.userPort))) {
+                if (!(await this.utilityContext.checkLiveness(new Peer(info.ip, info.userPort)))) {
                     this.clusterManager.increaseAliveCheck(node.refId);
                 }
                 else {
@@ -151,7 +151,7 @@ class ClusterContext {
         const unlNodes = this.getClusterUnlNodes();
         if (unlNodes && unlNodes.length > 0) {
             const addMessage = <ClusterMessage>{ type: ClusterMessageType.MATURED, nodePubkey: this.hpContext.publicKey }
-            await this.utilityContext.sendMessage(JSON.stringify(addMessage), unlNodes[0].ip, unlNodes[0].userPort);
+            await this.utilityContext.sendMessage(JSON.stringify(addMessage), unlNodes.map(n => new Peer(n.ip, n.userPort)));
         }
         return false;
     }
@@ -196,9 +196,11 @@ class ClusterContext {
             switch (messageType) {
                 case ClusterMessageType.MATURED: {
                     // Check if node exist in the cluster.
-                    // Add to UNL if exist.
-                    const node = this.clusterManager.getNode(message.nodePubkey);
-                    status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
+                    // Add to UNL if exist. Note: The node's user connection will be made from node's public key.
+                    if (user.publicKey === message.nodePubkey) {
+                        const node = this.clusterManager.getNode(message.nodePubkey);
+                        status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
+                    }
                     break;
                 }
                 default: {
