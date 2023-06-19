@@ -14,7 +14,7 @@ const ownerPubkey = "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9
 const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 
 const MAX_ACQUIRES = 5;
-const MAX_CLUSTER = 7;
+const MAX_CLUSTER = 8;
 
 const testContract = async (hpContext) => {
     if (!hpContext.readonly) {
@@ -191,7 +191,7 @@ const addNewClusterNode = async (clusterContext) => {
         }
 
         await clusterContext.addNewClusterNode(1, {
-            host: "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N", instanceCfg: {
+            instanceCfg: {
                 config: {
                     log: {
                         log_level: "dbg"
@@ -212,7 +212,8 @@ const removeNode = async (clusterContext) => {
     try {
         const unlNodes = clusterContext.getClusterUnlNodes();
 
-        if (unlNodes.length === MAX_CLUSTER) {
+        // Remove nodes if max cluster size reached and there are no nodes which are added to unl on this ledger.
+        if (unlNodes.length === MAX_CLUSTER && !unlNodes.find(n => n.addedToUnlOnLcl === clusterContext.hpContext.lclSeqNo)) {
             console.log("Removing node ", unlNodes[unlNodes.length - 1].pubkey);
             await clusterContext.removeNode(unlNodes[unlNodes.length - 1].pubkey);
             console.log("Removing node ", unlNodes[unlNodes.length - 2].pubkey);

@@ -12,6 +12,7 @@ const ALIVENESS_CHECK_THRESHOLD = 5;
 
 class ClusterContext {
     private clusterManager: ClusterManager;
+    private userMessageProcessing: boolean;
     public hpContext: any;
     public voteContext: VoteContext;
     public evernodeContext: EvernodeContext;
@@ -25,6 +26,7 @@ class ClusterContext {
         this.utilityContext = options?.utilityContext || new UtilityContext(this.hpContext);
         this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
+        this.userMessageProcessing = false;
     }
 
     /**
@@ -181,6 +183,28 @@ class ClusterContext {
     }
 
     /**
+     * Try to acquire the user message lock.
+     */
+    async #acquireUserMessageProc(): Promise<void> {
+        await new Promise<void>(async resolve => {
+            while (this.userMessageProcessing) {
+                await new Promise(resolveSleep => {
+                    setTimeout(resolveSleep, 1000);
+                })
+            }
+            resolve();
+        });
+        this.userMessageProcessing = true;
+    }
+
+    /**
+     * Release the user message lock.
+     */
+    #releaseUserMessageProc(): void {
+        this.userMessageProcessing = false;
+    }
+
+    /**
      * Feed user messaged to the cluster context.
      * @param user Contract client user.
      * @param msg Message sent by the user.
@@ -197,6 +221,10 @@ class ClusterContext {
             response.type = message.type;
             switch (response.type) {
                 case ClusterMessageType.MATURED: {
+                    // Process user messages sequentially to avoid conflicts.
+                    // Lock the user message processor.
+                    await this.#acquireUserMessageProc();
+
                     // Check if node exist in the cluster.
                     // Add to UNL if exist. Note: The node's user connection will be made from node's public key.
                     if (user.publicKey === message.nodePubkey) {
@@ -205,6 +233,10 @@ class ClusterContext {
                     }
                     response.status = ClusterMessageResponseStatus.FAIL;
                     await user.send(JSON.stringify(response));
+
+                    // Release the user message processor.
+                    this.#releaseUserMessageProc();
+
                     break;
                 }
                 default: {
