@@ -8,8 +8,6 @@ const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
 const ip = "localhost";
 const port = 8081;
-const nodeCount = 3;
-const ownerPubkey = "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9834bafb";
 
 const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 
