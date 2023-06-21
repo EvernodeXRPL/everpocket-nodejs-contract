@@ -2,14 +2,14 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rPnKzw9ecZPxaqEPdMfgsCiYreVh4gVhg6";
-const masterSecret = "snMiB1Hrwhmo89TFdoWEXeLfXVM7a";
+const masterAddress = "rNC3aBTwEVJXdHo5yP73H8hCJNju4GqvJ1";
+const masterSecret = "snCUGkxT4bEZMPTf6WArK9itc2yYK";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
 const ip = "localhost";
 const port = 8081;
 
-const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
+const evernodeGovernor = "raVhw4Q8FQr296jdaDLDfZ4JDhh7tFG7SF";
 
 const MAX_ACQUIRES = 5;
 const MAX_CLUSTER = 8;
