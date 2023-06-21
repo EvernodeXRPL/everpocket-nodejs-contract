@@ -52,10 +52,6 @@ class NomadContext {
             console.log(`Shrinking the node ${node.pubkey} due to expiring.`);
             console.log(`Expiry moment: ${((node.createdMoment || 0) + node.lifeMoments)}, Current moment: ${curMoment}`);
 
-            if (node.isQuorum) {
-                // Todo: Renew the signer list if this is a signer.
-            }
-
             await this.clusterContext.removeNode(node.pubkey).catch(console.error);
         }
     }
@@ -70,10 +66,6 @@ class NomadContext {
         if (node) {
             console.log(`Shrinking the node ${node.pubkey} due to not getting matured.`);
             console.log(`Created on lcl: ${node.createdOnLcl}, Current moment: ${curLcl}`);
-
-            if (node.isQuorum) {
-                // Todo: Renew the signer list if this is a signer.
-            }
 
             await this.clusterContext.removeNode(node.pubkey).catch(console.error);
         }
