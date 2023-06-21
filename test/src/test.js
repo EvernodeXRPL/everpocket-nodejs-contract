@@ -44,14 +44,18 @@ const testContract = async (hpContext) => {
         ///////////////////////////////////////////////////////////////////////
 
         const contract = {
-            targetNodeCount: 5,
-            targetLifeTime: 2,
+            targetNodeCount: 8,
+            targetLifeMoments: 2,
+            preferredHosts: [
+                'r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N'
+            ]
         }
 
         const xrplContext = new evp.XrplContext(hpContext, masterAddress, null, { voteContext: voteContext });
         const evernodeContext = new evp.EvernodeContext(xrplContext, evernodeGovernor);
         const utilityContext = new evp.UtilityContext(hpContext);
-        const clusterContext = new evp.ClusterContext(evernodeContext, contract, { utilityContext: utilityContext });
+        const clusterContext = new evp.ClusterContext(evernodeContext, { utilityContext: utilityContext });
+        const nomadContext = new evp.NomadContext(clusterContext, contract);
 
         // Listen to incoming user messages and feed them to evernodeContext.
         const userHandlers = [];
@@ -80,6 +84,7 @@ const testContract = async (hpContext) => {
             // () => extendNode(evernodeContext),
             // () => addNewClusterNode(clusterContext),
             // () => removeNode(clusterContext),
+            // () => runNomadContract(nomadContext)
         ];
 
         for (const test of tests) {
@@ -211,8 +216,8 @@ const removeNode = async (clusterContext) => {
     try {
         const unlNodes = clusterContext.getClusterUnlNodes();
 
-        // Remove nodes if max cluster size reached and there are no nodes which are added to unl on this ledger.
-        if (unlNodes.length === MAX_CLUSTER && !unlNodes.find(n => n.addedToUnlOnLcl === clusterContext.hpContext.lclSeqNo)) {
+        // Remove nodes if max cluster size reached and 5 ledgers after the last node added to UNL.
+        if (unlNodes.length === MAX_CLUSTER && clusterContext.hpContext.lclSeqNo > (Math.max(unlNodes.map(n => n.addedToUnlOnLcl)) + 5)) {
             console.log("Removing node ", unlNodes[unlNodes.length - 1].pubkey);
             await clusterContext.removeNode(unlNodes[unlNodes.length - 1].pubkey);
             console.log("Removing node ", unlNodes[unlNodes.length - 2].pubkey);
@@ -224,6 +229,26 @@ const removeNode = async (clusterContext) => {
         await clusterContext.deinit();
     }
 
+}
+
+const runNomadContract = async (nomadContext) => {
+    await nomadContext.init();
+
+    try {
+        const pendingNodes = nomadContext.clusterContext.getPendingNodes();
+        const clusterNodes = nomadContext.clusterContext.getClusterNodes();
+
+        console.log(`There are ${pendingNodes.length} pending nodes and ${clusterNodes.length} cluster nodes.`);
+
+        console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
+        console.log("Unl: ", nomadContext.clusterContext.hpContext.unl.list().map(n => n.publicKey));
+
+        await nomadContext.start();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        await nomadContext.deinit();
+    }
 }
 
 const renewSignerList = async (xrplContext) => {

@@ -158,7 +158,7 @@ class EvernodeContext {
             throw "NO_LEASE_OFFER";
 
         const electionName = `lease_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(3, 1000));
+        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(this.hpContext.unl.list().length, 1000));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -190,7 +190,7 @@ class EvernodeContext {
             throw 'There are no vacant hosts in the network';
 
         const electionName = `host_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(3, 1000));
+        const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(this.hpContext.unl.list().length, 1000));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -212,7 +212,7 @@ class EvernodeContext {
         const keyPair: Record<string, any> = kp.deriveKeypair(seed);
 
         const electionName = `message_key_selection${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [keyPair.publicKey], new AllVoteElector(3, 1000));
+        const voteRound = this.voteContext.vote(electionName, [keyPair.publicKey], new AllVoteElector(this.hpContext.unl.list().length, 1000));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -233,6 +233,15 @@ class EvernodeContext {
         }
 
         return collection[0];
+    }
+
+    async getCurMoment() {
+        // Vote for node created moment.
+        const electionName = `share_node_create_moment${this.voteContext.getUniqueNumber()}`;
+        const elector = new AllVoteElector(this.hpContext.unl.list().length, 2000);
+        const moment = await this.registryClient.getMoment();
+        const nodes: number[] = (await this.voteContext.vote(electionName, [moment], elector)).map(ob => ob.data).sort();
+        return nodes[0];
     }
 
     /**

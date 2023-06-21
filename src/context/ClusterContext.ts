@@ -1,5 +1,5 @@
 import { AcquireOptions } from "../models/evernode";
-import { Contract, Peer, User } from "../models";
+import { Peer, User } from "../models";
 import { Buffer } from 'buffer';
 import { EvernodeContext, UtilityContext, VoteContext } from "../context";
 import { ClusterContextOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
@@ -17,12 +17,10 @@ class ClusterContext {
     public voteContext: VoteContext;
     public evernodeContext: EvernodeContext;
     public utilityContext: UtilityContext;
-    public contract: Contract;
 
-    public constructor(evernodeContext: EvernodeContext, contract: Contract, options: ClusterContextOptions) {
+    public constructor(evernodeContext: EvernodeContext, options: ClusterContextOptions) {
         this.evernodeContext = evernodeContext;
         this.hpContext = this.evernodeContext.hpContext;
-        this.contract = contract;
         this.utilityContext = options?.utilityContext || new UtilityContext(this.hpContext);
         this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
@@ -58,11 +56,11 @@ class ClusterContext {
         if (clusterNodes.length === 0) {
             const electionName = `share_node_info${this.voteContext.getUniqueNumber()}`;
             const elector = new AllVoteElector(0, 2000);
-            const contrctConfig = await this.hpContext.getConfig();
+            const contractConfig = await this.hpContext.getConfig();
             const node = <ClusterNode>{
                 pubkey: this.hpContext.publicKey,
-                contractId: contrctConfig.id,
-                isUnl: !!contrctConfig.unl.find((k: string) => k === this.hpContext.publicKey),
+                contractId: contractConfig.id,
+                isUnl: !!contractConfig.unl.find((k: string) => k === this.hpContext.publicKey),
                 isQuorum: this.evernodeContext.xrplContext.isSigner()
             }
             const nodes: ClusterNode[] = (await this.voteContext.vote(electionName, [node], elector)).map(ob => ob.data);
@@ -83,6 +81,8 @@ class ClusterContext {
                 // Remove node if aliveness check threshold reached.
                 if (node.aliveCheckCount > ALIVENESS_CHECK_THRESHOLD) {
                     this.clusterManager.removePending(node.refId);
+
+                    console.log(`Pending node ${node.refId} is removed since it's not alive.`);
                     continue;
                 }
 
@@ -92,10 +92,13 @@ class ClusterContext {
                 else {
                     await this.hpContext.updatePeers([`${info.ip}:${info.peerPort}`], []);
 
+                    const curMoment = await this.evernodeContext.getCurMoment();
+
                     this.clusterManager.addNode(<ClusterNode>{
                         refId: node.refId,
                         contractId: info.contractId,
                         createdOnLcl: this.hpContext.lclSeqNo,
+                        createdMoment: curMoment,
                         host: node.host,
                         ip: info.ip,
                         name: info.name,
@@ -107,12 +110,17 @@ class ClusterContext {
                         lifeMoments: 1,
                         targetLifeMoments: node.targetLifeMoments
                     });
+
+                    console.log(`Added node ${info.pubkey} to the cluster as nonUnl.`);
                 }
 
             }
             // If the pending node is not in the pending acquire, this acquire should be failed.
-            else if (!info && !this.evernodeContext.getIfPending(node.refId))
+            else if (!info && !this.evernodeContext.getIfPending(node.refId)) {
                 this.clusterManager.removePending(node.refId);
+
+                console.log(`Pending node ${node.refId} is removed due to unavailability.`);
+            }
         }
     }
 
@@ -123,8 +131,9 @@ class ClusterContext {
         const clusterNodes = this.getClusterNodes();
 
         for (const node of clusterNodes.filter(n => n.targetLifeMoments > n.lifeMoments)) {
-            const extension = this.contract.targetLifeTime - 1;
+            const extension = node.targetLifeMoments - node.lifeMoments;
             try {
+                console.log(`Extending node ${node.pubkey} by ${extension}.`);
                 const res = await this.evernodeContext.extendSubmit(node.host, extension, node.name);
                 if (res)
                     this.clusterManager.updateLifeMoments(node.pubkey, node.lifeMoments + extension);
@@ -141,8 +150,10 @@ class ClusterContext {
         const selfNode = this.clusterManager.getNode(this.hpContext.publicKey);
 
         // If this node is not in UNL acknowledge others to add to UNL.
-        if (selfNode && !selfNode.isUnl)
+        if (selfNode && !selfNode.isUnl) {
             await this.#acknowledgeMaturity();
+            console.log(`Maturity acknowledgement sent.`);
+        }
     }
 
     /**
@@ -162,7 +173,7 @@ class ClusterContext {
      * Get all Unl nodes in the cluster.
      * @returns List of nodes in the cluster which are in Unl.
      */
-    getClusterUnlNodes(): ClusterNode[] {
+    public getClusterUnlNodes(): ClusterNode[] {
         return this.clusterManager.getUnlNodes();
     }
 
@@ -170,7 +181,7 @@ class ClusterContext {
      * Get all nodes in the cluster.
      * @returns List of nodes in the cluster.
      */
-    getClusterNodes(): ClusterNode[] {
+    public getClusterNodes(): ClusterNode[] {
         return this.clusterManager.getNodes();
     }
 
@@ -178,8 +189,16 @@ class ClusterContext {
      * Get all pending nodes.
      * @returns List of pending nodes.
      */
-    getPendingNodes(): PendingNode[] {
+    public getPendingNodes(): PendingNode[] {
         return this.clusterManager.getPending();
+    }
+
+    /**
+     * Get the pending + cluster node count in the cluster.
+     * @returns Total number of cluster nodes.
+     */
+    public totalCount(): number {
+        return (this.getClusterNodes().length + this.getPendingNodes().length)
     }
 
     /**
@@ -322,6 +341,8 @@ class ClusterContext {
             const hpconfig = await this.hpContext.getConfig();
             hpconfig.unl.push(pubkey);
             await this.hpContext.updateConfig(hpconfig);
+
+            console.log(`Added node ${pubkey} to the Unl.`);
             return true;
         }
         return false;
@@ -331,7 +352,7 @@ class ClusterContext {
      * Removes a provided a node from the cluster.
      * @param publickey Public key of the node to be removed.
      */
-    async removeNode(publickey: string): Promise<void> {
+    public async removeNode(publickey: string): Promise<void> {
         // Update patch config.
         let config = await this.hpContext.getConfig();
         config.unl = config.unl.filter((p: string) => p != publickey);

@@ -10,6 +10,7 @@ export interface ClusterNode extends AcquiredNode {
   addedToUnlOnLcl?: number;
   isUnl: boolean;
   isQuorum: boolean;
+  createdMoment?: number;
   lifeMoments: number;
   targetLifeMoments: number;
 }

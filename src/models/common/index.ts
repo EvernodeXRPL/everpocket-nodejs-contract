@@ -21,7 +21,8 @@ export class Peer {
 
 export interface Contract {
   targetNodeCount: number;
-  targetLifeTime: number;
+  targetLifeMoments: number;
+  preferredHosts: string[];
 }
 
 export interface User {
