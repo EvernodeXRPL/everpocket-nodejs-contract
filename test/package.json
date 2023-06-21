@@ -6,7 +6,7 @@
         "start": "npm run build && hpdevkit deploy dist"
     },
     "dependencies": {
-        "evernode-js-client": "0.6.8",
+        "evernode-js-client": "0.6.11",
         "everpocket-nodejs-contract": "file:../dist",
         "hotpocket-nodejs-contract": "0.5.7"
     },
