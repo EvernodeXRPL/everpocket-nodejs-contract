@@ -211,8 +211,8 @@ const removeNode = async (clusterContext) => {
     try {
         const unlNodes = clusterContext.getClusterUnlNodes();
 
-        // Remove nodes if max cluster size reached and there are no nodes which are added to unl on this ledger.
-        if (unlNodes.length === MAX_CLUSTER && !unlNodes.find(n => n.addedToUnlOnLcl === clusterContext.hpContext.lclSeqNo)) {
+        // Remove nodes if max cluster size reached and 5 ledgers after the last node added to UNL.
+        if (unlNodes.length === MAX_CLUSTER && clusterContext.hpContext.lclSeqNo > (Math.max(...unlNodes.filter(n => n.addedToUnlOnLcl).map(n => n.addedToUnlOnLcl)) + 5)) {
             console.log("Removing node ", unlNodes[unlNodes.length - 1].pubkey);
             await clusterContext.removeNode(unlNodes[unlNodes.length - 1].pubkey);
             console.log("Removing node ", unlNodes[unlNodes.length - 2].pubkey);

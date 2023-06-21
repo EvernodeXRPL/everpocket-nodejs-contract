@@ -163,8 +163,8 @@ class ClusterManager {
         return false;
     }
 
-    public removeNode(publicKey: string): void {
-        this.clusterData.nodes = this.clusterData.nodes.filter(n => n.pubkey !== publicKey);
+    public removeNode(pubkey: string): void {
+        this.clusterData.nodes = this.clusterData.nodes.filter(n => n.pubkey !== pubkey);
         this.#persist();
     }
 

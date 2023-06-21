@@ -100,7 +100,7 @@ class UtilityContext {
     public async sendMessage(message: any, nodes: Peer[]): Promise<void> {
         return new Promise<void>(async (resolve, reject) => {
             await this.#connectAndHandle(nodes, async () => {
-                return new Promise<void>(async (resolve2, reject2) => {
+                return await new Promise<void>(async (resolve2, reject2) => {
                     this.hpClient.on(HotPocket.events.contractOutput, (res: any) => {
                         try {
                             let obj = res as ClusterMessageResponse;
