@@ -1,3 +1,5 @@
+import { InstanceConfig } from "../evernode";
+
 export interface UnlNode {
   publicKey?: string;
   activeOn?: number;
@@ -23,6 +25,7 @@ export interface Contract {
   targetNodeCount: number;
   targetLifeMoments: number;
   preferredHosts: string[];
+  instanceCfg: InstanceConfig;
 }
 
 export interface User {

@@ -47,8 +47,15 @@ const testContract = async (hpContext) => {
             targetNodeCount: 8,
             targetLifeMoments: 2,
             preferredHosts: [
-                'r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N'
-            ]
+                'rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww'
+            ],
+            instanceCfg: {
+                config: {
+                    log: {
+                        log_level: "dbg"
+                    }
+                }
+            }
         }
 
         const xrplContext = new evp.XrplContext(hpContext, masterAddress, null, { voteContext: voteContext });

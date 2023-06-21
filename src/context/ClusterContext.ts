@@ -249,15 +249,18 @@ class ClusterContext {
                         // Add to UNL if exist. Note: The node's user connection will be made from node's public key.
                         if (user.publicKey === message.nodePubkey) {
                             const node = this.clusterManager.getNode(message.nodePubkey);
-                            response.status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
+                            await this.addToUnl(message.nodePubkey);
+                            response.status = ClusterMessageResponseStatus.OK;
                         }
-                        response.status = ClusterMessageResponseStatus.FAIL;
-                        await user.send(JSON.stringify(response));
+                        else
+                            response.status = ClusterMessageResponseStatus.FAIL;
                     }
                     catch (e) {
                         console.error(e);
+                        response.status = ClusterMessageResponseStatus.FAIL;
                     }
                     finally {
+                        await user.send(JSON.stringify(response));
                         // Release the user message processor.
                         this.#releaseUserMessageProc();
                     }
@@ -320,32 +323,26 @@ class ClusterContext {
     /**
      * Add a node to cluster and mark as UNL.
      * @param node Cluster node to be added.
-     * @returns The status of the addition as a boolean figure.
      */
-    public async addToCluster(node: ClusterNode): Promise<boolean> {
+    public async addToCluster(node: ClusterNode): Promise<void> {
         // Check if node exists in the cluster.
         const existing = this.clusterManager.getNode(node.pubkey);
         if (!existing)
             this.clusterManager.addNode(node);
 
-        return await this.addToUnl(node.pubkey);
+        await this.addToUnl(node.pubkey);
     }
 
     /**
      * Mark existing node as a UNL node.
-     * @param pubkey Public key of the node.
-     * @returns The status of the addition as a boolean figure.
+     * @param publickey Public key of the node.
      */
-    public async addToUnl(pubkey: string) {
-        if (this.clusterManager.markAsUnl(pubkey, this.hpContext.lclSeqNo)) {
-            const hpconfig = await this.hpContext.getConfig();
-            hpconfig.unl.push(pubkey);
-            await this.hpContext.updateConfig(hpconfig);
+    public async addToUnl(publickey: string): Promise<void> {
+        this.clusterManager.markAsUnl(publickey, this.hpContext.lclSeqNo);
 
-            console.log(`Added node ${pubkey} to the Unl.`);
-            return true;
-        }
-        return false;
+        const hpconfig = await this.hpContext.getConfig();
+        hpconfig.unl.push(publickey);
+        await this.hpContext.updateConfig(hpconfig);
     }
 
     /**
@@ -353,10 +350,13 @@ class ClusterContext {
      * @param publickey Public key of the node to be removed.
      */
     public async removeNode(publickey: string): Promise<void> {
-        // Update patch config.
+        // Update patch config if node exists in UNL.
         let config = await this.hpContext.getConfig();
-        config.unl = config.unl.filter((p: string) => p != publickey);
-        await this.hpContext.updateConfig(config);
+        const index = config.unl.findIndex((p: string) => p === publickey);
+        if (index > -1) {
+            config.unl.splice(index, 1);
+            await this.hpContext.updateConfig(config);
+        }
 
         // Update peer list.
         const node = this.clusterManager.getNode(publickey);

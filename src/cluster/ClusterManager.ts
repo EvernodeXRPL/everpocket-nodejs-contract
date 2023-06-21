@@ -145,22 +145,18 @@ class ClusterManager {
      * Mark the node as a UNL node.
      * @param pubkey Public key of the node.
      * @param lclSeqNo Current lcl sequence number.
-     * @returns True if marked as UNL. False if node does not exist or already a UNL node.
      */
-    public markAsUnl(pubkey: string, lclSeqNo: number): boolean {
+    public markAsUnl(pubkey: string, lclSeqNo: number): void {
         const index = this.clusterData.nodes.findIndex(n => n.pubkey === pubkey);
 
-        if (index == -1)
-            return false;
+        if (index === -1)
+            throw 'Pubkey does not exist in the cluster.';
 
         if (!this.clusterData.nodes[index].isUnl) {
             this.clusterData.nodes[index].isUnl = true;
             this.clusterData.nodes[index].addedToUnlOnLcl = lclSeqNo;
             this.#persist();
-            return true;
         }
-
-        return false;
     }
 
     public removeNode(publicKey: string): void {
