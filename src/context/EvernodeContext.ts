@@ -16,7 +16,7 @@ class EvernodeContext {
     private acquireData: AcquireData = { acquiredNodes: [], pendingAcquires: [] };
     private registryClient: any;
 
-    constructor(xrplContext: XrplContext, governorAddress: string) {
+    public constructor(xrplContext: XrplContext, governorAddress: string) {
         this.xrplContext = xrplContext;
         this.hpContext = this.xrplContext.hpContext;
         this.voteContext = this.xrplContext.voteContext;
@@ -36,7 +36,7 @@ class EvernodeContext {
     /**
      * Initialize the context.
      */
-    async init(): Promise<void> {
+    public async init(): Promise<void> {
         await this.xrplContext.init();
 
         try {
@@ -53,7 +53,7 @@ class EvernodeContext {
     /**
      * Deinitialize the context.
      */
-    async deinit(): Promise<void> {
+    public async deinit(): Promise<void> {
         if (this.registryClient)
             await this.registryClient.disconnect();
         await this.xrplContext.deinit();
@@ -104,7 +104,7 @@ class EvernodeContext {
      * @param options Options related to a particular acquire operation.
      * @returns Acquire data.
      */
-    async acquireNode(options: AcquireOptions = {}): Promise<PendingAcquire> {
+    public async acquireNode(options: AcquireOptions = {}): Promise<PendingAcquire> {
         // Use provided host or select a host randomly.
         const hostAddress = options.host || await this.decideHost(options.preferredHosts);
         // Choose the lease offer
@@ -128,7 +128,7 @@ class EvernodeContext {
      * @param acquireRefId Acquire reference.
      * @returns Acquired node.
      */
-    getIfAcquired(acquireRefId: string): AcquiredNode | null {
+    public getIfAcquired(acquireRefId: string): AcquiredNode | null {
         const node = this.acquireData.acquiredNodes.find(n => n.refId == acquireRefId);
         return node ? node : null;
     }
@@ -138,7 +138,7 @@ class EvernodeContext {
      * @param acquireRefId Acquire reference.
      * @returns Pending node.
      */
-    getIfPending(acquireRefId: string): PendingAcquire | null {
+    public getIfPending(acquireRefId: string): PendingAcquire | null {
         const node = this.acquireData.pendingAcquires.find(n => n.refId == acquireRefId);
         return node ? node : null;
     }
@@ -148,7 +148,7 @@ class EvernodeContext {
      * @param hostAddress Host that should be used to take lease offers.
      * @returns URIToken related to the lease offer.
      */
-    async decideLeaseOffer(hostAddress: string): Promise<URIToken> {
+    public async decideLeaseOffer(hostAddress: string): Promise<URIToken> {
         // Get transaction details to use for xrpl tx submission.
         const hostClient = new evernode.HostClient(hostAddress);
         const leaseOffers = await hostClient.getLeaseOffers();
@@ -176,7 +176,7 @@ class EvernodeContext {
      * @param [preferredHosts=null] List of proffered host addresses.
      * @returns Decided host address.
      */
-    async decideHost(preferredHosts: string[] | null = null): Promise<string> {
+    public async decideHost(preferredHosts: string[] | null = null): Promise<string> {
         const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
 
         // Choose from hosts that have available instances.
@@ -207,7 +207,7 @@ class EvernodeContext {
      * Decide a encryption key pair collectively
      * @returns Public key of the decided key pair.
      */
-    async decideMessageKey(): Promise<string> {
+    public async decideMessageKey(): Promise<string> {
         const seed = kp.generateSeed();
         const keyPair: Record<string, any> = kp.deriveKeypair(seed);
 
@@ -235,7 +235,7 @@ class EvernodeContext {
         return collection[0];
     }
 
-    async getCurMoment() {
+    public async getCurMoment() {
         // Vote for node created moment.
         const electionName = `share_node_create_moment${this.voteContext.getUniqueNumber()}`;
         const elector = new AllVoteElector(this.hpContext.unl.list().length, 2000);
@@ -252,7 +252,7 @@ class EvernodeContext {
      * @param options
      * @returns Result of the submitted transaction.
      */
-    async acquireSubmit(hostAddress: string, leaseOffer: URIToken, messageKey: string, options: AcquireOptions = {}): Promise<any> {
+    public async acquireSubmit(hostAddress: string, leaseOffer: URIToken, messageKey: string, options: AcquireOptions = {}): Promise<any> {
         // Get transaction details to use for xrpl tx submission.
         const hostClient = new evernode.HostClient(hostAddress);
 
@@ -290,7 +290,7 @@ class EvernodeContext {
      * @param {object} options This is an optional field and contains necessary details for the transactions.
      * @returns The transaction result.
      */
-    async extendSubmit(hostAddress: string, extension: number, tokenID: string, options: any = {}): Promise<any> {
+    public async extendSubmit(hostAddress: string, extension: number, tokenID: string, options: any = {}): Promise<any> {
         const leaseToken = (await this.xrplContext.xrplAcc.getURITokens()).find((t: any) => t.index === tokenID);
         if (!leaseToken)
             throw 'No lease token for given token id';
@@ -310,7 +310,7 @@ class EvernodeContext {
      * Fetches registered hosts
      * @returns An array of hosts that are having vacant leases.
      */
-    async getHosts(): Promise<any[]> {
+    public async getHosts(): Promise<any[]> {
         const allHosts = await this.registryClient.getActiveHosts();
         return allHosts.filter((h: { maxInstances: number; activeInstances: number; }) => (h.maxInstances - h.activeInstances) > 0);
     }
@@ -318,7 +318,7 @@ class EvernodeContext {
     /**
      * Persist details of acquires.
      */
-    persistAcquireData(): void {
+    public persistAcquireData(): void {
         try {
             JSONHelpers.writeToFile(this.acquireDataFile, this.acquireData);
         } catch (error) {
@@ -330,7 +330,7 @@ class EvernodeContext {
      * Fetches details of successful acquires.
      * @returns an array of instance acquisitions that are completed.
      */
-    getAcquiredNodes(): AcquiredNode[] {
+    public getAcquiredNodes(): AcquiredNode[] {
         return this.acquireData.acquiredNodes;
     }
 
@@ -338,7 +338,7 @@ class EvernodeContext {
      * Fetches details of pending acquires.
      * @returns an array of instance acquisitions that are in progress.
      */
-    getPendingAcquires(): PendingAcquire[] {
+    public getPendingAcquires(): PendingAcquire[] {
         return this.acquireData.pendingAcquires;
     }
 
@@ -347,7 +347,7 @@ class EvernodeContext {
      * @param uri URI of the URIToken
      * @returns decoded content of the URI
      */
-    decodeLeaseTokenUri(uri: string): LeaseURIInfo {
+    public decodeLeaseTokenUri(uri: string): LeaseURIInfo {
         return evernode.UtilHelpers.decodeLeaseTokenUri(uri);
     }
 
@@ -357,7 +357,7 @@ class EvernodeContext {
      * @param element Element to be added or removed
      * @param mode Type of operation ("INSERT" or "DELETE")
      */
-    async updatePendingAcquireInfo(element: PendingAcquire, mode: string = "INSERT"): Promise<void> {
+    public async updatePendingAcquireInfo(element: PendingAcquire, mode: string = "INSERT"): Promise<void> {
         if (mode === "INSERT")
             this.acquireData.pendingAcquires.push(element); // modify the array as needed
         else {
@@ -378,7 +378,7 @@ class EvernodeContext {
      * @param element Element to be added or removed
      * @param mode Type of operation ("INSERT" or "DELETE")
      */
-    async updateAcquiredNodeInfo(element: AcquiredNode, mode: string = "INSERT"): Promise<void> {
+    public async updateAcquiredNodeInfo(element: AcquiredNode, mode: string = "INSERT"): Promise<void> {
         if (mode === "INSERT")
             this.acquireData.acquiredNodes.push(element); // modify the array as needed
         else {
@@ -391,6 +391,16 @@ class EvernodeContext {
             }
         }
         this.persistAcquireData();
+    }
+
+    public hasPendingOperations(): boolean {
+        // Check if this node has message keys for pending acquires.
+        for (const item of this.getPendingAcquires()) {
+            if (fs.existsSync(`../${item.messageKey}.txt`))
+                return true;
+        }
+
+        return false;
     }
 }
 

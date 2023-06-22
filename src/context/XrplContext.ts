@@ -67,7 +67,7 @@ class XrplContext {
      * @param timeout Optional timeout for votes to resolve.
      */
     public async multiSignAndSubmitTransaction(transaction: any, options: MultiSignOptions = {}): Promise<any> {
-        const txSubmitInfo = await this.getTransactionSubmissionInfo(options.voteTimeout);
+        const txSubmitInfo = await this.getTransactionSubmissionInfo(options?.voteElectorOptions?.timeout);
         if (!txSubmitInfo)
             throw 'Could not get transaction submission info';
 
@@ -85,7 +85,7 @@ class XrplContext {
         transaction.Fee = `${10 * (signerCount + 2)}`;
         transaction.NetworkID = evernode.Defaults.get().networkID;
 
-        const elector = new MultiSignedBlobElector(signerCount, signerListInfo, options.voteTimeout || TIMEOUT);
+        const elector = new MultiSignedBlobElector(signerCount, signerListInfo, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `sign${this.voteContext.getUniqueNumber()}`;
         let signatures: Signature[];
 
@@ -124,7 +124,7 @@ class XrplContext {
         if (!signerCount)
             throw 'Signer count cannot be empty.';
 
-        const elector = new AllVoteElector(signerCount, options.voteTimeout || TIMEOUT);
+        const elector = new AllVoteElector(signerCount, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `signerList${this.voteContext.getUniqueNumber()}`;
 
         let newSigner: SignerPrivate | null = null;
@@ -186,7 +186,7 @@ class XrplContext {
     }
 
     async addXrplSigner(pubkey: string, weight: number, options: MultiSignOptions = {}): Promise<void> {
-        const elector = new AllVoteElector(1, options.voteTimeout || TIMEOUT);
+        const elector = new AllVoteElector(1, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `addSigner${this.voteContext.getUniqueNumber()}`;
 
         let signer: Signer;
@@ -217,7 +217,7 @@ class XrplContext {
     }
 
     async removeXrplSigner(pubkey: string, options: MultiSignOptions = {}): Promise<void> {
-        const elector = new AllVoteElector(1, options.voteTimeout || TIMEOUT);
+        const elector = new AllVoteElector(1, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `removeSigner${this.voteContext.getUniqueNumber()}`;
 
         let signer: Signer;
@@ -325,7 +325,7 @@ class XrplContext {
      */
     public async makePayment(toAddr: any, amount: any, currency: any, issuer: any = null, memos: Memo[] | null = null, hookParams: HookParameter[] | null = null, options: MultiSignOptions = {}) {
         const amountObj = this.makeAmountObject(amount, currency, issuer);
-        const tx : Transaction = {
+        const tx: Transaction = {
             TransactionType: 'Payment',
             Account: this.xrplAcc.address,
             Amount: amountObj,

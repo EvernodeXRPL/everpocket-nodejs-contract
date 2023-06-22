@@ -45,29 +45,42 @@ class NomadContext {
         const curMoment = await this.clusterContext.evernodeContext.getCurMoment();
         // Find for a nodes which is going to expire soon and not yet scheduled for extends.
         // Nodes which aren't added yet to the Unl even after the threshold.
-        const node = this.clusterContext.getClusterNodes().find(n =>
+        const nodes = this.clusterContext.getClusterNodes().filter(n =>
             n.targetLifeMoments <= n.lifeMoments && curMoment === ((n.createdMoment || 0) + n.lifeMoments));
 
-        if (node) {
-            console.log(`Shrinking the node ${node.pubkey} due to expiring.`);
-            console.log(`Expiry moment: ${((node.createdMoment || 0) + node.lifeMoments)}, Current moment: ${curMoment}`);
-
-            await this.clusterContext.removeNode(node.pubkey).catch(console.error);
+        for (const node of nodes) {
+            try {
+                console.log(`Shrinking the node ${node.pubkey} due to expiring.`);
+                console.log(`Expiry moment: ${((node.createdMoment || 0) + node.lifeMoments)}, Current moment: ${curMoment}`);
+                await this.clusterContext.removeNode(node.pubkey);
+                // Return if at least one node is removed, So others will be removed next round.
+                return;
+            }
+            catch (e) {
+                console.error(e);
+            }
         }
+
     }
 
     public async shrinkIfNotMatured(): Promise<void> {
         const curLcl = this.hpContext.lclSeqNo;
         // Find for a nodes which is going to expire soon and not yet scheduled for extends.
         // Nodes which aren't added yet to the Unl even after the threshold.
-        const node = this.clusterContext.getClusterNodes().find(n =>
+        const nodes = this.clusterContext.getClusterNodes().filter(n =>
             !n.isUnl && curLcl - n.createdOnLcl > IMMATURE_KICK_THRESHOLD);
 
-        if (node) {
-            console.log(`Shrinking the node ${node.pubkey} due to not getting matured.`);
-            console.log(`Created on lcl: ${node.createdOnLcl}, Current moment: ${curLcl}`);
-
-            await this.clusterContext.removeNode(node.pubkey).catch(console.error);
+        for (const node of nodes) {
+            try {
+                console.log(`Shrinking the node ${node.pubkey} due to not getting matured.`);
+                console.log(`Created on lcl: ${node.createdOnLcl}, Current moment: ${curLcl}`);
+                await this.clusterContext.removeNode(node.pubkey);
+                // Return if at least one node is removed, So others will be removed next round.
+                return;
+            }
+            catch (e) {
+                console.error(e);
+            }
         }
     }
 }

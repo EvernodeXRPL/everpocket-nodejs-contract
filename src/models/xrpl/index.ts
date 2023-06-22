@@ -1,5 +1,5 @@
 import { VoteContext } from "../../context";
-import { VoteContextOptions } from "../vote";
+import { VoteContextOptions, VoteElectorOptions } from "../vote";
 
 export interface Signer {
   account: string;
@@ -38,7 +38,7 @@ export interface MultiSignOptions {
   quorum?: number;
   weight?: number;
   signerCount?: number;
-  voteTimeout?: number;
+  voteElectorOptions?: VoteElectorOptions;
   txOptions?: any;
 }
 

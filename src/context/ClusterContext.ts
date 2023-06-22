@@ -5,10 +5,12 @@ import { EvernodeContext, UtilityContext, VoteContext } from "../context";
 import { ClusterContextOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
 import { ClusterManager } from "../cluster";
 import { AllVoteElector } from "../vote/vote-electors";
+import { VoteElectorOptions } from "../models/vote";
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
 const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16";
 const ALIVENESS_CHECK_THRESHOLD = 5;
+const TIMEOUT = 4000;
 
 class ClusterContext {
     private clusterManager: ClusterManager;
@@ -51,11 +53,11 @@ class ClusterContext {
         await this.evernodeContext.deinit();
     }
 
-    async #setupClusterInfo() {
+    async #setupClusterInfo(options: VoteElectorOptions = {}): Promise<void> {
         const clusterNodes = this.getClusterNodes();
         if (clusterNodes.length === 0) {
             const electionName = `share_node_info${this.voteContext.getUniqueNumber()}`;
-            const elector = new AllVoteElector(0, 2000);
+            const elector = new AllVoteElector(0, options?.timeout || TIMEOUT);
             const contractConfig = await this.hpContext.getConfig();
             const node = <ClusterNode>{
                 pubkey: this.hpContext.publicKey,
@@ -350,6 +352,10 @@ class ClusterContext {
      * @param publickey Public key of the node to be removed.
      */
     public async removeNode(publickey: string): Promise<void> {
+        // If this node contains pending operations, This node cannot be removed until they are completed.
+        if (await this.hasPendingOperations(publickey))
+            throw 'This node cannot be removed yet. It has pending operations.'
+
         // Update patch config if node exists in UNL.
         let config = await this.hpContext.getConfig();
         const index = config.unl.findIndex((p: string) => p === publickey);
@@ -365,6 +371,19 @@ class ClusterContext {
             await this.hpContext.updatePeers(null, [peer]);
 
             this.clusterManager.removeNode(publickey);
+        }
+    }
+
+    public async hasPendingOperations(publickey: string, options: VoteElectorOptions = {}): Promise<boolean> {
+        const elector = new AllVoteElector(1, options?.timeout || TIMEOUT);
+        const electionName = `removeSigner${this.voteContext.getUniqueNumber()}`;
+
+        if (publickey === this.hpContext.publicKey) {
+            const hasPending = this.evernodeContext.hasPendingOperations();
+            return (await this.voteContext.vote(electionName, [hasPending], elector)).map(ob => ob.data)[0];
+        }
+        else {
+            return (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
         }
     }
 }

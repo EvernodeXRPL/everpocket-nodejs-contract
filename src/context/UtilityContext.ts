@@ -87,6 +87,7 @@ class UtilityContext {
                 }
                 else
                     resolve(true);
+                return;
             }, { timeout: 6000 });
         });
     }
@@ -103,9 +104,13 @@ class UtilityContext {
                 return await new Promise<void>(async (resolve2, reject2) => {
                     this.hpClient.on(HotPocket.events.contractOutput, (res: any) => {
                         try {
-                            let obj = res as ClusterMessageResponse;
-                            if (obj.type === ClusterMessageType.MATURED && obj.status === ClusterMessageResponseStatus.OK)
-                                resolve2();
+                            for (const output of res.outputs) {
+                                let obj = JSON.parse(output.toString()) as ClusterMessageResponse;
+                                if (obj.type === ClusterMessageType.MATURED && obj.status === ClusterMessageResponseStatus.OK) {
+                                    resolve2();
+                                    return;
+                                }
+                            }
                         }
                         catch (e) {
                             console.error(e);
@@ -114,8 +119,10 @@ class UtilityContext {
 
                     const input = await this.hpClient.submitContractInput(message);
                     const statRes = await input.submissionStatus;
-                    if (statRes.status != "accepted")
+                    if (statRes.status != "accepted") {
                         reject2("Submission failed. reason: " + statRes.reason);
+                        return;
+                    }
 
                 });
             }, (data: any, error: any) => {
@@ -123,7 +130,7 @@ class UtilityContext {
                     reject(error);
                 else
                     resolve();
-
+                return;
             }, { timeout: 60000 });
         });
     }
