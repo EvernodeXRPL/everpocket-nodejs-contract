@@ -78,6 +78,11 @@ class VoteContext {
         return await election;
     }
 
+    /**
+     * Resolve all the collected votes.
+     * @param electionName Name of the election to resolve.
+     * @returns The vote collection.
+     */
     public resolveVotes(electionName: string): any[] {
         const votes = this.voteCollection[electionName];
         delete this.voteCollection[electionName];

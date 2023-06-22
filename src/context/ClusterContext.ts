@@ -284,7 +284,7 @@ class ClusterContext {
     /**
      * Acquire and add new node to the cluster.
      * @param [lifeMoments=1] Amount of life moments for the instance.
-     * @param options Acquire instance options.
+     * @param [options={}]  Acquire instance options.
      */
     public async addNewClusterNode(lifeMoments: number = 1, options: AcquireOptions = {}): Promise<void> {
         const hpconfig = await this.hpContext.getConfig();
@@ -372,11 +372,17 @@ class ClusterContext {
         }
     }
 
-    public async hasPendingOperations(publickey: string, options: VoteElectorOptions = {}): Promise<boolean> {
+    /**
+     * Check wether there're pending operations for a node.
+     * @param pubkey Public key of the node to check.
+     * @param [options={}] Vote options to collect the check.
+     * @returns true if there're pending operations otherwise false.
+     */
+    public async hasPendingOperations(pubkey: string, options: VoteElectorOptions = {}): Promise<boolean> {
         const elector = new AllVoteElector(1, options?.timeout || TIMEOUT);
         const electionName = `removeSigner${this.voteContext.getUniqueNumber()}`;
 
-        if (publickey === this.hpContext.publicKey) {
+        if (pubkey === this.hpContext.publicKey) {
             const hasPending = this.evernodeContext.hasPendingOperations();
             return (await this.voteContext.vote(electionName, [hasPending], elector)).map(ob => ob.data)[0];
         }

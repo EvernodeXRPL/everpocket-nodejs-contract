@@ -159,6 +159,10 @@ class ClusterManager {
         }
     }
 
+    /**
+     * Remove a node from the UNL.
+     * @param pubkey Node pubkey to remove.
+     */
     public removeNode(pubkey: string): void {
         this.clusterData.nodes = this.clusterData.nodes.filter(n => n.pubkey !== pubkey);
         this.#persist();

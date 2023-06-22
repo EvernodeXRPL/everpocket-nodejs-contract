@@ -14,20 +14,32 @@ class NomadContext {
         this.hpContext = clusterContext.hpContext;
     }
 
+    /**
+     * Initialize the nomad context.
+     */
     public async init(): Promise<void> {
         await this.clusterContext.init();
     }
 
+    /**
+     * Deinitialize the nomad contract.
+     */
     public async deinit(): Promise<void> {
         await this.clusterContext.deinit();
     }
 
+    /**
+     * Start the nomad contract process.
+     */
     public async start(): Promise<void> {
         await this.shrinkIfExpiring();
         await this.shrinkIfNotMatured();
         await this.grow();
     }
 
+    /**
+     * Grow the cluster upto target one by one.
+     */
     public async grow(): Promise<void> {
         const totalCount = this.clusterContext.totalCount();
         // If the pending nodes + cluster node count is less than target node count we need to add missing nodes.
@@ -41,6 +53,9 @@ class NomadContext {
         }
     }
 
+    /**
+     * Shrink the recently expiring nodes one by one.
+     */
     public async shrinkIfExpiring(): Promise<void> {
         const curMoment = await this.clusterContext.evernodeContext.getCurMoment();
         // Find for a nodes which is going to expire soon and not yet scheduled for extends.
@@ -63,6 +78,9 @@ class NomadContext {
 
     }
 
+    /**
+     * Shrink the recently immatures nodes one by one.
+     */
     public async shrinkIfNotMatured(): Promise<void> {
         const curLcl = this.hpContext.lclSeqNo;
         // Find for a nodes which is going to expire soon and not yet scheduled for extends.

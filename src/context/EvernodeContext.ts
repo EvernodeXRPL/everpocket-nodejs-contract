@@ -7,6 +7,9 @@ import { URIToken } from "../models";
 import * as fs from 'fs';
 import * as kp from 'ripple-keypairs';
 import { JSONHelpers } from "../utils";
+import { VoteElectorOptions } from "../models/vote";
+
+const TIMEOUT = 4000;
 
 class EvernodeContext {
     public hpContext: any;
@@ -61,8 +64,9 @@ class EvernodeContext {
 
     /**
      * Check whether there're any completed pending acquires.
+     * @param [options={}] Vote options for payload sharing.
      */
-    async #checkForCompletedAcquires(): Promise<void> {
+    async #checkForCompletedAcquires(options: VoteElectorOptions = {}): Promise<void> {
         // Check for pending transactions and their completion.
         for (const item of this.getPendingAcquires()) {
             const txnInfo = await this.xrplContext.xrplApi.getTxnInfo(item.refId, {});
@@ -84,7 +88,7 @@ class EvernodeContext {
 
                     if (payload) {
                         const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
-                        const elector = new AllVoteElector(1, 1000);
+                        const elector = new AllVoteElector(1, options?.timeout || TIMEOUT);
                         payload = (privateKey ? await this.voteContext.vote(electionName, [payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
 
                         // Updated the acquires if there's a success response.
@@ -146,9 +150,10 @@ class EvernodeContext {
     /**
      * Decides a lease offer collectively.
      * @param hostAddress Host that should be used to take lease offers.
+     * @param [options={}] Vote options for lease decision.
      * @returns URIToken related to the lease offer.
      */
-    public async decideLeaseOffer(hostAddress: string): Promise<URIToken> {
+    public async decideLeaseOffer(hostAddress: string, options: VoteElectorOptions = {}): Promise<URIToken> {
         // Get transaction details to use for xrpl tx submission.
         const hostClient = new evernode.HostClient(hostAddress);
         const leaseOffers = await hostClient.getLeaseOffers();
@@ -158,7 +163,7 @@ class EvernodeContext {
             throw "NO_LEASE_OFFER";
 
         const electionName = `lease_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(this.hpContext.unl.list().length, 1000));
+        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -174,9 +179,10 @@ class EvernodeContext {
     /**
      * Decides a host collectively.
      * @param [preferredHosts=null] List of proffered host addresses.
+     * @param [options={}] Vote options for host decision.
      * @returns Decided host address.
      */
-    public async decideHost(preferredHosts: string[] | null = null): Promise<string> {
+    public async decideHost(preferredHosts: string[] | null = null, options: VoteElectorOptions = {}): Promise<string> {
         const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
 
         // Choose from hosts that have available instances.
@@ -190,7 +196,7 @@ class EvernodeContext {
             throw 'There are no vacant hosts in the network';
 
         const electionName = `host_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(this.hpContext.unl.list().length, 1000));
+        const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -205,14 +211,15 @@ class EvernodeContext {
 
     /**
      * Decide a encryption key pair collectively
+     * @param [options={}] Vote options for message key decision.
      * @returns Public key of the decided key pair.
      */
-    public async decideMessageKey(): Promise<string> {
+    public async decideMessageKey(options: VoteElectorOptions = {}): Promise<string> {
         const seed = kp.generateSeed();
         const keyPair: Record<string, any> = kp.deriveKeypair(seed);
 
         const electionName = `message_key_selection${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [keyPair.publicKey], new AllVoteElector(this.hpContext.unl.list().length, 1000));
+        const voteRound = this.voteContext.vote(electionName, [keyPair.publicKey], new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -235,10 +242,15 @@ class EvernodeContext {
         return collection[0];
     }
 
-    public async getCurMoment() {
+    /**
+     * Get the current evernode moment.
+     * @param [options={}] Vote options to collect the current moment value.
+     * @returns The current moment value
+     */
+    public async getCurMoment(options: VoteElectorOptions = {}) {
         // Vote for node created moment.
         const electionName = `share_node_create_moment${this.voteContext.getUniqueNumber()}`;
-        const elector = new AllVoteElector(this.hpContext.unl.list().length, 2000);
+        const elector = new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT);
         const moment = await this.registryClient.getMoment();
         const nodes: number[] = (await this.voteContext.vote(electionName, [moment], elector)).map(ob => ob.data).sort();
         return nodes[0];
@@ -393,6 +405,10 @@ class EvernodeContext {
         this.persistAcquireData();
     }
 
+    /**
+     * Check wether there are any pending acquires to decrypt from running host.
+     * @returns true if there are any operations otherwise false.
+     */
     public hasPendingOperations(): boolean {
         // Check if this node has message keys for pending acquires.
         for (const item of this.getPendingAcquires()) {
