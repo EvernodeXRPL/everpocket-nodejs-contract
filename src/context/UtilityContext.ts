@@ -32,7 +32,7 @@ class UtilityContext {
         await this.#initClient(nodes);
 
         const timer = setTimeout(async () => {
-            await handleFailure(`Timeout waiting for Hot Pocket connection`);
+            await handleFailure(`Timeout waiting for HotPocket connection`);
         }, options.timeout || 60000);
 
         const handleFailure = async (error: any) => {
@@ -62,7 +62,7 @@ class UtilityContext {
                 }
             }
             else {
-                await handleFailure(`Hot Pocket connection failed for requested nodes`);
+                await handleFailure(`HotPocket connection failed for requested nodes`);
             }
         }
         catch (e) {
