@@ -18,3 +18,19 @@ export class Peer {
     return `${this.ip}:${this.port}`
   }
 }
+
+export interface Contract {
+  targetNodeCount: number;
+  targetLifeTime: number;
+}
+
+export interface User {
+  publicKey: string;
+  inputs: [number, number];
+
+  send(msg: string): Promise<void>;
+}
+
+export interface ConnectionOptions {
+  timeout?: number;
+}

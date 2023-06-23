@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+
 class JSONHelpers {
     /**
      * Convert json object with snake_case properties to a given class instance.
@@ -31,6 +33,30 @@ class JSONHelpers {
                 this.castFromModel(value) : value;
         }
         return returnObj;
+    }
+
+    /**
+     * Write a given json object into a file
+     * @param filePath File path of the json.
+     * @param obj Json object to be written.
+     */
+    public static writeToFile(filePath: string, obj: any) {
+        const stringified = JSON.stringify(obj, null, 4); // convert the updated data back to JSON string
+        fs.writeFileSync(filePath, stringified);
+    }
+
+    /**
+     * Read a json from given file and cast to T.
+     * @param filePath File path of the json.
+     * @returns Casted object or null if file not exist.
+     */
+    public static readFromFile<T>(filePath: string): T | null {
+        if (!fs.existsSync(filePath))
+            return null;
+
+        const rawData = fs.readFileSync(filePath, 'utf8');
+        const data = rawData ? JSON.parse(rawData) : {};
+        return data as T;
     }
 }
 
