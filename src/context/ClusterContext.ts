@@ -53,6 +53,10 @@ class ClusterContext {
         await this.evernodeContext.deinit();
     }
 
+    /**
+     * Setup initial cluster info and prepare the data file.
+     * @param [options={}] Vote options to collect the vote info. 
+     */
     async #setupClusterInfo(options: VoteElectorOptions = {}): Promise<void> {
         const clusterNodes = this.getClusterNodes();
         if (clusterNodes.length === 0) {
@@ -242,24 +246,26 @@ class ClusterContext {
             response.type = message.type;
             switch (response.type) {
                 case ClusterMessageType.MATURED: {
+                    // Set status as fail for default.
+                    response.status = ClusterMessageResponseStatus.FAIL;
+
                     // Process user messages sequentially to avoid conflicts.
                     // Lock the user message processor.
                     await this.#acquireUserMessageProc();
 
-                    try {
+                    try {    
                         // Check if node exist in the cluster.
                         // Add to UNL if exist. Note: The node's user connection will be made from node's public key.
                         if (user.publicKey === message.nodePubkey) {
                             const node = this.clusterManager.getNode(message.nodePubkey);
-                            await this.addToUnl(message.nodePubkey);
-                            response.status = ClusterMessageResponseStatus.OK;
+                            if (node) {
+                                await this.addToUnl(message.nodePubkey);
+                                response.status = ClusterMessageResponseStatus.OK;
+                            }
                         }
-                        else
-                            response.status = ClusterMessageResponseStatus.FAIL;
                     }
                     catch (e) {
                         console.error(e);
-                        response.status = ClusterMessageResponseStatus.FAIL;
                     }
                     finally {
                         await user.send(JSON.stringify(response));
