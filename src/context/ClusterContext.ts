@@ -2,7 +2,7 @@ import { AcquireOptions } from "../models/evernode";
 import { Peer, User } from "../models";
 import { Buffer } from 'buffer';
 import { EvernodeContext, UtilityContext, VoteContext } from "../context";
-import { ClusterContextOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
+import { ClusterOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
 import { ClusterManager } from "../cluster";
 import { AllVoteElector } from "../vote/vote-electors";
 import { VoteElectorOptions } from "../models/vote";
@@ -20,7 +20,7 @@ class ClusterContext {
     public evernodeContext: EvernodeContext;
     public utilityContext: UtilityContext;
 
-    public constructor(evernodeContext: EvernodeContext, options: ClusterContextOptions) {
+    public constructor(evernodeContext: EvernodeContext, options: ClusterOptions) {
         this.evernodeContext = evernodeContext;
         this.hpContext = this.evernodeContext.hpContext;
         this.utilityContext = options?.utilityContext || new UtilityContext(this.hpContext);

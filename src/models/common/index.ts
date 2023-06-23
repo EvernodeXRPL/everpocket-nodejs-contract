@@ -21,13 +21,6 @@ export class Peer {
   }
 }
 
-export interface Contract {
-  targetNodeCount: number;
-  targetLifeMoments: number;
-  preferredHosts: string[];
-  instanceCfg: InstanceConfig;
-}
-
 export interface User {
   publicKey: string;
   inputs: [number, number];

@@ -1,6 +1,6 @@
 import VoteSerializer from "../../vote/VoteSerializer";
 
-export interface VoteContextOptions {
+export interface VoteOptions {
   voteSerializer?: VoteSerializer;
 }
 

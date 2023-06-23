@@ -1,4 +1,4 @@
-import { XrplContextOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter, Transaction } from '../models';
+import { XrplOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter, Transaction } from '../models';
 import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
@@ -15,7 +15,7 @@ class XrplContext {
     public multiSigner: MultiSigner;
     public voteContext: VoteContext;
 
-    public constructor(hpContext: any, address: string, secret: string | null = null, options: XrplContextOptions = {}) {
+    public constructor(hpContext: any, address: string, secret: string | null = null, options: XrplOptions = {}) {
         this.hpContext = hpContext;
         this.xrplApi = options.xrplApi || new evernode.XrplApi();
         this.voteContext = options.voteContext || new VoteContext(this.hpContext, options.voteOptions)

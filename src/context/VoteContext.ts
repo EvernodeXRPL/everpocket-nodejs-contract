@@ -3,7 +3,7 @@ import { Buffer } from 'buffer';
 import { UnlNode } from '../models';
 import VoteSerializer from '../vote/VoteSerializer';
 import { AllVoteElector } from '../vote/vote-electors';
-import { VoteContextOptions } from '../models/vote';
+import { VoteOptions } from '../models/vote';
 
 class VoteContext {
     public hpContext: any;
@@ -12,7 +12,7 @@ class VoteContext {
     private uniqueNumber: number = 0;
     private voteCollection: any = {};
 
-    public constructor(hpContext: any, options: VoteContextOptions = {}) {
+    public constructor(hpContext: any, options: VoteOptions = {}) {
         this.hpContext = hpContext;
         this.voteSerializer = options.voteSerializer || new VoteSerializer();
     }

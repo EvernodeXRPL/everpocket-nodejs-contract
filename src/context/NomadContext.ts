@@ -1,16 +1,16 @@
-import { Contract } from "../models";
+import { NomadOptions } from "../models/nomad";
 import ClusterContext from "./ClusterContext";
 
 const IMMATURE_KICK_THRESHOLD = 20;
 
 class NomadContext {
     public clusterContext: ClusterContext;
-    public contract: Contract;
+    public options: NomadOptions;
     public hpContext: any;
 
-    public constructor(clusterContext: ClusterContext, contract: Contract) {
+    public constructor(clusterContext: ClusterContext, contract: NomadOptions) {
         this.clusterContext = clusterContext;
-        this.contract = contract;
+        this.options = contract;
         this.hpContext = clusterContext.hpContext;
     }
 
@@ -43,12 +43,12 @@ class NomadContext {
     public async grow(): Promise<void> {
         const totalCount = this.clusterContext.totalCount();
         // If the pending nodes + cluster node count is less than target node count we need to add missing nodes.
-        if (this.contract.targetNodeCount > totalCount) {
+        if (this.options.targetNodeCount > totalCount) {
             console.log('Growing the cluster.');
-            console.log(`Target count: ${this.contract.targetNodeCount}, Existing count: ${totalCount}`);
+            console.log(`Target count: ${this.options.targetNodeCount}, Existing count: ${totalCount}`);
 
-            await this.clusterContext.addNewClusterNode(this.contract.targetLifeMoments, {
-                preferredHosts: this.contract.preferredHosts, instanceCfg: this.contract.instanceCfg
+            await this.clusterContext.addNewClusterNode(this.options.targetLifeMoments, {
+                preferredHosts: this.options.preferredHosts, instanceCfg: this.options.instanceCfg
             }).catch(console.error);
         }
     }

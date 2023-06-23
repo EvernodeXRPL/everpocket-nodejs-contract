@@ -43,7 +43,7 @@ const testContract = async (hpContext) => {
         }
         ///////////////////////////////////////////////////////////////////////
 
-        const contract = {
+        const nomadOptions = {
             targetNodeCount: 8,
             targetLifeMoments: 2,
             preferredHosts: [
@@ -62,7 +62,7 @@ const testContract = async (hpContext) => {
         const evernodeContext = new evp.EvernodeContext(xrplContext, evernodeGovernor);
         const utilityContext = new evp.UtilityContext(hpContext);
         const clusterContext = new evp.ClusterContext(evernodeContext, { utilityContext: utilityContext });
-        const nomadContext = new evp.NomadContext(clusterContext, contract);
+        const nomadContext = new evp.NomadContext(clusterContext, nomadOptions);
 
         // Listen to incoming user messages and feed them to evernodeContext.
         const userHandlers = [];

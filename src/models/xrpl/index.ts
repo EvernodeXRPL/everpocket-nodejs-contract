@@ -1,5 +1,5 @@
 import { VoteContext } from "../../context";
-import { VoteContextOptions, VoteElectorOptions } from "../vote";
+import { VoteOptions, VoteElectorOptions } from "../vote";
 
 export interface Signer {
   account: string;
@@ -28,10 +28,10 @@ export interface TransactionSubmissionInfo {
   maxLedgerSequence: number;
 }
 
-export interface XrplContextOptions {
+export interface XrplOptions {
   xrplApi?: any;
   voteContext?: VoteContext;
-  voteOptions?: VoteContextOptions;
+  voteOptions?: VoteOptions;
 }
 
 export interface MultiSignOptions {

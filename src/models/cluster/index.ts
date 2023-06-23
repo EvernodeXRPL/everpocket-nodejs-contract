@@ -1,7 +1,7 @@
 import { UtilityContext } from "../../context";
 import { AcquiredNode, PendingAcquire } from "../evernode";
 
-export interface ClusterContextOptions {
+export interface ClusterOptions {
   utilityContext: UtilityContext;
 }
 
