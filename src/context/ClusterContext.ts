@@ -1,7 +1,7 @@
 import { AcquireOptions } from "../models/evernode";
 import { Contract, Peer, User } from "../models";
 import { Buffer } from 'buffer';
-import { EvernodeContext, UtilityContext, VoteContext } from "../context";
+import { EvernodeContext, UtilityContext, VoteContext, XrplContext } from "../context";
 import { ClusterContextOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
 import { ClusterManager } from "../cluster";
 import { AllVoteElector } from "../vote/vote-electors";
@@ -18,8 +18,9 @@ class ClusterContext {
     public evernodeContext: EvernodeContext;
     public utilityContext: UtilityContext;
     public contract: Contract;
+    public xrplContext: XrplContext;
 
-    public constructor(evernodeContext: EvernodeContext, contract: Contract, options: ClusterContextOptions) {
+    public constructor(evernodeContext: EvernodeContext, contract: Contract, options: ClusterContextOptions, xrplContext: XrplContext) {
         this.evernodeContext = evernodeContext;
         this.hpContext = this.evernodeContext.hpContext;
         this.contract = contract;
@@ -27,6 +28,7 @@ class ClusterContext {
         this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
         this.userMessageProcessing = false;
+        this.xrplContext = xrplContext;
     }
 
     /**
@@ -330,6 +332,7 @@ class ClusterContext {
      * @param pubkey Public key of the node to be removed.
      */
     async removeNode(pubkey: string): Promise<void> {
+        await this.xrplContext.replaceSignerList(pubkey, {});
         // Update patch config.
         let config = await this.hpContext.getConfig();
         config.unl = config.unl.filter((p: string) => p != pubkey);

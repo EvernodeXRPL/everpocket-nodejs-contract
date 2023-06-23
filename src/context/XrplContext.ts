@@ -249,6 +249,57 @@ class XrplContext {
             this.multiSigner.removeSigner();
     }
 
+    async replaceSignerList(pubkey: string ,options: MultiSignOptions = {}): Promise<void> {
+        const elector = new AllVoteElector(1, options.voteTimeout || TIMEOUT);
+        const electionName = `removeSigner${this.voteContext.getUniqueNumber()}`;
+
+        let signer: Signer;
+        let curSigner: SignerPrivate | null = null;
+        let newSigner: SignerPrivate | null = null;
+        // If this is a the owner, Generate new signer and send it.
+        // Otherwise just collect the signer.
+        if (pubkey === this.hpContext.publicKey) {
+            
+            // Removal of signer
+            curSigner = this.multiSigner.getSigner();
+            signer = (await this.voteContext.vote(electionName, [<Signer>{
+                account: curSigner?.account,
+                weight: curSigner?.weight
+            }], elector)).map(ob => ob.data)[0];
+
+            // Assigninig new signer
+            newSigner = this.multiSigner.generateSigner();
+            signer = (await this.voteContext.vote(electionName, [<Signer>{
+                account: signer.account,
+                weight: signer.weight
+            }], elector)).map(ob => ob.data)[0];
+        }
+        else {
+            signer = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+        }
+
+        let signerList = await this.getSignerList();
+
+        if (signerList && signer) {
+            // Remove signer from the list and renew the signer list.
+            signerList.signerList = signerList.signerList.filter(s => s.account != signer.account);
+
+            // Add signer to the list and renew the signer list.
+            signerList.signerList.push(signer);
+
+            if (options.quorum)
+                signerList.signerQuorum = options.quorum;
+            await this.setSignerList(signerList!, options);
+        }
+
+        if (curSigner)
+            this.multiSigner.removeSigner();
+
+        if (curSigner)
+            this.multiSigner.setSigner(curSigner);  
+        
+    }
+
     /**
      * Returns the signer list of the account
      * @returns An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || undefined 
