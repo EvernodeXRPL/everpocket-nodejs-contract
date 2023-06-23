@@ -205,7 +205,7 @@ class ClusterContext {
     }
 
     /**
-     * Feed user messaged to the cluster context.
+     * Feed user message to the cluster context.
      * @param user Contract client user.
      * @param msg Message sent by the user.
      * @returns Response for the cluster message with status.
@@ -242,8 +242,6 @@ class ClusterContext {
                         // Release the user message processor.
                         this.#releaseUserMessageProc();
                     }
-
-
 
                     break;
                 }
@@ -329,21 +327,21 @@ class ClusterContext {
 
     /**
      * Removes a provided a node from the cluster.
-     * @param publickey Public key of the node to be removed.
+     * @param pubkey Public key of the node to be removed.
      */
-    async removeNode(publickey: string): Promise<void> {
+    async removeNode(pubkey: string): Promise<void> {
         // Update patch config.
         let config = await this.hpContext.getConfig();
-        config.unl = config.unl.filter((p: string) => p != publickey);
+        config.unl = config.unl.filter((p: string) => p != pubkey);
         await this.hpContext.updateConfig(config);
 
         // Update peer list.
-        const node = this.clusterManager.getNode(publickey);
+        const node = this.clusterManager.getNode(pubkey);
         if (node) {
             let peer = `${node?.ip}:${node?.peerPort}`
             await this.hpContext.updatePeers(null, [peer]);
 
-            this.clusterManager.removeNode(publickey);
+            this.clusterManager.removeNode(pubkey);
         }
     }
 }
