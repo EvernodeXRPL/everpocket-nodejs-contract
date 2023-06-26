@@ -270,8 +270,8 @@ class XrplContext {
             // Assigninig new signer
             newSigner = this.multiSigner.generateSigner();
             signer = (await this.voteContext.vote(electionName, [<Signer>{
-                account: signer.account,
-                weight: signer.weight
+                account: newSigner?.account,
+                weight: curSigner?.weight
             }], elector)).map(ob => ob.data)[0];
         }
         else {
