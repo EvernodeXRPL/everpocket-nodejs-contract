@@ -2,20 +2,29 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rNC3aBTwEVJXdHo5yP73H8hCJNju4GqvJ1";
-const masterSecret = "snCUGkxT4bEZMPTf6WArK9itc2yYK";
+const exectsFile = "exects.txt";
+const masterAddress = "r3Yss1Ggo5td8zug1G7VnWPCUSYai8pmZ2";
+const masterSecret = "ssHD1y3DUX9TYA2PcUxLWS1TMUo7v";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
 const ip = "localhost";
 const port = 8081;
 
-const evernodeGovernor = "raVhw4Q8FQr296jdaDLDfZ4JDhh7tFG7SF";
+const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 
 const MAX_ACQUIRES = 5;
 const MAX_CLUSTER = 8;
 
 const testContract = async (hpContext) => {
     if (!hpContext.readonly) {
+        ///// This block is added to avoid forever syncing /////
+        fs.appendFileSync(exectsFile, "ts:" + hpContext.timestamp + "\n");
+
+        const stats = fs.statSync(exectsFile);
+        if (stats.size > 100 * 1024 * 1024) // If more than 100 MB, empty the file.
+            fs.truncateSync(exectsFile);
+        ////////////////////////////////////////////////////////
+
         let nonSigners = [];
         if (hpContext.unl.list().length > 3)
             nonSigners = (hpContext.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
@@ -44,10 +53,40 @@ const testContract = async (hpContext) => {
         ///////////////////////////////////////////////////////////////////////
 
         const nomadOptions = {
-            targetNodeCount: 8,
+            targetNodeCount: 15,
             targetLifeMoments: 2,
             preferredHosts: [
-                'rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww'
+                "rP4zJ6ZWoHYC8cj6GkWHyiUJT15xwzLCLm",
+                "rwqWhVJZ1SgXBBpBNQ194sdDNBbUZTaTem",
+                "rP9qLtcfbymrhLfsFsiz86iPhFqCqkgRXW",
+                "rE29fENEy8GBiFhcAnagCLBbJ7XqnaVmSX",
+                "rLkSafYKvf5vBfFyQMVB6touhUnS6j5HR9",
+                "rKUq1MnzfqnZAUArkE2ttL1n4UavwUzGrn",
+                "rahTwEZefDFtShmgjsArNzxTCT8Zj8HXKN",
+                "rw4fF5LDQsonyoYiEYrgPgTC2asnCQQZ6g",
+                "rrssGm5h8aWncB3CGMuQ2WGfexubbeCTLV",
+                "rEmGJ3uu7DSrNfM5JSZnFtMjYhLbSmVJ3A",
+                "rfBQaUjF9UZWjdJ33hGDeas1hEXK7DmfCV",
+                "rswHs4bzLBSyfd2fWtjuzUxAqudfrzRDtT",
+                "r4dVikgRzdVuZcFfMWJWiUo8iJxmYGDmiS",
+                "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
+                "rhXBNAJbHKym75tazYAxcEbghNN6vLyYZE",
+                "rKqDVS5fYEWDNivosnFiri1bXfqt2ebj7q",
+                "rP3MGBqPdAXVrBGvP1Hn1UFozuaQvSxMMQ",
+                "rErmdQZLmAauqjY7ig8KeLAGhfxeVAHHnA",
+                "rnG2Q9cqrmCvWNZvMG4JHzG96deqEg5HDx",
+                "rB2SBLDLBUwaUV2QegZxoztpkJLgh1Kvcx",
+                "r931fvw3imdtULs522s5VqV9EaQ21pu6ja",
+                "r4LF5L5tq7JdsAUY5YUXjAU1J6xZtm47HP",
+                "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
+                "rGnsENqQKqPNQKWMSNxbZcMuubjJaaBpf5",
+                "rMaHq7P7ibkbeiykRGyTsdyFEDBRGrLdx6",
+                "rHJqCseZFzCveSTdtJuDNpD4ARoMy41E1C",
+                "rGYPizbATsej8iJ4kDeFf7tRysf6ggwcQY",
+                "rMu8RLEKTtyWuhko1F5dVZoUAiVpRpi5GB",
+                "rhsBuUnoV1yGSpSVYgzFMFeTcFLvg8ZQnh",
+                "rhYqbRQpSy7RtQtXjfurprdB4Gj8PAJW2X",
+                "rfZFCjpFD1zhJP3DsSWy9NVUCmm9Kkhg4w"
             ],
             instanceCfg: {
                 config: {
