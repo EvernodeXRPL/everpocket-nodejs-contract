@@ -15,6 +15,8 @@ const TIMEOUT = 4000;
 class ClusterContext {
     private clusterManager: ClusterManager;
     private userMessageProcessing: boolean;
+    private maturityLclThreshold: number;
+    private initialized: boolean = false;
     public hpContext: any;
     public voteContext: VoteContext;
     public evernodeContext: EvernodeContext;
@@ -26,6 +28,7 @@ class ClusterContext {
         this.utilityContext = options?.utilityContext || new UtilityContext(this.hpContext);
         this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
+        this.maturityLclThreshold = options.maturityLclThreshold || 0;
         this.userMessageProcessing = false;
     }
 
@@ -33,13 +36,18 @@ class ClusterContext {
      * Initiates the operations regarding the cluster.
      */
     public async init(): Promise<void> {
+        if (this.initialized)
+            return;
+
         await this.evernodeContext.init();
 
         try {
             await this.#setupClusterInfo();
             await this.#checkForPendingNodes();
-            await this.#checkForNewNodes();
+            await this.#checkForMatured();
+            await this.#checkForAcknowledged();
             await this.#checkForExtends();
+            this.initialized = true;
         } catch (e) {
             await this.deinit();
             throw e;
@@ -50,7 +58,11 @@ class ClusterContext {
      * Deinitiates the operations regarding the cluster.
      */
     public async deinit(): Promise<void> {
+        if (!this.initialized)
+            return;
+
         await this.evernodeContext.deinit();
+        this.initialized = false;
     }
 
     /**
@@ -134,15 +146,38 @@ class ClusterContext {
      * Check for node which needed to extended.
      */
     async #checkForExtends(): Promise<void> {
+        // Extend one by one to avoid contract hanging.
         const clusterNodes = this.getClusterNodes();
+        const pendingExtend = clusterNodes.find(n => n.targetLifeMoments > n.lifeMoments);
 
-        for (const node of clusterNodes.filter(n => n.targetLifeMoments > n.lifeMoments)) {
-            const extension = node.targetLifeMoments - node.lifeMoments;
+        if (pendingExtend) {
+            const extension = pendingExtend.targetLifeMoments - pendingExtend.lifeMoments;
             try {
-                console.log(`Extending node ${node.pubkey} by ${extension}.`);
-                const res = await this.evernodeContext.extendSubmit(node.host, extension, node.name);
+                console.log(`Extending node ${pendingExtend.pubkey} by ${extension}.`);
+                const res = await this.evernodeContext.extendSubmit(pendingExtend.host, extension, pendingExtend.name);
                 if (res)
-                    this.clusterManager.updateLifeMoments(node.pubkey, node.lifeMoments + extension);
+                    this.clusterManager.updateLifeMoments(pendingExtend.pubkey, pendingExtend.lifeMoments + extension);
+            } catch (e) {
+                console.error(e)
+            }
+        }
+    }
+
+    /**
+     * Check for maturity acknowledged nodes.
+     */
+    async #checkForAcknowledged(): Promise<void> {
+        // Add one by one to Unl to avoid forking.
+        const clusterNodes = this.getClusterNodes();
+        const pendingAcknowledged = clusterNodes
+            .filter(n => !n.isUnl && n.ackReceivedOnLcl && (n.ackReceivedOnLcl + this.maturityLclThreshold) < this.hpContext.lclSeqNo)
+            .sort((a, b) => (a.ackReceivedOnLcl || 0) < (b.ackReceivedOnLcl || 0) ? -1 : 1);
+
+        if (pendingAcknowledged && pendingAcknowledged.length > 0) {
+            const node = pendingAcknowledged[0];
+            try {
+                console.log(`Adding node ${node.pubkey} as a Unl node.`);
+                await this.addToUnl(node.pubkey);
             } catch (e) {
                 console.error(e)
             }
@@ -152,11 +187,11 @@ class ClusterContext {
     /**
      * Check for new node which are synced and matured.
      */
-    async #checkForNewNodes(): Promise<void> {
+    async #checkForMatured(): Promise<void> {
         const selfNode = this.clusterManager.getNode(this.hpContext.publicKey);
 
         // If this node is not in UNL acknowledge others to add to UNL.
-        if (selfNode && !selfNode.isUnl) {
+        if (selfNode && !selfNode.isUnl && !selfNode.ackReceivedOnLcl) {
             await this.#acknowledgeMaturity();
             console.log(`Maturity acknowledgement sent.`);
         }
@@ -181,6 +216,14 @@ class ClusterContext {
      */
     public getClusterUnlNodes(): ClusterNode[] {
         return this.clusterManager.getUnlNodes();
+    }
+
+    /**
+     * Get all Unl nodes which are not in the cluster.
+     * @returns List of nodes in the cluster which are not in Unl.
+     */
+    public getClusterNonUnlNodes(): ClusterNode[] {
+        return this.clusterManager.getNonUnlNodes();
     }
 
     /**
@@ -253,14 +296,15 @@ class ClusterContext {
                     // Lock the user message processor.
                     await this.#acquireUserMessageProc();
 
-                    try {    
+                    try {
                         // Check if node exist in the cluster.
                         // Add to UNL if exist. Note: The node's user connection will be made from node's public key.
                         if (user.publicKey === message.nodePubkey) {
                             const node = this.clusterManager.getNode(message.nodePubkey);
                             if (node) {
-                                await this.addToUnl(message.nodePubkey);
+                                this.clusterManager.markAsMatured(message.nodePubkey, this.hpContext.lclSeqNo)
                                 response.status = ClusterMessageResponseStatus.OK;
+                                console.log(`Maturity acknowledgement received from node ${message.nodePubkey}.`);
                             }
                         }
                     }

@@ -33,7 +33,7 @@ const testContract = async (hpContext) => {
 
         const signerToAdd = nonSigners.length ? nonSigners[0] : null;
         const signerCount = hpContext.unl.list().length - nonSigners.length;
-        const quorum = signerCount * signerWeight;
+        const quorum = Math.floor(signerCount * signerWeight * 0.8);
 
         const voteContext = new evp.VoteContext(hpContext);
 
@@ -53,7 +53,7 @@ const testContract = async (hpContext) => {
         ///////////////////////////////////////////////////////////////////////
 
         const nomadOptions = {
-            targetNodeCount: 15,
+            targetNodeCount: 30,
             targetLifeMoments: 2,
             preferredHosts: [
                 "rP4zJ6ZWoHYC8cj6GkWHyiUJT15xwzLCLm",
@@ -278,7 +278,7 @@ const removeNode = async (clusterContext) => {
 }
 
 const runNomadContract = async (nomadContext) => {
-    await nomadContext.init();
+    await nomadContext.clusterContext.init();
 
     try {
         const pendingNodes = nomadContext.clusterContext.getPendingNodes();
@@ -289,7 +289,7 @@ const runNomadContract = async (nomadContext) => {
         console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
         console.log("Unl: ", nomadContext.clusterContext.hpContext.unl.list().map(n => n.publicKey));
 
-        await nomadContext.start();
+        await nomadContext.init();
     } catch (e) {
         console.error(e);
     } finally {

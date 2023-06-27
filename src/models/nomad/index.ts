@@ -1,8 +1,9 @@
 import { InstanceConfig } from "../evernode";
 
 export interface NomadOptions {
-    targetNodeCount: number;
-    targetLifeMoments: number;
-    preferredHosts: string[];
-    instanceCfg: InstanceConfig;
-  }
+  targetNodeCount: number;
+  targetLifeMoments: number;
+  preferredHosts?: string[];
+  instanceCfg?: InstanceConfig;
+  parallelGrow?: boolean;
+}

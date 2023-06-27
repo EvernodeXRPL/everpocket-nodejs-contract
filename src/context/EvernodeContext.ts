@@ -18,6 +18,7 @@ class EvernodeContext {
     private acquireDataFile: string = "acquires.json";
     private acquireData: AcquireData = { acquiredNodes: [], pendingAcquires: [] };
     private registryClient: any;
+    private initialized: boolean = false;
 
     public constructor(xrplContext: XrplContext, governorAddress: string) {
         this.xrplContext = xrplContext;
@@ -40,6 +41,9 @@ class EvernodeContext {
      * Initialize the context.
      */
     public async init(): Promise<void> {
+        if (this.initialized)
+            return;
+
         await this.xrplContext.init();
 
         try {
@@ -47,6 +51,7 @@ class EvernodeContext {
             await this.registryClient.connect();
 
             await this.#checkForCompletedAcquires();
+            this.initialized = true;
         } catch (e) {
             await this.deinit();
             throw e;
@@ -57,9 +62,13 @@ class EvernodeContext {
      * Deinitialize the context.
      */
     public async deinit(): Promise<void> {
+        if (!this.initialized)
+            return;
+
         if (this.registryClient)
             await this.registryClient.disconnect();
         await this.xrplContext.deinit();
+        this.initialized = false;
     }
 
     /**
@@ -92,11 +101,13 @@ class EvernodeContext {
                         payload = (privateKey ? await this.voteContext.vote(electionName, [payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
 
                         // Updated the acquires if there's a success response.
-                        if (payload !== 'acquire_error')
-                            await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
-                        await this.updatePendingAcquireInfo(item, "DELETE");
-                        if (privateKey)
-                            fs.unlinkSync(`../${item.messageKey}.txt`);
+                        if (payload) {
+                            if (payload !== 'acquire_error')
+                                await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
+                            await this.updatePendingAcquireInfo(item, "DELETE");
+                            if (privateKey)
+                                fs.unlinkSync(`../${item.messageKey}.txt`);
+                        }
                     }
                 }
             }

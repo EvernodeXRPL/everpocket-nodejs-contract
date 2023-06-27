@@ -118,6 +118,14 @@ class ClusterManager {
     }
 
     /**
+     * Get cluster nodes which are not in Unl.
+     * @returns List of cluster nodes which are not in Unl.
+     */
+    public getNonUnlNodes(): ClusterNode[] {
+        return this.clusterData.nodes.filter(n => !n.isUnl);
+    }
+
+    /**
      * Get cluster node by pubkey if exist.
      * @param pubkey Public key of the node to find.
      * @returns Cluster node if exists, otherwise null.
@@ -155,6 +163,23 @@ class ClusterManager {
         if (!this.clusterData.nodes[index].isUnl) {
             this.clusterData.nodes[index].isUnl = true;
             this.clusterData.nodes[index].addedToUnlOnLcl = lclSeqNo;
+            this.#persist();
+        }
+    }
+
+    /**
+     * Mark the node as matured.
+     * @param pubkey Public key of the node.
+     * @param lclSeqNo Current lcl sequence number.
+     */
+    public markAsMatured(pubkey: string, lclSeqNo: number): void {
+        const index = this.clusterData.nodes.findIndex(n => n.pubkey === pubkey);
+
+        if (index === -1)
+            throw 'Pubkey does not exist in the cluster.';
+
+        if (!this.clusterData.nodes[index].ackReceivedOnLcl) {
+            this.clusterData.nodes[index].ackReceivedOnLcl = lclSeqNo;
             this.#persist();
         }
     }

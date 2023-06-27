@@ -3,11 +3,13 @@ import { AcquiredNode, PendingAcquire } from "../evernode";
 
 export interface ClusterOptions {
   utilityContext: UtilityContext;
+  maturityLclThreshold?: number;
 }
 
 export interface ClusterNode extends AcquiredNode {
   createdOnLcl: number;
   addedToUnlOnLcl?: number;
+  ackReceivedOnLcl?: number;
   isUnl: boolean;
   isQuorum: boolean;
   createdMoment?: number;

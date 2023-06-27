@@ -1,9 +1,10 @@
 import { NomadOptions } from "../models/nomad";
 import ClusterContext from "./ClusterContext";
 
-const IMMATURE_KICK_THRESHOLD = 20;
+const IMMATURE_KICK_THRESHOLD = 10;
 
 class NomadContext {
+    private initialized: boolean = false;
     public clusterContext: ClusterContext;
     public options: NomadOptions;
     public hpContext: any;
@@ -18,32 +19,44 @@ class NomadContext {
      * Initialize the nomad context.
      */
     public async init(): Promise<void> {
+        if (this.initialized)
+            return;
+
         await this.clusterContext.init();
+        await this.shrinkIfExpiring();
+        await this.shrinkIfNotMatured();
+        await this.grow();
+        this.initialized = true;
     }
 
     /**
      * Deinitialize the nomad contract.
      */
     public async deinit(): Promise<void> {
-        await this.clusterContext.deinit();
-    }
+        if (!this.initialized)
+            return;
 
-    /**
-     * Start the nomad contract process.
-     */
-    public async start(): Promise<void> {
-        await this.shrinkIfExpiring();
-        await this.shrinkIfNotMatured();
-        await this.grow();
+        await this.clusterContext.deinit();
+        this.initialized = false;
     }
 
     /**
      * Grow the cluster upto target one by one.
      */
     public async grow(): Promise<void> {
+        // Acquire one by one to avoid contract hanging.
         const totalCount = this.clusterContext.totalCount();
         // If the pending nodes + cluster node count is less than target node count we need to add missing nodes.
         if (this.options.targetNodeCount > totalCount) {
+            if (!this.options.parallelGrow) {
+                // Skip growing if there are node which are not yet added to Unl (Still syncing) or pending.
+                // This will grow the cluster one by one.
+                const nonUnlNodes = this.clusterContext.getClusterNonUnlNodes();
+                const pendingNodes = this.clusterContext.getPendingNodes();
+                if ((nonUnlNodes && nonUnlNodes.length > 0) || (pendingNodes && pendingNodes.length))
+                    return;
+            }
+
             console.log('Growing the cluster.');
             console.log(`Target count: ${this.options.targetNodeCount}, Existing count: ${totalCount}`);
 
@@ -86,7 +99,7 @@ class NomadContext {
         // Find for a nodes which is going to expire soon and not yet scheduled for extends.
         // Nodes which aren't added yet to the Unl even after the threshold.
         const nodes = this.clusterContext.getClusterNodes().filter(n =>
-            !n.isUnl && curLcl - n.createdOnLcl > IMMATURE_KICK_THRESHOLD);
+            !n.isUnl && !n.ackReceivedOnLcl && (curLcl - n.createdOnLcl) > IMMATURE_KICK_THRESHOLD);
 
         for (const node of nodes) {
             try {
