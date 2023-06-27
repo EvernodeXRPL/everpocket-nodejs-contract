@@ -10,6 +10,7 @@ import { JSONHelpers } from "../utils";
 import { VoteElectorOptions } from "../models/vote";
 
 const TIMEOUT = 4000;
+const ACQUIRE_ABANDON_LCL_THRESHOLD = 5;
 
 class EvernodeContext {
     public hpContext: any;
@@ -78,6 +79,17 @@ class EvernodeContext {
     async #checkForCompletedAcquires(options: VoteElectorOptions = {}): Promise<void> {
         // Check for pending transactions and their completion.
         for (const item of this.getPendingAcquires()) {
+            const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
+                fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
+
+            // Abandon waiting for this node if threshold reached.
+            if (item.acquireSentOnLcl < (this.hpContext.lclSeqNo - ACQUIRE_ABANDON_LCL_THRESHOLD)) {
+                console.log(`Maximum acquire wait threshold reached, Abandoning waiting for ${item.refId}.`)
+                await this.updatePendingAcquireInfo(item, "DELETE");
+                if (privateKey)
+                    fs.unlinkSync(`../${item.messageKey}.txt`);
+            }
+
             const txnInfo = await this.xrplContext.xrplApi.getTxnInfo(item.refId, {});
             if (txnInfo && txnInfo.validated) {
                 const txList = await this.xrplContext.xrplAcc.getAccountTrx(txnInfo.ledger_index);
@@ -85,8 +97,6 @@ class EvernodeContext {
                     t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
                     t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
 
-                    const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
-                        fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
                     const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
                     const res = await tenantClient.extractEvernodeEvent(t.tx);
                     let payload = null;
@@ -130,7 +140,13 @@ class EvernodeContext {
         // Perform acquire txn on the selected host.
         const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
 
-        const pendingAcquire = <PendingAcquire>{ host: hostAddress, leaseOfferIdx: leaseOffer.index, refId: res.tx_json.hash, messageKey: messageKey };
+        const pendingAcquire = <PendingAcquire>{
+            host: hostAddress,
+            leaseOfferIdx: leaseOffer.index,
+            refId: res.tx_json.hash,
+            messageKey: messageKey,
+            acquireSentOnLcl: this.hpContext.lclSeqNo
+        };
 
         // Record as a acquire transaction.
         await this.updatePendingAcquireInfo(pendingAcquire);
