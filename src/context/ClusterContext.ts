@@ -215,15 +215,8 @@ class ClusterContext {
      * @returns List of nodes in the cluster which are in Unl.
      */
     public getClusterUnlNodes(): ClusterNode[] {
-        return this.clusterManager.getUnlNodes();
-    }
-
-    /**
-     * Get all Unl nodes which are not in the cluster.
-     * @returns List of nodes in the cluster which are not in Unl.
-     */
-    public getClusterNonUnlNodes(): ClusterNode[] {
-        return this.clusterManager.getNonUnlNodes();
+        // Filter out the nodes which are not persisted in the HotPocket Unl yet.
+        return this.clusterManager.getUnlNodes().filter(n => this.hpContext.unl.list().find((p: any) => p.publicKey === n.pubkey));
     }
 
     /**

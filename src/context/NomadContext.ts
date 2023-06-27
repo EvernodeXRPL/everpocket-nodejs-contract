@@ -51,9 +51,9 @@ class NomadContext {
             if (!this.options.parallelGrow) {
                 // Skip growing if there are node which are not yet added to Unl (Still syncing) or pending.
                 // This will grow the cluster one by one.
-                const nonUnlNodes = this.clusterContext.getClusterNonUnlNodes();
-                const pendingNodes = this.clusterContext.getPendingNodes();
-                if ((nonUnlNodes && nonUnlNodes.length > 0) || (pendingNodes && pendingNodes.length))
+                const nonUnlNodeCount = this.clusterContext.getClusterNodes().length - this.clusterContext.getClusterUnlNodes().length;
+                const pendingNodeCount = this.clusterContext.getPendingNodes().length;
+                if (pendingNodeCount > 0 || nonUnlNodeCount > 0)
                     return;
             }
 

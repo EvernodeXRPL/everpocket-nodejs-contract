@@ -110,19 +110,11 @@ class ClusterManager {
     }
 
     /**
-     * Get cluster nodes in Unl.
-     * @returns List of cluster nodes which are in Unl.
+     * Get cluster nodes in Unl. This will also include the nodes which are added to Unl in this ledger.
+     * @returns List of cluster nodes which are in Unl (including the nodes which are added to Unl in this ledger).
      */
     public getUnlNodes(): ClusterNode[] {
         return this.clusterData.nodes.filter(n => n.isUnl);
-    }
-
-    /**
-     * Get cluster nodes which are not in Unl.
-     * @returns List of cluster nodes which are not in Unl.
-     */
-    public getNonUnlNodes(): ClusterNode[] {
-        return this.clusterData.nodes.filter(n => !n.isUnl);
     }
 
     /**
