@@ -28,7 +28,7 @@ class ClusterContext {
         this.utilityContext = options?.utilityContext || new UtilityContext(this.hpContext);
         this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
-        this.maturityLclThreshold = options.maturityLclThreshold || 0;
+        this.maturityLclThreshold = options.maturityLclThreshold || 1;
         this.userMessageProcessing = false;
     }
 
