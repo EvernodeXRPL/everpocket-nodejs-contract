@@ -4,6 +4,7 @@ import { ClusterData, ClusterNode, PendingNode } from '../models/cluster';
 class ClusterManager {
     private clusterDataFile: string = "cluster.json";
     private clusterData: ClusterData = { nodes: [], pendingNodes: [] };
+    private updated: boolean = false;
 
     public constructor() {
         const data = JSONHelpers.readFromFile<ClusterData>(this.clusterDataFile);
@@ -16,7 +17,10 @@ class ClusterManager {
     /**
      * Persist details of cluster.
      */
-    #persist(): void {
+    public persist(): void {
+        if (!this.updated)
+            return;
+
         try {
             JSONHelpers.writeToFile(this.clusterDataFile, this.clusterData);
         } catch (error) {
@@ -35,7 +39,7 @@ class ClusterManager {
             return;
 
         this.clusterData.pendingNodes.push(node);
-        this.#persist();
+        this.updated = true;
     }
 
     /**
@@ -53,7 +57,7 @@ class ClusterManager {
     public removePending(refId: string): void {
         this.clusterData.pendingNodes = this.clusterData.pendingNodes.filter(n => n.refId !== refId);
 
-        this.#persist();
+        this.updated = true;
     }
 
     /**
@@ -65,7 +69,7 @@ class ClusterManager {
 
         if (index > 0) {
             this.clusterData.pendingNodes[index].aliveCheckCount++;
-            this.#persist();
+            this.updated = true;
         }
     }
 
@@ -81,7 +85,7 @@ class ClusterManager {
             this.clusterData.nodes.push(node);
         }
 
-        this.#persist();
+        this.updated = true;
     }
 
     /**
@@ -98,7 +102,7 @@ class ClusterManager {
                 this.clusterData.nodes.push(node);
         }
 
-        this.#persist();
+        this.updated = true;
     }
 
     /**
@@ -137,7 +141,7 @@ class ClusterManager {
 
         if (index > 0) {
             this.clusterData.nodes[index].lifeMoments = lifeMoments;
-            this.#persist();
+            this.updated = true;
         }
     }
 
@@ -155,7 +159,7 @@ class ClusterManager {
         if (!this.clusterData.nodes[index].isUnl) {
             this.clusterData.nodes[index].isUnl = true;
             this.clusterData.nodes[index].addedToUnlOnLcl = lclSeqNo;
-            this.#persist();
+            this.updated = true;
         }
     }
 
@@ -172,8 +176,23 @@ class ClusterManager {
 
         if (!this.clusterData.nodes[index].ackReceivedOnLcl) {
             this.clusterData.nodes[index].ackReceivedOnLcl = lclSeqNo;
-            this.#persist();
+            this.updated = true;
         }
+    }
+
+    /**
+     * Mark the node as active.
+     * @param pubkey Public key of the node.
+     * @param lclSeqNo Current lcl sequence number.
+     */
+    public markAsActive(pubkey: string, lclSeqNo: number): void {
+        const index = this.clusterData.nodes.findIndex(n => n.pubkey === pubkey);
+
+        if (index === -1)
+            throw 'Pubkey does not exist in the cluster.';
+
+        this.clusterData.nodes[index].activeOnLcl = lclSeqNo;
+        this.updated = true;
     }
 
     /**
@@ -182,9 +201,8 @@ class ClusterManager {
      */
     public removeNode(pubkey: string): void {
         this.clusterData.nodes = this.clusterData.nodes.filter(n => n.pubkey !== pubkey);
-        this.#persist();
+        this.updated = true;
     }
-
 }
 
 export default ClusterManager;

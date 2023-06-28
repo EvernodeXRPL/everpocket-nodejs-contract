@@ -28,7 +28,7 @@ class ClusterContext {
         this.utilityContext = options?.utilityContext || new UtilityContext(this.hpContext);
         this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
-        this.maturityLclThreshold = options.maturityLclThreshold || 1;
+        this.maturityLclThreshold = options.maturityLclThreshold || 2;
         this.userMessageProcessing = false;
     }
 
@@ -43,6 +43,7 @@ class ClusterContext {
 
         try {
             await this.#setupClusterInfo();
+            await this.#updateActiveness();
             await this.#checkForPendingNodes();
             await this.#checkForMatured();
             await this.#checkForAcknowledged();
@@ -61,6 +62,7 @@ class ClusterContext {
         if (!this.initialized)
             return;
 
+        this.clusterManager.persist();
         await this.evernodeContext.deinit();
         this.initialized = false;
     }
@@ -83,6 +85,22 @@ class ClusterContext {
             }
             const nodes: ClusterNode[] = (await this.voteContext.vote(electionName, [node], elector)).map(ob => ob.data);
             this.clusterManager.addNodes(nodes);
+        }
+    }
+
+    /**
+     * Mark the activeness of nodes.
+     */
+    async #updateActiveness(): Promise<void> {
+        const unl = this.hpContext.unl.list();
+        const hpconfig = await this.hpContext.getConfig();
+
+        for (const u of unl) {
+            const gap = Math.abs(u.activeOn - this.hpContext.timestamp);
+            // If last active timestamp is before the roundtime, This node must be active.
+            if (!u.activeOn || gap <= hpconfig.consensus.roundtime) {
+                this.clusterManager.markAsActive(u.publicKey, this.hpContext.lclSeqNo);
+            }
         }
     }
 
@@ -110,13 +128,11 @@ class ClusterContext {
                 else {
                     await this.hpContext.updatePeers([`${info.ip}:${info.peerPort}`], []);
 
-                    const curMoment = await this.evernodeContext.getCurMoment();
-
                     this.clusterManager.addNode(<ClusterNode>{
                         refId: node.refId,
                         contractId: info.contractId,
                         createdOnLcl: this.hpContext.lclSeqNo,
-                        createdMoment: curMoment,
+                        createdOnTimestamp: this.hpContext.timestamp,
                         host: node.host,
                         ip: info.ip,
                         name: info.name,
@@ -146,11 +162,10 @@ class ClusterContext {
      * Check for node which needed to extended.
      */
     async #checkForExtends(): Promise<void> {
-        // Extend one by one to avoid contract hanging.
         const clusterNodes = this.getClusterNodes();
-        const pendingExtend = clusterNodes.find(n => n.targetLifeMoments > n.lifeMoments);
+        const pendingExtends = clusterNodes.filter(n => n.targetLifeMoments > n.lifeMoments);
 
-        if (pendingExtend) {
+        for (const pendingExtend of pendingExtends) {
             const extension = pendingExtend.targetLifeMoments - pendingExtend.lifeMoments;
             try {
                 console.log(`Extending node ${pendingExtend.pubkey} by ${extension}.`);

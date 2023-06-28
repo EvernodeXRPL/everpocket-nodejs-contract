@@ -19,6 +19,7 @@ class EvernodeContext {
     private acquireDataFile: string = "acquires.json";
     private acquireData: AcquireData = { acquiredNodes: [], pendingAcquires: [] };
     private registryClient: any;
+    private updatedData: boolean = false;
     private initialized: boolean = false;
 
     public constructor(xrplContext: XrplContext, governorAddress: string) {
@@ -66,10 +67,25 @@ class EvernodeContext {
         if (!this.initialized)
             return;
 
+        this.#persistAcquireData();
         if (this.registryClient)
             await this.registryClient.disconnect();
         await this.xrplContext.deinit();
         this.initialized = false;
+    }
+
+    /**
+     * Persist details of acquires.
+     */
+    #persistAcquireData(): void {
+        if (!this.updatedData)
+            return;
+
+        try {
+            JSONHelpers.writeToFile(this.acquireDataFile, this.acquireData);
+        } catch (error) {
+            throw `Error writing file ${this.acquireDataFile}: ${error}`;
+        }
     }
 
     /**
@@ -270,6 +286,14 @@ class EvernodeContext {
     }
 
     /**
+     * Get evernode configuration.
+     * @returns The evernode configuration.
+     */
+    public getEvernodeConfig() {
+        return this.registryClient.config;
+    }
+
+    /**
      * Get the current evernode moment.
      * @param [options={}] Vote options to collect the current moment value.
      * @returns The current moment value
@@ -355,17 +379,6 @@ class EvernodeContext {
     }
 
     /**
-     * Persist details of acquires.
-     */
-    public persistAcquireData(): void {
-        try {
-            JSONHelpers.writeToFile(this.acquireDataFile, this.acquireData);
-        } catch (error) {
-            throw `Error writing file ${this.acquireDataFile}: ${error}`;
-        }
-    }
-
-    /**
      * Fetches details of successful acquires.
      * @returns an array of instance acquisitions that are completed.
      */
@@ -408,7 +421,7 @@ class EvernodeContext {
                 this.acquireData.pendingAcquires.splice(indexToRemove, 1);
             }
         }
-        this.persistAcquireData();
+        this.updatedData = true;
     }
 
     /**
@@ -429,7 +442,7 @@ class EvernodeContext {
                 this.acquireData.acquiredNodes.splice(indexToRemove, 1);
             }
         }
-        this.persistAcquireData();
+        this.updatedData = true;
     }
 
     /**
