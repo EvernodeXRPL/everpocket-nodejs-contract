@@ -97,8 +97,8 @@ class ClusterContext {
 
         for (const u of unl) {
             const gap = Math.abs(u.activeOn - this.hpContext.timestamp);
-            // If last active timestamp is before the roundtime, This node must be active.
-            if (!u.activeOn || gap <= hpconfig.consensus.roundtime) {
+            // If last active timestamp is before the twice of roundtime, This node must be active.
+            if (!u.activeOn || gap <= (hpconfig.consensus.roundtime * 2)) {
                 this.clusterManager.markAsActive(u.publicKey, this.hpContext.lclSeqNo);
             }
         }
