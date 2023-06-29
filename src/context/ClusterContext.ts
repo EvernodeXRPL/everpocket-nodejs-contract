@@ -28,7 +28,7 @@ class ClusterContext {
         this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
         this.userMessageProcessing = false;
-        this.xrplContext = xrplContext;
+        this.xrplContext = this.evernodeContext.xrplContext;
     }
 
     /**
