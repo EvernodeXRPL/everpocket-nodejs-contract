@@ -331,20 +331,28 @@ class ClusterContext {
      * Removes a provided a node from the cluster.
      * @param pubkey Public key of the node to be removed.
      */
-    async removeNode(pubkey: string): Promise<void> {
-        await this.xrplContext.replaceSignerList(pubkey, {});
+    async removeNode(oldPubkey: string): Promise<void> {
+        // Sorting logic to determine new pubkey - yet to be implemented
+        let newPubKey = "";
+        // Sorting logic to determine new pubkey - yet to be implemented
+        let isQuorum = this.evernodeContext.xrplContext.isSigner();
+ 
+        if(isQuorum){
+            await this.xrplContext.replaceSignerList(oldPubkey, newPubKey, {});
+        }
+        
         // Update patch config.
         let config = await this.hpContext.getConfig();
-        config.unl = config.unl.filter((p: string) => p != pubkey);
+        config.unl = config.unl.filter((p: string) => p != oldPubkey);
         await this.hpContext.updateConfig(config);
 
         // Update peer list.
-        const node = this.clusterManager.getNode(pubkey);
+        const node = this.clusterManager.getNode(oldPubkey);
         if (node) {
             let peer = `${node?.ip}:${node?.peerPort}`
             await this.hpContext.updatePeers(null, [peer]);
 
-            this.clusterManager.removeNode(pubkey);
+            this.clusterManager.removeNode(oldPubkey);
         }
     }
 }

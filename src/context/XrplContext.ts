@@ -249,54 +249,64 @@ class XrplContext {
             this.multiSigner.removeSigner();
     }
 
-    async replaceSignerList(pubkey: string ,options: MultiSignOptions = {}): Promise<void> {
+    async replaceSignerList(oldPubKey: string , newPubKey: string, options: MultiSignOptions = {}): Promise<void> {
         const elector = new AllVoteElector(1, options.voteTimeout || TIMEOUT);
         const electionName = `removeSigner${this.voteContext.getUniqueNumber()}`;
 
-        let signer: Signer;
-        let curSigner: SignerPrivate | null = null;
-        let newSigner: SignerPrivate | null = null;
+        let newSigner: Signer;
+        let oldSigner: Signer;
+        let generatedCurSigner: SignerPrivate | null = null;
+        let generatedNewSigner: SignerPrivate | null = null;
+        let oldSignerWeight: number;
         // If this is a the owner, Generate new signer and send it.
         // Otherwise just collect the signer.
-        if (pubkey === this.hpContext.publicKey) {
+        if (oldPubKey === this.hpContext.publicKey) {
             
             // Removal of signer
-            curSigner = this.multiSigner.getSigner();
-            signer = (await this.voteContext.vote(electionName, [<Signer>{
-                account: curSigner?.account,
-                weight: curSigner?.weight
+            generatedCurSigner = this.multiSigner.getSigner();
+            oldSigner = (await this.voteContext.vote(electionName, [<Signer>{
+                account: generatedCurSigner?.account,
+                weight: generatedCurSigner?.weight
             }], elector)).map(ob => ob.data)[0];
 
+            oldSignerWeight = generatedCurSigner?.weight ? generatedCurSigner?.weight : 0;
+        }
+
+        else{
+            oldSigner = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+        }
+        
+        if(newPubKey === this.hpContext.publicKey) {
             // Assigninig new signer
-            newSigner = this.multiSigner.generateSigner();
-            signer = (await this.voteContext.vote(electionName, [<Signer>{
-                account: newSigner?.account,
-                weight: curSigner?.weight
+            generatedNewSigner = this.multiSigner.generateSigner();
+            newSigner = (await this.voteContext.vote(electionName, [<Signer>{
+                account: generatedNewSigner?.account,
+                weight: generatedNewSigner?.weight
             }], elector)).map(ob => ob.data)[0];
         }
         else {
-            signer = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+            newSigner = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
         }
 
         let signerList = await this.getSignerList();
 
-        if (signerList && signer) {
+        if (signerList && newSigner && oldSigner) {
             // Remove signer from the list and renew the signer list.
-            signerList.signerList = signerList.signerList.filter(s => s.account != signer.account);
+            signerList.signerList = signerList.signerList.filter(s => s.account != oldSigner.account);
 
             // Add signer to the list and renew the signer list.
-            signerList.signerList.push(signer);
+            signerList.signerList.push(newSigner);
 
             if (options.quorum)
                 signerList.signerQuorum = options.quorum;
             await this.setSignerList(signerList!, options);
         }
 
-        if (curSigner)
+        if (generatedCurSigner)
             this.multiSigner.removeSigner();
 
-        if (curSigner)
-            this.multiSigner.setSigner(curSigner);  
+        if (generatedNewSigner)
+            this.multiSigner.setSigner(generatedNewSigner);  
         
     }
 
