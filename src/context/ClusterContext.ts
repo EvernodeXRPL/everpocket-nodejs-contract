@@ -333,14 +333,26 @@ class ClusterContext {
      */
     async removeNode(oldPubkey: string): Promise<void> {
         // Sorting logic to determine new pubkey - yet to be implemented
-        let newPubKey = "";
-        // Sorting logic to determine new pubkey - yet to be implemented
-        let isQuorum = this.evernodeContext.xrplContext.isSigner();
+        const clusterNodes = this.getClusterNodes();
+
+        // Get isQuorum false nodes
+        let isQuorumFalseClusterNodes = clusterNodes.filter((cluster)=> {return cluster.isQuorum === false})
+
+        console.log('isQuorumFalseClusterNodes', isQuorumFalseClusterNodes)
+        // Sorting the array using pubkey
+        isQuorumFalseClusterNodes.sort((a, b) => a.pubkey.localeCompare(b.pubkey));
+
+        let newPubKey = isQuorumFalseClusterNodes[0]?.pubkey;
+        console.log('old kasun', oldPubkey)
+        console.log('new kasun', newPubKey)
  
-        if(isQuorum){
-            await this.xrplContext.replaceSignerList(oldPubkey, newPubKey, {});
-        }
-        
+        clusterNodes.map(async (cluster) => {
+            if(cluster.isQuorum){
+                await this.xrplContext.replaceSignerList(oldPubkey, newPubKey);
+            }
+        })
+
+        // Sorting logic to determine new pubkey - yet to be implemented
         // Update patch config.
         let config = await this.hpContext.getConfig();
         config.unl = config.unl.filter((p: string) => p != oldPubkey);
