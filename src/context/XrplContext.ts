@@ -1,10 +1,11 @@
-import { XrplOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter, Transaction } from '../models';
+import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter, Transaction, SignatureInfo, Signature } from '../models';
 import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
 import * as evernode from 'evernode-js-client';
-import VoteContext from './VoteContext';
 import { VoteElectorOptions } from '../models/vote';
+import HotPocketContext from './HotPocketContext';
+import VoteContext from './VoteContext';
 
 const TIMEOUT = 4000;
 
@@ -15,10 +16,10 @@ class XrplContext {
     public multiSigner: MultiSigner;
     public voteContext: VoteContext;
 
-    public constructor(hpContext: any, address: string, secret: string | null = null, options: XrplOptions = {}) {
+    public constructor(hpContext: HotPocketContext, address: string, secret: string | null = null, options: XrplOptions = {}) {
         this.hpContext = hpContext;
+        this.voteContext = hpContext.voteContext;
         this.xrplApi = options.xrplApi || new evernode.XrplApi();
-        this.voteContext = options.voteContext || new VoteContext(this.hpContext, options.voteOptions)
         this.xrplAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
         this.multiSigner = new MultiSigner(this.xrplAcc);
     }
@@ -63,7 +64,7 @@ class XrplContext {
         const infos: TransactionSubmissionInfo[] = (await this.voteContext.vote(`transactionInfo${this.voteContext.getUniqueNumber()}`, [<TransactionSubmissionInfo>{
             sequence: await this.getSequence(),
             maxLedgerSequence: this.getMaxLedgerSequence()
-        }], new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT))).map(ob => ob.data);
+        }], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT))).map(ob => ob.data);
 
         return <TransactionSubmissionInfo>{
             sequence: infos.map(i => i.sequence).sort()[0],
@@ -107,21 +108,29 @@ class XrplContext {
 
         const elector = new MultiSignedBlobElector(signerCount, signerListInfo, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `sign${this.voteContext.getUniqueNumber()}`;
-        let signatures: Signature[];
+        let signatures: SignatureInfo[];
 
         // If this is a signer, Sign the transaction and collect the signed blob list.
         // Otherwise just collect the signed blob list.
         if (this.isSigner()) {
             const signed = await this.multiSigner.sign(transaction);
             const decodedTx = JSON.parse(JSON.stringify(xrplCodec.decode(signed)));
-            const signature: Signature = decodedTx.Signers[0];
+            const signature: SignatureInfo = {
+                ...decodedTx.Signers[0],
+                weight: this.multiSigner.getSigner()?.weight
+            };
             signatures = (await this.voteContext.vote(electionName, [signature], elector)).map(ob => ob.data);
         }
         else {
             signatures = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
         }
 
-        transaction.Signers = [...signatures];
+        // Throw error if there're no enough signatures to fulfil the quorum.
+        const totalWeight = signatures.map(s => s.weight).reduce((a, b) => a + b, 0);
+        if (totalWeight < signerListInfo.signerQuorum)
+            throw `No enough signatures: Total weight: ${totalWeight}, Quorum: ${signerListInfo.signerQuorum}.`;
+
+        transaction.Signers = signatures.map(s => <Signature>{ Signer: s.Signer });
         transaction.SigningPubKey = "";
 
         // Submit the multi-signed transaction.

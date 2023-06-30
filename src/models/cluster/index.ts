@@ -1,8 +1,6 @@
-import { UtilityContext } from "../../context";
 import { AcquiredNode, PendingAcquire } from "../evernode";
 
 export interface ClusterOptions {
-  utilityContext: UtilityContext;
   maturityLclThreshold?: number;
 }
 

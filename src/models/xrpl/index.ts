@@ -1,4 +1,3 @@
-import { VoteContext } from "../../context";
 import { VoteOptions, VoteElectorOptions } from "../vote";
 
 export interface Signer {
@@ -23,6 +22,10 @@ export interface Signature {
   }
 }
 
+export interface SignatureInfo extends Signature {
+  weight: number;
+} 
+
 export interface TransactionSubmissionInfo {
   sequence: number;
   maxLedgerSequence: number;
@@ -30,8 +33,6 @@ export interface TransactionSubmissionInfo {
 
 export interface XrplOptions {
   xrplApi?: any;
-  voteContext?: VoteContext;
-  voteOptions?: VoteOptions;
 }
 
 export interface MultiSignOptions {

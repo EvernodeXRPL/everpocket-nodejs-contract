@@ -15,10 +15,10 @@ const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 const MAX_ACQUIRES = 5;
 const MAX_CLUSTER = 8;
 
-const testContract = async (hpContext) => {
-    if (!hpContext.readonly) {
+const testContract = async (contractCtx) => {
+    if (!contractCtx.readonly) {
         ///// This block is added to avoid forever syncing /////
-        fs.appendFileSync(exectsFile, "ts:" + hpContext.timestamp + "\n");
+        fs.appendFileSync(exectsFile, "ts:" + contractCtx.timestamp + "\n");
 
         const stats = fs.statSync(exectsFile);
         if (stats.size > 100 * 1024 * 1024) // If more than 100 MB, empty the file.
@@ -26,19 +26,20 @@ const testContract = async (hpContext) => {
         ////////////////////////////////////////////////////////
 
         let nonSigners = [];
-        if (hpContext.unl.list().length > 3)
-            nonSigners = (hpContext.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
-        if (!nonSigners.length || nonSigners.length === hpContext.unl.list().length)
-            nonSigners = hpContext.unl.list().slice(0, 1).map(n => n.publicKey);
+        if (contractCtx.unl.list().length > 3)
+            nonSigners = (contractCtx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
+        if (!nonSigners.length || nonSigners.length === contractCtx.unl.list().length)
+            nonSigners = contractCtx.unl.list().slice(0, 1).map(n => n.publicKey);
 
         const signerToAdd = nonSigners.length ? nonSigners[0] : null;
-        const signerCount = hpContext.unl.list().length - nonSigners.length;
+        const signerCount = contractCtx.unl.list().length - nonSigners.length;
         const quorum = Math.floor(signerCount * signerWeight * 0.8);
 
-        const voteContext = new evp.VoteContext(hpContext);
+        const voteContext = new evp.VoteContext(contractCtx);
+        const hpContext = new evp.HotPocketContext(contractCtx, { voteContext: voteContext });
 
         // Listen to incoming unl messages and feed them to elector.
-        hpContext.unl.onMessage((node, msg) => {
+        contractCtx.unl.onMessage((node, msg) => {
             voteContext.feedUnlMessage(node, msg);
         });
 
@@ -46,7 +47,7 @@ const testContract = async (hpContext) => {
         if (!fs.existsSync('multisig')) {
             const isSigner = !nonSigners.includes(hpContext.publicKey);
 
-            await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret, { voteContext: voteContext }), signerCount, isSigner, quorum);
+            await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
 
             fs.writeFileSync('multisig', 'MULTISIG');
         }
@@ -97,18 +98,17 @@ const testContract = async (hpContext) => {
             }
         }
 
-        const xrplContext = new evp.XrplContext(hpContext, masterAddress, null, { voteContext: voteContext });
+        const xrplContext = new evp.XrplContext(hpContext, masterAddress);
         const evernodeContext = new evp.EvernodeContext(xrplContext, evernodeGovernor);
-        const utilityContext = new evp.UtilityContext(hpContext);
-        const clusterContext = new evp.ClusterContext(evernodeContext, { utilityContext: utilityContext });
+        const clusterContext = new evp.ClusterContext(evernodeContext);
         const nomadContext = new evp.NomadContext(clusterContext, nomadOptions);
 
         // Listen to incoming user messages and feed them to evernodeContext.
         const userHandlers = [];
-        for (const user of hpContext.users.list()) {
+        for (const user of contractCtx.users.list()) {
             userHandlers.push(new Promise(async (resolve) => {
                 for (const input of user.inputs) {
-                    const buf = await hpContext.users.read(input);
+                    const buf = await contractCtx.users.read(input);
                     console.log("Received user input", buf.toString());
                     await clusterContext.feedUserMessage(user, buf);
                 }
@@ -232,7 +232,7 @@ const addNewClusterNode = async (clusterContext) => {
             return;
 
         console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
-        console.log("Unl: ", clusterContext.hpContext.unl.list().map(n => n.publicKey));
+        console.log("Unl: ", clusterContext.hpContext.getContractUnl().map(n => n.publicKey));
 
         if (clusterNodes.length == MAX_CLUSTER) {
             console.log(`Reached max cluster size ${MAX_CLUSTER}`);
@@ -287,7 +287,7 @@ const runNomadContract = async (nomadContext) => {
         console.log(`There are ${pendingNodes.length} pending nodes and ${clusterNodes.length} cluster nodes.`);
 
         console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
-        console.log("Unl: ", nomadContext.clusterContext.hpContext.unl.list().map(n => n.publicKey));
+        console.log("Unl: ", nomadContext.clusterContext.hpContext.getContractUnl().map(n => n.publicKey));
 
         await nomadContext.init();
     } catch (e) {

@@ -1,15 +1,17 @@
 import { AcquireOptions } from "../models/evernode";
 import { Peer, User } from "../models";
 import { Buffer } from 'buffer';
-import { EvernodeContext, UtilityContext, VoteContext } from "../context";
+import { EvernodeContext, VoteContext } from "../context";
 import { ClusterOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
 import { ClusterManager } from "../cluster";
 import { AllVoteElector } from "../vote/vote-electors";
 import { VoteElectorOptions } from "../models/vote";
+import HotPocketContext from "./HotPocketContext";
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
 const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16";
 const ALIVENESS_CHECK_THRESHOLD = 5;
+const MATURITY_LCL_THRESHOLD = 2;
 const TIMEOUT = 6000;
 
 class ClusterContext {
@@ -17,18 +19,16 @@ class ClusterContext {
     private userMessageProcessing: boolean;
     private maturityLclThreshold: number;
     private initialized: boolean = false;
-    public hpContext: any;
+    public hpContext: HotPocketContext;
     public voteContext: VoteContext;
     public evernodeContext: EvernodeContext;
-    public utilityContext: UtilityContext;
 
-    public constructor(evernodeContext: EvernodeContext, options: ClusterOptions) {
+    public constructor(evernodeContext: EvernodeContext, options: ClusterOptions = {}) {
         this.evernodeContext = evernodeContext;
         this.hpContext = this.evernodeContext.hpContext;
-        this.utilityContext = options?.utilityContext || new UtilityContext(this.hpContext);
         this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
-        this.maturityLclThreshold = options.maturityLclThreshold || 2;
+        this.maturityLclThreshold = options.maturityLclThreshold || MATURITY_LCL_THRESHOLD;
         this.userMessageProcessing = false;
     }
 
@@ -76,7 +76,7 @@ class ClusterContext {
             const node = <ClusterNode>{
                 pubkey: this.hpContext.publicKey,
                 contractId: this.hpContext.contractId,
-                isUnl: !!this.hpContext.unl.list().find((p: any) => p.publicKey === this.hpContext.publicKey),
+                isUnl: !!this.hpContext.getContractUnl().find((p: any) => p.publicKey === this.hpContext.publicKey),
                 isQuorum: !!signer,
                 signerWeight: signer ? signer.weight : null
             }
@@ -90,10 +90,9 @@ class ClusterContext {
      * Mark the activeness of nodes.
      */
     async #updateActiveness(): Promise<void> {
-        const unl = this.hpContext.unl.list();
-        const hpconfig = await this.hpContext.getConfig();
+        const hpconfig = await this.hpContext.getContractConfig();
 
-        for (const u of unl) {
+        for (const u of this.hpContext.getContractUnl()) {
             const gap = Math.abs(u.activeOn - this.hpContext.timestamp);
             // If last active timestamp is before the twice of roundtime, This node must be active.
             if (!u.activeOn || gap <= (hpconfig.consensus.roundtime * 2)) {
@@ -126,11 +125,11 @@ class ClusterContext {
                         continue;
                     }
 
-                    if (!(await this.utilityContext.checkLiveness(new Peer(info.ip, info.userPort)))) {
+                    if (!(await this.hpContext.checkLiveness(new Peer(info.ip, info.userPort)))) {
                         this.clusterManager.increaseAliveCheck(node.refId);
                     }
                     else {
-                        await this.hpContext.updatePeers([`${info.ip}:${info.peerPort}`], []);
+                        await this.hpContext.updatePeers([`${info.ip}:${info.peerPort}`]);
 
                         this.clusterManager.addNode(<ClusterNode>{
                             refId: node.refId,
@@ -227,7 +226,7 @@ class ClusterContext {
         const unlNodes = this.getClusterUnlNodes();
         if (unlNodes && unlNodes.length > 0) {
             const addMessage = <ClusterMessage>{ type: ClusterMessageType.MATURED, nodePubkey: this.hpContext.publicKey }
-            await this.utilityContext.sendMessage(JSON.stringify(addMessage), unlNodes.map(n => new Peer(n.ip, n.userPort)));
+            await this.hpContext.sendMessage(JSON.stringify(addMessage), unlNodes.map(n => new Peer(n.ip, n.userPort)));
         }
         return false;
     }
@@ -238,7 +237,7 @@ class ClusterContext {
      */
     public getClusterUnlNodes(): ClusterNode[] {
         // Filter out the nodes which are not persisted in the HotPocket Unl yet.
-        return this.clusterManager.getUnlNodes().filter(n => this.hpContext.unl.list().find((p: any) => p.publicKey === n.pubkey));
+        return this.clusterManager.getUnlNodes().filter(n => this.hpContext.getContractUnl().find((p: any) => p.publicKey === n.pubkey));
     }
 
     /**
@@ -352,7 +351,7 @@ class ClusterContext {
      * @param [options={}]  Acquire instance options.
      */
     public async addNewClusterNode(lifeMoments: number = 1, options: AcquireOptions = {}): Promise<void> {
-        const hpconfig = await this.hpContext.getConfig();
+        const hpconfig = await this.hpContext.getContractConfig();
         const unl = hpconfig.unl;
 
         // Override the instance specs.
@@ -405,9 +404,9 @@ class ClusterContext {
     public async addToUnl(pubkey: string): Promise<void> {
         this.clusterManager.markAsUnl(pubkey, this.hpContext.lclSeqNo);
 
-        const hpconfig = await this.hpContext.getConfig();
+        const hpconfig = await this.hpContext.getContractConfig();
         hpconfig.unl.push(pubkey);
-        await this.hpContext.updateConfig(hpconfig);
+        await this.hpContext.updateContractConfig(hpconfig);
     }
 
     /**
@@ -420,11 +419,11 @@ class ClusterContext {
             throw 'This node cannot be removed yet. It has pending operations.'
 
         // Update patch config if node exists in UNL.
-        let config = await this.hpContext.getConfig();
+        let config = await this.hpContext.getContractConfig();
         const index = config.unl.findIndex((p: string) => p === pubkey);
         if (index > -1) {
             config.unl.splice(index, 1);
-            await this.hpContext.updateConfig(config);
+            await this.hpContext.updateContractConfig(config);
         }
 
         // Update peer list.

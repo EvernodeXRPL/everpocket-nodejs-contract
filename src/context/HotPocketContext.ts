@@ -1,16 +1,29 @@
 import { Buffer } from 'buffer';
-import { ConnectionOptions, Peer } from '../models';
+import { ConnectionOptions, HotPocketOptions, Peer, UnlNode } from '../models';
 import { ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType } from '../models/cluster';
+import VoteContext from './VoteContext';
+const HotPocket = require('hotpocket-js-client');
 
 const TIMEOUT = 60000;
 
-const HotPocket = require('hotpocket-js-client');
-class UtilityContext {
-    private hpContext: any;
+class HotPocketContext {
     private hpClient: any;
+    private contractContext: any;
+    public voteContext: any;
+    public publicKey: string;
+    public contractId: string;
+    public lclSeqNo: number;
+    public lclHash: string;
+    public timestamp: number;
 
-    constructor(hpContext: any) {
-        this.hpContext = hpContext;
+    constructor(contractContext: any, options: HotPocketOptions = {}) {
+        this.contractContext = contractContext;
+        this.publicKey = this.contractContext.publicKey;
+        this.contractId = this.contractContext.contractId;
+        this.lclSeqNo = this.contractContext.lclSeqNo;
+        this.lclHash = this.contractContext.lclHash;
+        this.timestamp = this.contractContext.timestamp;
+        this.voteContext = options.voteContext || new VoteContext(this.contractContext, options.voteOptions)
     }
 
     /**
@@ -23,8 +36,8 @@ class UtilityContext {
             await this.hpClient.close();
 
         const keys = (useNewKeyPair) ? await HotPocket.generateKeys() : {
-            privateKey: new Uint8Array(Buffer.from(this.hpContext.privateKey, 'hex')),
-            publicKey: new Uint8Array(Buffer.from(this.hpContext.publicKey, 'hex'))
+            privateKey: new Uint8Array(Buffer.from(this.contractContext.privateKey, 'hex')),
+            publicKey: new Uint8Array(Buffer.from(this.contractContext.publicKey, 'hex'))
         }
 
         const nodesToTry = nodes.filter(n => n.ip && n.port).map(n => `wss://${n.toString()}`);
@@ -154,6 +167,39 @@ class UtilityContext {
             });
         });
     }
+
+    /**
+     * Get the contract config.
+     * @returns The contract config.
+     */
+    public async getContractConfig(): Promise<any> {
+        return await this.contractContext.getConfig();
+    }
+
+    /**
+     * Update the contract config.
+     * @returns The contract config.
+     */
+    public async updateContractConfig(config: any): Promise<void> {
+        await this.contractContext.updateConfig(config);
+    }
+
+    /**
+     * Get the contract unl.
+     * @returns The contract unl.
+     */
+    public getContractUnl(): UnlNode[] {
+        return this.contractContext.unl.list();
+    }
+
+    /**
+     * Update the HotPocket peer list.
+     * @param toAdd Peer list to add.
+     * @param [toRemove=[]] Peer list to remove.
+     */
+    public async updatePeers(toAdd: string[] | null, toRemove: string[] | null = null): Promise<void> {
+        await this.contractContext.updatePeers(toAdd, toRemove);
+    }
 }
 
-export default UtilityContext;
+export default HotPocketContext;
