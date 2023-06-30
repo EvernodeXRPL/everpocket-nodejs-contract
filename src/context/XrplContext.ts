@@ -165,9 +165,10 @@ class XrplContext {
                 throw 'Weight or Signer Quorum cannot be empty.';
 
             newSigner = this.multiSigner.generateSigner();
+            newSigner.weight = weight;
             signerList = (await this.voteContext.vote(electionName, [<Signer>{
                 account: newSigner.account,
-                weight: weight
+                weight: newSigner.weight
             }], elector)).map(ob => ob.data);
 
         }
@@ -235,9 +236,10 @@ class XrplContext {
         // Otherwise just collect the signer.
         if (pubkey === this.hpContext.publicKey) {
             newSigner = this.multiSigner.generateSigner();
+            newSigner.weight = weight;
             signer = (await this.voteContext.vote(electionName, [<Signer>{
                 account: newSigner.account,
-                weight: weight
+                weight: newSigner.weight
             }], elector)).map(ob => ob.data)[0];
 
         }

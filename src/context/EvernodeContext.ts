@@ -64,9 +64,6 @@ class EvernodeContext {
      * Deinitialize the context.
      */
     public async deinit(): Promise<void> {
-        if (!this.initialized)
-            return;
-
         this.#persistAcquireData();
         if (this.registryClient)
             await this.registryClient.disconnect();

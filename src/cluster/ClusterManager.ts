@@ -3,7 +3,7 @@ import { ClusterData, ClusterNode, PendingNode } from '../models/cluster';
 
 class ClusterManager {
     private clusterDataFile: string = "cluster.json";
-    private clusterData: ClusterData = { nodes: [], pendingNodes: [] };
+    private clusterData: ClusterData = { initialized: false, nodes: [], pendingNodes: [] };
     private updated: boolean = false;
 
     public constructor() {
@@ -25,6 +25,37 @@ class ClusterManager {
             JSONHelpers.writeToFile(this.clusterDataFile, this.clusterData);
         } catch (error) {
             throw `Error writing file ${this.clusterDataFile}: ${error}`;
+        }
+    }
+
+    /**
+     * Is cluster initialized on first run.
+     */
+    public hasClusterInitialized(): boolean {
+        return this.clusterData.initialized;
+    }
+
+    /**
+     * Mark cluster as initialized.
+     */
+    public initializeCluster(nodes: ClusterNode[]): void {
+        if (!this.clusterData.initialized) {
+            for (const node of nodes) {
+                const index = this.clusterData.nodes.findIndex(n => n.pubkey === node.pubkey);
+                // Add node if not exist, Update otherwise.
+                if (index === -1) {
+                    this.clusterData.nodes.push(node);
+                }
+                else {
+                    this.clusterData.nodes[index] = {
+                        ...this.clusterData.nodes[index],
+                        ...node
+                    }
+                }
+            }
+
+            this.clusterData.initialized = true;
+            this.updated = true;
         }
     }
 
@@ -95,11 +126,7 @@ class ClusterManager {
     public addNodes(nodes: ClusterNode[]): void {
         // Sort the nodes to preserve the order in all the node states.
         for (const node of nodes.sort((a, b) => a.pubkey.localeCompare(b.pubkey))) {
-            this.clusterData.pendingNodes = this.clusterData.pendingNodes.filter(n => n.refId !== node.refId);
-
-            // Return if node already exist.
-            if (!this.getNode(node.pubkey))
-                this.clusterData.nodes.push(node);
+            this.addNode(node);
         }
 
         this.updated = true;

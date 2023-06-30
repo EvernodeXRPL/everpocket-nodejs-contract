@@ -13,6 +13,7 @@ export interface ClusterNode extends AcquiredNode {
   activeOnLcl?: number;
   isUnl: boolean;
   isQuorum: boolean;
+  signerWeight?: number;
   createdOnTimestamp?: number;
   lifeMoments: number;
   targetLifeMoments: number;
@@ -24,6 +25,7 @@ export interface PendingNode extends PendingAcquire {
 }
 
 export interface ClusterData {
+  initialized: boolean,
   nodes: ClusterNode[],
   pendingNodes: PendingNode[]
 }

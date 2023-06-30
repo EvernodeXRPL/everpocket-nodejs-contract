@@ -34,9 +34,6 @@ class NomadContext {
      * Deinitialize the nomad contract.
      */
     public async deinit(): Promise<void> {
-        if (!this.initialized)
-            return;
-
         await this.clusterContext.deinit();
         this.initialized = false;
     }

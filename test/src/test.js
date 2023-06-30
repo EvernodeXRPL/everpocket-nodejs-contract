@@ -153,9 +153,9 @@ const addXrplSigner = async (xrplContext, publickey, quorum = null) => {
     if (!publickey || xrplContext.hpContext.lclSeqNo % 3 !== 1)
         return;
 
-    await xrplContext.init();
-
     try {
+        await xrplContext.init();
+
         console.log(`----------- Adding ${publickey} to signer list`);
         await xrplContext.addXrplSigner(publickey, signerWeight, { quorum: quorum });
         console.log("Signer added");
@@ -168,9 +168,9 @@ const addXrplSigner = async (xrplContext, publickey, quorum = null) => {
 }
 
 const acquireNewNode = async (evernodeContext) => {
-    await evernodeContext.init();
-
     try {
+        await evernodeContext.init();
+
         const pendingAcquires = evernodeContext.getPendingAcquires();
         const acquiredNodes = evernodeContext.getAcquiredNodes();
 
@@ -203,9 +203,9 @@ const acquireNewNode = async (evernodeContext) => {
 }
 
 const extendNode = async (evernodeContext) => {
-    await evernodeContext.init();
-
     try {
+        await evernodeContext.init();
+
         const tokens = await evernodeContext.xrplContext.xrplAcc.getURITokens();
         const token = tokens[0];
         const extendingNodeName = token.index;
@@ -220,9 +220,9 @@ const extendNode = async (evernodeContext) => {
 }
 
 const addNewClusterNode = async (clusterContext) => {
-    await clusterContext.init();
-
     try {
+        await clusterContext.init();
+
         const pendingNodes = clusterContext.getPendingNodes();
         const clusterNodes = clusterContext.getClusterNodes();
 
@@ -257,9 +257,9 @@ const addNewClusterNode = async (clusterContext) => {
 }
 
 const removeNode = async (clusterContext) => {
-    await clusterContext.init();
-
     try {
+        await clusterContext.init();
+
         const unlNodes = clusterContext.getClusterUnlNodes();
 
         // Remove nodes if max cluster size reached and 5 ledgers after the last node added to UNL.
@@ -278,9 +278,9 @@ const removeNode = async (clusterContext) => {
 }
 
 const runNomadContract = async (nomadContext) => {
-    await nomadContext.clusterContext.init();
-
     try {
+        await nomadContext.clusterContext.init();
+
         const pendingNodes = nomadContext.clusterContext.getPendingNodes();
         const clusterNodes = nomadContext.clusterContext.getClusterNodes();
 
@@ -301,9 +301,9 @@ const renewSignerList = async (xrplContext) => {
     if (xrplContext.hpContext.lclSeqNo % 3 !== 2)
         return;
 
-    await xrplContext.init();
-
     try {
+        await xrplContext.init();
+
         console.log("----------- Renew Multi-Signing");
         await xrplContext.renewSignerList();
         console.log("Signer list renewed");
@@ -319,9 +319,9 @@ const removeXrplSigner = async (xrplContext, publickey, quorum = null) => {
     if (!publickey || xrplContext.hpContext.lclSeqNo % 3 !== 0)
         return;
 
-    await xrplContext.init();
-
     try {
+        await xrplContext.init();
+
         console.log(`----------- Removing ${publickey} from signer list`);
         await xrplContext.removeXrplSigner(publickey, { quorum: quorum });
         console.log("Signer removed");
@@ -334,9 +334,9 @@ const removeXrplSigner = async (xrplContext, publickey, quorum = null) => {
 }
 
 const getSignerList = async (xrplContext) => {
-    await xrplContext.init();
-
     try {
+        await xrplContext.init();
+
         console.log("----------- Getting the signer list");
         const signerList = await xrplContext.getSignerList();
         console.log(signerList);
@@ -358,9 +358,9 @@ const multiSignTransaction = async (xrplContext) => {
         Flags: 2147483648
     };
 
-    await xrplContext.init();
-
     try {
+        await xrplContext.init();
+
         console.log("----------- Multi-Signing Transaction");
         await xrplContext.multiSignAndSubmitTransaction(tx);
         console.log("Transaction submitted");
@@ -381,19 +381,20 @@ const checkLiveness = async (utilityContext, ip, port) => {
 
 ////// TODO: This is a temporary function and will be removed in the future //////
 const prepareMultiSigner = async (xrplContext, signerCount, isSigner, quorum) => {
-    await xrplContext.init();
-
     try {
+        await xrplContext.init();
+
         const elector = new evp.AllVoteElector(signerCount, 4000);
 
         let signerList;
         let signer;
         if (isSigner) {
             signer = xrplContext.multiSigner.generateSigner();
+            signer.weight = signerWeight;
 
             signerList = (await xrplContext.voteContext.vote(`multiSignerPrepare`, [{
                 account: signer.account,
-                weight: signerWeight
+                weight: signer.weight
             }], elector)).map(ob => ob.data);
         }
         else {

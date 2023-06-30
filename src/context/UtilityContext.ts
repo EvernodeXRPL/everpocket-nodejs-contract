@@ -27,7 +27,11 @@ class UtilityContext {
             publicKey: new Uint8Array(Buffer.from(this.hpContext.publicKey, 'hex'))
         }
 
-        this.hpClient = await HotPocket.createClient(nodes.map(n => `wss://${n.toString()}`), keys);
+        const nodesToTry = nodes.filter(n => n.ip && n.port).map(n => `wss://${n.toString()}`);
+        if (!nodesToTry || !nodesToTry.length)
+            throw `There are no nodes ip port info to connect.`;
+
+        this.hpClient = await HotPocket.createClient(nodesToTry, keys);
     }
 
     /**
@@ -86,9 +90,10 @@ class UtilityContext {
      * @returns the liveliness as a boolean figure.
      */
     public async checkLiveness(node: Peer): Promise<boolean> {
-        return new Promise<boolean>(async (resolve) => {
+        const address = node.toString();
+        return new Promise<boolean>(async (resolve, reject) => {
             await this.#connectAndHandle([node], () => {
-                console.log(`Hot Pocket live at wss://${node.toString()}`);
+                console.log(`Hot Pocket live at wss://${address}`);
             }, (data: any, error: any) => {
                 if (error) {
                     console.error(error);
@@ -97,7 +102,10 @@ class UtilityContext {
                 else
                     resolve(true);
                 return;
-            }, { timeout: 6000 });
+            }, { timeout: 6000 }).catch(e => {
+                reject(e);
+                return;
+            });
         });
     }
 
@@ -140,7 +148,10 @@ class UtilityContext {
                 else
                     resolve();
                 return;
-            }, { timeout: 60000 });
+            }, { timeout: 60000 }).catch(e => {
+                reject(e);
+                return;
+            });
         });
     }
 }

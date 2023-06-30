@@ -10,7 +10,7 @@ import { VoteElectorOptions } from "../models/vote";
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
 const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16";
 const ALIVENESS_CHECK_THRESHOLD = 5;
-const TIMEOUT = 4000;
+const TIMEOUT = 6000;
 
 class ClusterContext {
     private clusterManager: ClusterManager;
@@ -59,9 +59,6 @@ class ClusterContext {
      * Deinitiates the operations regarding the cluster.
      */
     public async deinit(): Promise<void> {
-        if (!this.initialized)
-            return;
-
         this.clusterManager.persist();
         await this.evernodeContext.deinit();
         this.initialized = false;
@@ -72,19 +69,20 @@ class ClusterContext {
      * @param [options={}] Vote options to collect the vote info. 
      */
     async #setupClusterInfo(options: VoteElectorOptions = {}): Promise<void> {
-        const clusterNodes = this.getClusterNodes();
-        if (clusterNodes.length === 0) {
+        if (!this.clusterManager.hasClusterInitialized()) {
             const electionName = `share_node_info${this.voteContext.getUniqueNumber()}`;
             const elector = new AllVoteElector(0, options?.timeout || TIMEOUT);
-            const contractConfig = await this.hpContext.getConfig();
+            const signer = this.evernodeContext.xrplContext.multiSigner.getSigner();
             const node = <ClusterNode>{
                 pubkey: this.hpContext.publicKey,
-                contractId: contractConfig.id,
-                isUnl: !!contractConfig.unl.find((k: string) => k === this.hpContext.publicKey),
-                isQuorum: this.evernodeContext.xrplContext.isSigner()
+                contractId: this.hpContext.contractId,
+                isUnl: !!this.hpContext.unl.list().find((p: any) => p.publicKey === this.hpContext.publicKey),
+                isQuorum: !!signer,
+                signerWeight: signer ? signer.weight : null
             }
             const nodes: ClusterNode[] = (await this.voteContext.vote(electionName, [node], elector)).map(ob => ob.data);
-            this.clusterManager.addNodes(nodes);
+            this.clusterManager.initializeCluster(nodes);
+            console.log('Initialized the cluster data with node info.');
         }
     }
 
@@ -99,7 +97,12 @@ class ClusterContext {
             const gap = Math.abs(u.activeOn - this.hpContext.timestamp);
             // If last active timestamp is before the twice of roundtime, This node must be active.
             if (!u.activeOn || gap <= (hpconfig.consensus.roundtime * 2)) {
-                this.clusterManager.markAsActive(u.publicKey, this.hpContext.lclSeqNo);
+                try {
+                    this.clusterManager.markAsActive(u.publicKey, this.hpContext.lclSeqNo);
+                }
+                catch (e) {
+                    console.error(e);
+                }
             }
         }
     }
@@ -110,49 +113,53 @@ class ClusterContext {
     async #checkForPendingNodes(): Promise<void> {
         const pendingNodes = this.getPendingNodes();
 
-        for (const node of pendingNodes) {
+        for (const node of pendingNodes.filter(n => n.refId)) {
             const info = this.evernodeContext.getIfAcquired(node.refId);
             // If acquired, Check the liveliness and add that to the node list as a non-UNL node.
             if (info) {
-                // Remove node if aliveness check threshold reached.
-                if (node.aliveCheckCount > ALIVENESS_CHECK_THRESHOLD) {
-                    this.clusterManager.removePending(node.refId);
+                try {
+                    // Remove node if aliveness check threshold reached.
+                    if (node.aliveCheckCount > ALIVENESS_CHECK_THRESHOLD) {
+                        this.clusterManager.removePending(node.refId);
 
-                    console.log(`Pending node ${node.refId} is removed since it's not alive.`);
-                    continue;
+                        console.log(`Pending node ${node.refId} is removed since it's not alive.`);
+                        continue;
+                    }
+
+                    if (!(await this.utilityContext.checkLiveness(new Peer(info.ip, info.userPort)))) {
+                        this.clusterManager.increaseAliveCheck(node.refId);
+                    }
+                    else {
+                        await this.hpContext.updatePeers([`${info.ip}:${info.peerPort}`], []);
+
+                        this.clusterManager.addNode(<ClusterNode>{
+                            refId: node.refId,
+                            contractId: info.contractId,
+                            createdOnLcl: this.hpContext.lclSeqNo,
+                            createdOnTimestamp: this.hpContext.timestamp,
+                            host: node.host,
+                            ip: info.ip,
+                            name: info.name,
+                            peerPort: info.peerPort,
+                            pubkey: info.pubkey,
+                            userPort: info.userPort,
+                            isUnl: false,
+                            isQuorum: false,
+                            lifeMoments: 1,
+                            targetLifeMoments: node.targetLifeMoments
+                        });
+
+                        console.log(`Added node ${info.pubkey} to the cluster as nonUnl.`);
+                    }
                 }
-
-                if (!(await this.utilityContext.checkLiveness(new Peer(info.ip, info.userPort)))) {
-                    this.clusterManager.increaseAliveCheck(node.refId);
-                }
-                else {
-                    await this.hpContext.updatePeers([`${info.ip}:${info.peerPort}`], []);
-
-                    this.clusterManager.addNode(<ClusterNode>{
-                        refId: node.refId,
-                        contractId: info.contractId,
-                        createdOnLcl: this.hpContext.lclSeqNo,
-                        createdOnTimestamp: this.hpContext.timestamp,
-                        host: node.host,
-                        ip: info.ip,
-                        name: info.name,
-                        peerPort: info.peerPort,
-                        pubkey: info.pubkey,
-                        userPort: info.userPort,
-                        isUnl: false,
-                        isQuorum: false,
-                        lifeMoments: 1,
-                        targetLifeMoments: node.targetLifeMoments
-                    });
-
-                    console.log(`Added node ${info.pubkey} to the cluster as nonUnl.`);
+                catch (e) {
+                    console.log(e);
                 }
 
             }
             // If the pending node is not in the pending acquire, this acquire should be failed.
             else if (!info && !this.evernodeContext.getIfPending(node.refId)) {
                 this.clusterManager.removePending(node.refId);
-
                 console.log(`Pending node ${node.refId} is removed due to unavailability.`);
             }
         }
@@ -207,7 +214,7 @@ class ClusterContext {
 
         // If this node is not in UNL acknowledge others to add to UNL.
         if (selfNode && !selfNode.isUnl && !selfNode.ackReceivedOnLcl) {
-            await this.#acknowledgeMaturity();
+            await this.#acknowledgeMaturity().catch(console.error);
             console.log(`Maturity acknowledgement sent.`);
         }
     }
@@ -423,8 +430,10 @@ class ClusterContext {
         // Update peer list.
         const node = this.clusterManager.getNode(pubkey);
         if (node) {
-            let peer = `${node?.ip}:${node?.peerPort}`
-            await this.hpContext.updatePeers(null, [peer]);
+            if (node?.ip && node?.peerPort) {
+                let peer = `${node?.ip}:${node?.peerPort}`
+                await this.hpContext.updatePeers(null, [peer]);
+            }
 
             this.clusterManager.removeNode(pubkey);
         }
