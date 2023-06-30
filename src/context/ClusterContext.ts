@@ -112,7 +112,7 @@ class ClusterContext {
     async #checkForPendingNodes(): Promise<void> {
         const pendingNodes = this.getPendingNodes();
 
-        for (const node of pendingNodes.filter(n => n.refId)) {
+        for (const node of pendingNodes) {
             const info = this.evernodeContext.getIfAcquired(node.refId);
             // If acquired, Check the liveliness and add that to the node list as a non-UNL node.
             if (info) {
