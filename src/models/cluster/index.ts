@@ -30,16 +30,18 @@ export interface ClusterData {
 
 export interface ClusterMessage {
   type: ClusterMessageType;
-  nodePubkey: string;
+  data?: any;
 }
 
 export interface ClusterMessageResponse {
   type: ClusterMessageType;
   status: ClusterMessageResponseStatus;
+  data?: any;
 }
 
 export enum ClusterMessageType {
   MATURED = "maturity_ack",
+  CLUSTER_NODES = "cluster_nodes",
   UNKNOWN = "unknown"
 }
 

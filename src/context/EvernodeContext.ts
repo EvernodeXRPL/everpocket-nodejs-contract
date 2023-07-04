@@ -157,7 +157,7 @@ class EvernodeContext {
         const pendingAcquire = <PendingAcquire>{
             host: hostAddress,
             leaseOfferIdx: leaseOffer.index,
-            refId: res.tx_json.hash,
+            refId: res.id,
             messageKey: messageKey,
             acquireSentOnLcl: this.hpContext.lclSeqNo
         };

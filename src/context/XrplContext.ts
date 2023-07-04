@@ -134,14 +134,14 @@ class XrplContext {
 
         // Submit the multi-signed transaction.
         const res = await this.submitMultisignedTx(transaction).catch(console.error);
-        if (res?.result?.engine_result === "tesSUCCESS")
+        if (res?.code === "tesSUCCESS")
             console.log("Transaction submitted successfully");
-        else if (res?.result?.engine_result === "tefPAST_SEQ" || res?.result?.engine_result === "tefALREADY")
+        else if (res?.code === "tefPAST_SEQ" || res?.code === "tefALREADY")
             console.log("Proceeding with pre-submitted transaction");
         else
-            throw res?.result?.engine_result ? `Transaction failed with error ${res.result.engine_result}` : 'Transaction failed';
+            throw res?.code ? `Transaction failed with error ${res.code}` : 'Transaction failed';
 
-        return res.result;
+        return res;
     }
 
     /**

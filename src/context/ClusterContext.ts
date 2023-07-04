@@ -226,7 +226,7 @@ class ClusterContext {
     async #acknowledgeMaturity(): Promise<boolean> {
         const unlNodes = this.getClusterUnlNodes();
         if (unlNodes && unlNodes.length > 0) {
-            const addMessage = <ClusterMessage>{ type: ClusterMessageType.MATURED, nodePubkey: this.hpContext.publicKey }
+            const addMessage = <ClusterMessage>{ type: ClusterMessageType.MATURED, data: this.hpContext.publicKey }
             await this.hpContext.sendMessage(JSON.stringify(addMessage), unlNodes.map(n => new Peer(n.ip, n.userPort)));
         }
         return false;
@@ -314,12 +314,12 @@ class ClusterContext {
                     try {
                         // Check if node exist in the cluster.
                         // Add to UNL if exist. Note: The node's user connection will be made from node's public key.
-                        if (user.publicKey === message.nodePubkey) {
-                            const node = this.clusterManager.getNode(message.nodePubkey);
+                        if (user.publicKey === message.data) {
+                            const node = this.clusterManager.getNode(message.data);
                             if (node) {
-                                this.clusterManager.markAsMatured(message.nodePubkey, this.hpContext.lclSeqNo)
+                                this.clusterManager.markAsMatured(message.data, this.hpContext.lclSeqNo)
                                 response.status = ClusterMessageResponseStatus.OK;
-                                console.log(`Maturity acknowledgement received from node ${message.nodePubkey}.`);
+                                console.log(`Maturity acknowledgement received from node ${message.data}.`);
                             }
                         }
                     }
@@ -330,6 +330,23 @@ class ClusterContext {
                         await user.send(JSON.stringify(response));
                         // Release the user message processor.
                         this.#releaseUserMessageProc();
+                    }
+
+                    break;
+                }
+                case ClusterMessageType.CLUSTER_NODES: {
+                    // Set status as fail for default.
+                    response.status = ClusterMessageResponseStatus.FAIL;
+
+                    try {
+                        response.status = ClusterMessageResponseStatus.OK;
+                        response.data = this.clusterManager.getNodes();
+                    }
+                    catch (e) {
+                        console.error(e);
+                    }
+                    finally {
+                        await user.send(JSON.stringify(response));
                     }
 
                     break;

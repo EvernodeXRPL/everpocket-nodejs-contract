@@ -15,8 +15,72 @@ const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 const MAX_ACQUIRES = 5;
 const MAX_CLUSTER = 8;
 
+const nomadOptions = {
+    targetNodeCount: 30,
+    targetLifeMoments: 4,
+    preferredHosts: [
+        "rP4zJ6ZWoHYC8cj6GkWHyiUJT15xwzLCLm",
+        "rwqWhVJZ1SgXBBpBNQ194sdDNBbUZTaTem",
+        "rP9qLtcfbymrhLfsFsiz86iPhFqCqkgRXW",
+        "rE29fENEy8GBiFhcAnagCLBbJ7XqnaVmSX",
+        "rLkSafYKvf5vBfFyQMVB6touhUnS6j5HR9",
+        "rKUq1MnzfqnZAUArkE2ttL1n4UavwUzGrn",
+        "rahTwEZefDFtShmgjsArNzxTCT8Zj8HXKN",
+        "rw4fF5LDQsonyoYiEYrgPgTC2asnCQQZ6g",
+        "rrssGm5h8aWncB3CGMuQ2WGfexubbeCTLV",
+        "rEmGJ3uu7DSrNfM5JSZnFtMjYhLbSmVJ3A",
+        "rfBQaUjF9UZWjdJ33hGDeas1hEXK7DmfCV",
+        "rswHs4bzLBSyfd2fWtjuzUxAqudfrzRDtT",
+        "r4dVikgRzdVuZcFfMWJWiUo8iJxmYGDmiS",
+        "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
+        "rhXBNAJbHKym75tazYAxcEbghNN6vLyYZE",
+        "rKqDVS5fYEWDNivosnFiri1bXfqt2ebj7q",
+        "rP3MGBqPdAXVrBGvP1Hn1UFozuaQvSxMMQ",
+        "rErmdQZLmAauqjY7ig8KeLAGhfxeVAHHnA",
+        "rnG2Q9cqrmCvWNZvMG4JHzG96deqEg5HDx",
+        "rB2SBLDLBUwaUV2QegZxoztpkJLgh1Kvcx",
+        "r931fvw3imdtULs522s5VqV9EaQ21pu6ja",
+        "r4LF5L5tq7JdsAUY5YUXjAU1J6xZtm47HP",
+        "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
+        "rGnsENqQKqPNQKWMSNxbZcMuubjJaaBpf5",
+        "rMaHq7P7ibkbeiykRGyTsdyFEDBRGrLdx6",
+        "rHJqCseZFzCveSTdtJuDNpD4ARoMy41E1C",
+        "rGYPizbATsej8iJ4kDeFf7tRysf6ggwcQY",
+        "rMu8RLEKTtyWuhko1F5dVZoUAiVpRpi5GB",
+        "rhsBuUnoV1yGSpSVYgzFMFeTcFLvg8ZQnh",
+        "rhYqbRQpSy7RtQtXjfurprdB4Gj8PAJW2X",
+        "rfZFCjpFD1zhJP3DsSWy9NVUCmm9Kkhg4w"
+    ],
+    instanceCfg: {
+        config: {
+            log: {
+                log_level: "dbg"
+            }
+        }
+    }
+}
+
 const testContract = async (contractCtx) => {
+    let nonSigners = [];
+    if (contractCtx.unl.list().length > 3)
+        nonSigners = (contractCtx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
+    if (!nonSigners.length || nonSigners.length === contractCtx.unl.list().length)
+        nonSigners = contractCtx.unl.list().slice(0, 1).map(n => n.publicKey);
+
+    const signerToAdd = nonSigners.length ? nonSigners[0] : null;
+    const signerCount = contractCtx.unl.list().length - nonSigners.length;
+    const quorum = Math.floor(signerCount * signerWeight * 0.8);
+    const signerToRemove = contractCtx.unl.list().map(n => n.publicKey).find(p => !nonSigners.includes(p));
+
+    const voteContext = new evp.VoteContext(contractCtx);
+    const hpContext = new evp.HotPocketContext(contractCtx, { voteContext: voteContext });
+
     if (!contractCtx.readonly) {
+        // Listen to incoming unl messages and feed them to elector.
+        contractCtx.unl.onMessage((node, msg) => {
+            voteContext.feedUnlMessage(node, msg);
+        });
+
         ///// This block is added to avoid forever syncing /////
         fs.appendFileSync(exectsFile, "ts:" + contractCtx.timestamp + "\n");
 
@@ -24,25 +88,6 @@ const testContract = async (contractCtx) => {
         if (stats.size > 100 * 1024 * 1024) // If more than 100 MB, empty the file.
             fs.truncateSync(exectsFile);
         ////////////////////////////////////////////////////////
-
-        let nonSigners = [];
-        if (contractCtx.unl.list().length > 3)
-            nonSigners = (contractCtx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
-        if (!nonSigners.length || nonSigners.length === contractCtx.unl.list().length)
-            nonSigners = contractCtx.unl.list().slice(0, 1).map(n => n.publicKey);
-
-        const signerToAdd = nonSigners.length ? nonSigners[0] : null;
-        const signerCount = contractCtx.unl.list().length - nonSigners.length;
-        const quorum = Math.floor(signerCount * signerWeight * 0.8);
-        const signerToRemove = contractCtx.unl.list().map(n => n.publicKey).find(p => !nonSigners.includes(p));
-
-        const voteContext = new evp.VoteContext(contractCtx);
-        const hpContext = new evp.HotPocketContext(contractCtx, { voteContext: voteContext });
-
-        // Listen to incoming unl messages and feed them to elector.
-        contractCtx.unl.onMessage((node, msg) => {
-            voteContext.feedUnlMessage(node, msg);
-        });
 
         ///////// TODO: This part is temporary for preparing multisig /////////
         if (!fs.existsSync('multisig')) {
@@ -53,72 +98,28 @@ const testContract = async (contractCtx) => {
             fs.writeFileSync('multisig', 'MULTISIG');
         }
         ///////////////////////////////////////////////////////////////////////
+    }
 
-        const nomadOptions = {
-            targetNodeCount: 30,
-            targetLifeMoments: 2,
-            preferredHosts: [
-                "rP4zJ6ZWoHYC8cj6GkWHyiUJT15xwzLCLm",
-                "rwqWhVJZ1SgXBBpBNQ194sdDNBbUZTaTem",
-                "rP9qLtcfbymrhLfsFsiz86iPhFqCqkgRXW",
-                "rE29fENEy8GBiFhcAnagCLBbJ7XqnaVmSX",
-                "rLkSafYKvf5vBfFyQMVB6touhUnS6j5HR9",
-                "rKUq1MnzfqnZAUArkE2ttL1n4UavwUzGrn",
-                "rahTwEZefDFtShmgjsArNzxTCT8Zj8HXKN",
-                "rw4fF5LDQsonyoYiEYrgPgTC2asnCQQZ6g",
-                "rrssGm5h8aWncB3CGMuQ2WGfexubbeCTLV",
-                "rEmGJ3uu7DSrNfM5JSZnFtMjYhLbSmVJ3A",
-                "rfBQaUjF9UZWjdJ33hGDeas1hEXK7DmfCV",
-                "rswHs4bzLBSyfd2fWtjuzUxAqudfrzRDtT",
-                "r4dVikgRzdVuZcFfMWJWiUo8iJxmYGDmiS",
-                "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
-                "rhXBNAJbHKym75tazYAxcEbghNN6vLyYZE",
-                "rKqDVS5fYEWDNivosnFiri1bXfqt2ebj7q",
-                "rP3MGBqPdAXVrBGvP1Hn1UFozuaQvSxMMQ",
-                "rErmdQZLmAauqjY7ig8KeLAGhfxeVAHHnA",
-                "rnG2Q9cqrmCvWNZvMG4JHzG96deqEg5HDx",
-                "rB2SBLDLBUwaUV2QegZxoztpkJLgh1Kvcx",
-                "r931fvw3imdtULs522s5VqV9EaQ21pu6ja",
-                "r4LF5L5tq7JdsAUY5YUXjAU1J6xZtm47HP",
-                "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
-                "rGnsENqQKqPNQKWMSNxbZcMuubjJaaBpf5",
-                "rMaHq7P7ibkbeiykRGyTsdyFEDBRGrLdx6",
-                "rHJqCseZFzCveSTdtJuDNpD4ARoMy41E1C",
-                "rGYPizbATsej8iJ4kDeFf7tRysf6ggwcQY",
-                "rMu8RLEKTtyWuhko1F5dVZoUAiVpRpi5GB",
-                "rhsBuUnoV1yGSpSVYgzFMFeTcFLvg8ZQnh",
-                "rhYqbRQpSy7RtQtXjfurprdB4Gj8PAJW2X",
-                "rfZFCjpFD1zhJP3DsSWy9NVUCmm9Kkhg4w"
-            ],
-            instanceCfg: {
-                config: {
-                    log: {
-                        log_level: "dbg"
-                    }
-                }
+    const xrplContext = new evp.XrplContext(hpContext, masterAddress);
+    const evernodeContext = new evp.EvernodeContext(xrplContext, evernodeGovernor);
+    const clusterContext = new evp.ClusterContext(evernodeContext);
+    const nomadContext = new evp.NomadContext(clusterContext, nomadOptions);
+
+    // Listen to incoming user messages and feed them to evernodeContext.
+    const userHandlers = [];
+    for (const user of contractCtx.users.list()) {
+        userHandlers.push(new Promise(async (resolve) => {
+            for (const input of user.inputs) {
+                const buf = await contractCtx.users.read(input);
+                console.log("Received user input", buf.toString());
+                await clusterContext.feedUserMessage(user, buf);
             }
-        }
+            resolve();
+        }));
+    }
+    await Promise.all(userHandlers);
 
-        const xrplContext = new evp.XrplContext(hpContext, masterAddress);
-        const evernodeContext = new evp.EvernodeContext(xrplContext, evernodeGovernor);
-        const clusterContext = new evp.ClusterContext(evernodeContext);
-        const nomadContext = new evp.NomadContext(clusterContext, nomadOptions);
-
-        // Listen to incoming user messages and feed them to evernodeContext.
-        const userHandlers = [];
-        for (const user of contractCtx.users.list()) {
-            userHandlers.push(new Promise(async (resolve) => {
-                for (const input of user.inputs) {
-                    const buf = await contractCtx.users.read(input);
-                    console.log("Received user input", buf.toString());
-                    await clusterContext.feedUserMessage(user, buf);
-                }
-                resolve();
-            }));
-        }
-        await Promise.all(userHandlers);
-
-
+    if (!contractCtx.readonly) {
         const tests = [
             // () => testVote(voteContext),
             // () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
@@ -391,11 +392,10 @@ const prepareMultiSigner = async (xrplContext, signerCount, isSigner, quorum) =>
         let signer;
         if (isSigner) {
             signer = xrplContext.multiSigner.generateSigner();
-            signer.weight = signerWeight;
 
             signerList = (await xrplContext.voteContext.vote(`multiSignerPrepare`, [{
                 account: signer.account,
-                weight: signer.weight
+                weight: signerWeight
             }], elector)).map(ob => ob.data);
         }
         else {

@@ -2,12 +2,11 @@
     "name": "test",
     "version": "1.0.0",
     "scripts": {
-        "build": "npx ncc build src/test.js -o dist",
+        "build": "npx ncc build src/contract.js -o dist",
         "start": "npm run build && hpdevkit deploy dist"
     },
     "dependencies": {
-        "evernode-js-client": "0.6.11",
-        "everpocket-nodejs-contract": "file:../dist",
+        "everpocket-nodejs-contract": "file:../../dist",
         "hotpocket-nodejs-contract": "0.5.7"
     },
     "devDependencies": {
