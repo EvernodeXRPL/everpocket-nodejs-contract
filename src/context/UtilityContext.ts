@@ -2,6 +2,8 @@ import { Buffer } from 'buffer';
 import { ConnectionOptions, Peer } from '../models';
 import { ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType } from '../models/cluster';
 
+const TIMEOUT = 60000;
+
 const HotPocket = require('hotpocket-js-client');
 class UtilityContext {
     private hpContext: any;
@@ -28,25 +30,32 @@ class UtilityContext {
         this.hpClient = await HotPocket.createClient(nodes.map(n => `wss://${n.toString()}`), keys);
     }
 
-    async #connectAndHandle(nodes: Peer[], action: Function | null = null, cb: Function | null = null, options: ConnectionOptions = {}): Promise<void> {
+    /**
+     * Connect to given node and handle an user action.
+     * @param nodes Nodes to connect to.
+     * @param [action=null] User action to be handled
+     * @param [callback=null] Callback on completion or error.
+     * @param [options={}] Connection options.
+     */
+    async #connectAndHandle(nodes: Peer[], action: Function | null = null, callback: Function | null = null, options: ConnectionOptions = {}): Promise<void> {
         await this.#initClient(nodes);
 
         const timer = setTimeout(async () => {
             await handleFailure(`Timeout waiting for HotPocket connection`);
-        }, options.timeout || 60000);
+        }, options.timeout || TIMEOUT);
 
         const handleFailure = async (error: any) => {
             clearTimeout(timer);
             this.hpClient.clear(HotPocket.events.contractOutput);
             await this.hpClient.close();
-            if (cb)
-                await cb(null, error);
+            if (callback)
+                await callback(null, error);
         }
         const handleSuccess = async (data: any) => {
             clearTimeout(timer);
             await this.hpClient.close();
-            if (cb)
-                await cb(data, null);
+            if (callback)
+                await callback(data, null);
         }
 
         try {
@@ -87,6 +96,7 @@ class UtilityContext {
                 }
                 else
                     resolve(true);
+                return;
             }, { timeout: 6000 });
         });
     }
@@ -103,9 +113,13 @@ class UtilityContext {
                 return await new Promise<void>(async (resolve2, reject2) => {
                     this.hpClient.on(HotPocket.events.contractOutput, (res: any) => {
                         try {
-                            let obj = res as ClusterMessageResponse;
-                            if (obj.type === ClusterMessageType.MATURED && obj.status === ClusterMessageResponseStatus.OK)
-                                resolve2();
+                            for (const output of res.outputs) {
+                                let obj = JSON.parse(output.toString()) as ClusterMessageResponse;
+                                if (obj.type === ClusterMessageType.MATURED && obj.status === ClusterMessageResponseStatus.OK) {
+                                    resolve2();
+                                    return;
+                                }
+                            }
                         }
                         catch (e) {
                             console.error(e);
@@ -114,8 +128,10 @@ class UtilityContext {
 
                     const input = await this.hpClient.submitContractInput(message);
                     const statRes = await input.submissionStatus;
-                    if (statRes.status != "accepted")
+                    if (statRes.status != "accepted") {
                         reject2("Submission failed. reason: " + statRes.reason);
+                        return;
+                    }
 
                 });
             }, (data: any, error: any) => {
@@ -123,7 +139,7 @@ class UtilityContext {
                     reject(error);
                 else
                     resolve();
-
+                return;
             }, { timeout: 60000 });
         });
     }

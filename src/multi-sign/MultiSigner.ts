@@ -63,8 +63,8 @@ class MultiSigner {
 
     /**
      * 
-     * @param tx Transaction in json 
-     * @returns The signed transaction blob
+     * @param tx Transaction in json.
+     * @returns The signed transaction blob.
      */
     public async sign(tx: any): Promise<string> {
         if (!this.signerAcc)
@@ -73,6 +73,10 @@ class MultiSigner {
         return signedObj.tx_blob;
     }
 
+    /**
+     * Check wether this is a signer.
+     * @returns true or false based on signer or not.
+     */
     public isSignerNode(): boolean {
         return !!this.signer;
     }
