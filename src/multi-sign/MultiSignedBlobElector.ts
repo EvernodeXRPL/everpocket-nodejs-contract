@@ -11,6 +11,13 @@ class MultiSignedBlobElector extends AllVoteElector {
         this.signerListInfo = signerListInfo;
     }
 
+    /**
+     * Evaluate the election.
+     * @param electionName Election identifier.
+     * @param voteEmitter Event emitter which the votes are fed into,
+     * @param context Vote context for the election.
+     * @returns Evaluated votes as a promise.
+     */
     override election(electionName: string, voteEmitter: EventEmitter, context: VoteContext): Promise<any[]> {
         return new Promise((resolve) => {
             // Fire up the timeout if we didn't receive enough votes.

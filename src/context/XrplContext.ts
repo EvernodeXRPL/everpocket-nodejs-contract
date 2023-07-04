@@ -1,9 +1,10 @@
-import { XrplContextOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter, Transaction } from '../models';
+import { XrplOptions, Signature, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter, Transaction } from '../models';
 import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
 import * as evernode from 'evernode-js-client';
 import VoteContext from './VoteContext';
+import { VoteElectorOptions } from '../models/vote';
 
 const TIMEOUT = 4000;
 
@@ -14,7 +15,7 @@ class XrplContext {
     public multiSigner: MultiSigner;
     public voteContext: VoteContext;
 
-    public constructor(hpContext: any, address: string, secret: string | null = null, options: XrplContextOptions = {}) {
+    public constructor(hpContext: any, address: string, secret: string | null = null, options: XrplOptions = {}) {
         this.hpContext = hpContext;
         this.xrplApi = options.xrplApi || new evernode.XrplApi();
         this.voteContext = options.voteContext || new VoteContext(this.hpContext, options.voteOptions)
@@ -22,28 +23,47 @@ class XrplContext {
         this.multiSigner = new MultiSigner(this.xrplAcc);
     }
 
+    /**
+     * Initialize the xrpl context.
+     */
     public async init(): Promise<void> {
         await this.xrplApi.connect();
     }
 
+    /**
+     * Deinitialize the xrpl context.
+     */
     public async deinit(): Promise<void> {
         await this.xrplApi.disconnect();
     }
 
+    /**
+     * Get current sequence value of the master account.
+     * @returns Current sequence number.
+     */
     public async getSequence(): Promise<number> {
         return await this.xrplAcc.getSequence()
     }
 
+    /**
+     * Get a maximum ledger number to validate a transaction.
+     * @returns The maximum ledger number.
+     */
     public getMaxLedgerSequence(): number {
         return Math.ceil((this.xrplApi.ledgerIndex + 30) / 10) * 10; // Get nearest 10th
     }
 
-    public async getTransactionSubmissionInfo(timeout: number = TIMEOUT): Promise<TransactionSubmissionInfo> {
+    /**
+     * Decide a transaction submission info for a transaction.
+     * @param [options={}] Vote options to decide the transaction submission info.
+     * @returns Transaction submission info.
+     */
+    public async getTransactionSubmissionInfo(options: VoteElectorOptions = {}): Promise<TransactionSubmissionInfo> {
         // Decide a sequence number and max ledger sequence to send the same transaction from all the nodes.
         const infos: TransactionSubmissionInfo[] = (await this.voteContext.vote(`transactionInfo${this.voteContext.getUniqueNumber()}`, [<TransactionSubmissionInfo>{
             sequence: await this.getSequence(),
             maxLedgerSequence: this.getMaxLedgerSequence()
-        }], new AllVoteElector(this.hpContext.unl.list().length, timeout))).map(ob => ob.data);
+        }], new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT))).map(ob => ob.data);
 
         return <TransactionSubmissionInfo>{
             sequence: infos.map(i => i.sequence).sort()[0],
@@ -52,9 +72,9 @@ class XrplContext {
     }
 
     /**
-     * 
+     * Submit a multisigned transaction.
      * @param tx Multi-signed transaction
-     * @returns response
+     * @returns The transaction response.
      */
     async submitMultisignedTx(tx: any) {
         const res = await this.xrplApi.submitMultisigned(tx);
@@ -64,10 +84,10 @@ class XrplContext {
     /**
      * Multi sign and submit a given transaction.
      * @param transaction Transaction to submit.
-     * @param timeout Optional timeout for votes to resolve.
+    * @param [options={}] Multisigner options.
      */
     public async multiSignAndSubmitTransaction(transaction: any, options: MultiSignOptions = {}): Promise<any> {
-        const txSubmitInfo = await this.getTransactionSubmissionInfo(options.voteTimeout);
+        const txSubmitInfo = await this.getTransactionSubmissionInfo(options?.voteElectorOptions);
         if (!txSubmitInfo)
             throw 'Could not get transaction submission info';
 
@@ -83,7 +103,7 @@ class XrplContext {
 
         transaction.Fee = `${Number(transaction.Fee) * (signerCount + 2)}`;
 
-        const elector = new MultiSignedBlobElector(signerCount, signerListInfo, options.voteTimeout || TIMEOUT);
+        const elector = new MultiSignedBlobElector(signerCount, signerListInfo, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `sign${this.voteContext.getUniqueNumber()}`;
         let signatures: Signature[];
 
@@ -105,6 +125,11 @@ class XrplContext {
         return await this.xrplAcc.submitMultisigned(transaction);
     }
 
+    /**
+     * Generate new signer list.
+     * @param [options={}] Multisigner options.
+     * @returns The new signer list.
+     */
     public async generateNewSignerList(options: MultiSignOptions = {}): Promise<[SignerListInfo, SignerPrivate]> {
         const curSignerList = await this.getSignerList();
         const quorum = options.quorum || curSignerList?.signerQuorum;
@@ -113,7 +138,7 @@ class XrplContext {
         if (!signerCount)
             throw 'Signer count cannot be empty.';
 
-        const elector = new AllVoteElector(signerCount, options.voteTimeout || TIMEOUT);
+        const elector = new AllVoteElector(signerCount, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `signerList${this.voteContext.getUniqueNumber()}`;
 
         let newSigner: SignerPrivate | null = null;
@@ -147,6 +172,10 @@ class XrplContext {
 
 
 
+    /**
+     * Renew the current signer list.
+     * @param [options={}] Multisigner options to override.
+     */
     public async renewSignerList(options: MultiSignOptions = {}): Promise<void> {
         const [signerListInfo, newSigner] = await this.generateNewSignerList(options);
         const preparedTxn = await this.xrplAcc.prepareSetSignerList(signerListInfo.signerList, { ...options, signerQuorum: signerListInfo.signerQuorum });
@@ -158,8 +187,14 @@ class XrplContext {
             this.multiSigner.setSigner(newSigner);
     }
 
+    /**
+     * Add new signer node to the signer list.
+     * @param pubkey Public key of the node to add.
+     * @param weight Signer weight for the new signer.
+     * @param [options={}] Multisigner options to override.
+     */
     async addXrplSigner(pubkey: string, weight: number, options: MultiSignOptions = {}): Promise<void> {
-        const elector = new AllVoteElector(1, options.voteTimeout || TIMEOUT);
+        const elector = new AllVoteElector(1, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `addSigner${this.voteContext.getUniqueNumber()}`;
 
         let signer: Signer;
@@ -191,8 +226,13 @@ class XrplContext {
             this.multiSigner.setSigner(newSigner);
     }
 
+    /**
+     * Remove a signer node from the signer list.
+     * @param pubkey Public key of the signer node to remove.
+     * @param [options={}] Multisigner options to override.
+     */
     async removeXrplSigner(pubkey: string, options: MultiSignOptions = {}): Promise<void> {
-        const elector = new AllVoteElector(1, options.voteTimeout || TIMEOUT);
+        const elector = new AllVoteElector(1, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `removeSigner${this.voteContext.getUniqueNumber()}`;
 
         let signer: Signer;
@@ -228,7 +268,7 @@ class XrplContext {
 
     /**
      * Returns the signer list of the account
-     * @returns An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || undefined 
+     * @returns An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || null 
      */
     public async getSignerList(): Promise<SignerListInfo | null> {
         const accountObjects = await this.xrplAcc.getAccountObjects({ type: "signer_list" });
@@ -242,6 +282,10 @@ class XrplContext {
             return null;
     }
 
+    /**
+     * Check wether this node is a signer.
+     * @returns true or false if signer or not.
+     */
     public isSigner(): boolean {
         return this.multiSigner.isSignerNode();
     }

@@ -19,6 +19,7 @@ export interface PendingAcquire {
   refId: string;
   messageKey: string;
   ledgerIdx: number;
+  acquireSentOnLcl: number;
 }
 
 export interface AcquiredNode extends Instance {
