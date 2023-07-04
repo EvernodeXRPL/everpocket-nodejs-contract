@@ -65,37 +65,35 @@ class EvernodeContext {
     async #checkForCompletedAcquires(): Promise<void> {
         // Check for pending transactions and their completion.
         for (const item of this.getPendingAcquires()) {
-            const txnInfo = await this.xrplContext.xrplApi.getTxnInfo(item.refId, {});
-            if (txnInfo && txnInfo.validated) {
-                const txList = await this.xrplContext.xrplAcc.getAccountTrx(txnInfo.ledger_index);
-                for (let t of txList) {
-                    t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
-                    t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
+            const txList = await this.xrplContext.xrplAcc.getAccountTrx(item.ledgerIdx);
+            for (let t of txList) {
+                t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
+                t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
 
-                    const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
-                        fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
-                    const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
-                    const res = await tenantClient.extractEvernodeEvent(t.tx);
-                    let payload = null;
-                    if (res?.name === evernode.TenantEvents.AcquireSuccess && res?.data?.acquireRefId === item.refId)
-                        payload = res.data.payload;
-                    else if (res?.name === evernode.TenantEvents.AcquireError && res?.data?.acquireRefId === item.refId)
-                        payload = 'acquire_error';
+                const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
+                    fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
+                const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
+                const res = await tenantClient.extractEvernodeEvent(t.tx);
+                let payload = null;
+                if (res?.name === evernode.TenantEvents.AcquireSuccess && res?.data?.acquireRefId === item.refId)
+                    payload = res.data.payload;
+                else if (res?.name === evernode.TenantEvents.AcquireError && res?.data?.acquireRefId === item.refId)
+                    payload = 'acquire_error';
 
-                    if (payload) {
-                        const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
-                        const elector = new AllVoteElector(1, 1000);
-                        payload = (privateKey ? await this.voteContext.vote(electionName, [payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+                if (payload) {
+                    const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
+                    const elector = new AllVoteElector(1, 1000);
+                    payload = (privateKey ? await this.voteContext.vote(electionName, [payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
 
-                        // Updated the acquires if there's a success response.
-                        if (payload !== 'acquire_error')
-                            await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
-                        await this.updatePendingAcquireInfo(item, "DELETE");
-                        if (privateKey)
-                            fs.unlinkSync(`../${item.messageKey}.txt`);
-                    }
+                    // Updated the acquires if there's a success response.
+                    if (payload !== 'acquire_error')
+                        await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
+                    await this.updatePendingAcquireInfo(item, "DELETE");
+                    if (privateKey)
+                        fs.unlinkSync(`../${item.messageKey}.txt`);
                 }
             }
+
         }
     }
 
@@ -115,7 +113,7 @@ class EvernodeContext {
         // Perform acquire txn on the selected host.
         const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
 
-        const pendingAcquire = <PendingAcquire>{ host: hostAddress, leaseOfferIdx: leaseOffer.index, refId: res.tx_json.hash, messageKey: messageKey };
+        const pendingAcquire = <PendingAcquire>{ host: hostAddress, leaseOfferIdx: leaseOffer.index, refId: res.id, messageKey: messageKey, ledgerIdx: res.details.ledger_index };
 
         // Record as a acquire transaction.
         await this.updatePendingAcquireInfo(pendingAcquire);
@@ -245,32 +243,14 @@ class EvernodeContext {
      */
     async acquireSubmit(hostAddress: string, leaseOffer: URIToken, messageKey: string, options: AcquireOptions = {}): Promise<any> {
         // Get transaction details to use for xrpl tx submission.
-        const hostClient = new evernode.HostClient(hostAddress);
+        const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address);
+        await tenantClient.connect();
 
-        // Get host encryption key (public key).
-        const encKey = await hostClient.xrplAcc.getMessageKey();
-        if (!encKey)
-            throw { reason: evernode.ErrorReasons.INTERNAL_ERR, error: "Host encryption key not set." };
-
-        // Derive a seed buffer from the lclHash.
         const seed = Buffer.from(this.hpContext.lclHash, "hex");
-        const encrypted = await evernode.EncryptionHelper.encrypt(encKey, { ...(JSONHelpers.castFromModel(options.instanceCfg)), messageKey: messageKey }, {
-            iv: seed.slice(0, 16),
-            ephemPrivateKey: seed.slice(0, 32)
-        });
-        // Set encrypted prefix flag and data.
-        const data = Buffer.concat([Buffer.from([0x01]), Buffer.from(encrypted, "base64")]).toString("base64");
+        const preparedAcquireTxn = await tenantClient.prepareAcquireLeaseTransaction(hostAddress, { ...(JSONHelpers.castFromModel(options.instanceCfg)), messageKey: messageKey }, { leaseOfferIndex: leaseOffer.index, iv: seed.slice(0, 16), ephemPrivateKey: seed.slice(0, 32) })
+        await tenantClient.disconnect();
 
-        return await this.xrplContext.buyURIToken(
-            leaseOffer,
-            [
-                { type: evernode.EventTypes.ACQUIRE_LEASE, format: "base64", data: data }
-            ],
-            [
-                { name: evernode.HookParamKeys.PARAM_EVENT_TYPE_KEY, value: evernode.EventTypes.ACQUIRE_LEASE }
-            ],
-            options
-        );
+        return await this.xrplContext.multiSignAndSubmitTransaction(preparedAcquireTxn, options);
     }
 
     /**
@@ -287,14 +267,13 @@ class EvernodeContext {
             throw 'No lease token for given token id';
 
         const uriInfo = this.decodeLeaseTokenUri(leaseToken.URI);
-        return this.xrplContext.makePayment(hostAddress, ((uriInfo.leaseAmount * extension)).toString(),
-            evernode.EvernodeConstants.EVR, this.registryClient.config.evrIssuerAddress, null,
-            [
-                { name: evernode.HookParamKeys.PARAM_EVENT_TYPE_KEY, value: evernode.EventTypes.EXTEND_LEASE },
-                { name: evernode.HookParamKeys.PARAM_EVENT_DATA1_KEY, value: tokenID }
-            ],
-            options
-        );
+        const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address);
+        await tenantClient.connect();
+
+        const preparedAcquireTxn = await tenantClient.prepareExtendLeaseTransaction(hostAddress, ((uriInfo.leaseAmount * extension)).toString(), tokenID, options)
+        await tenantClient.disconnect();
+
+        return await this.xrplContext.multiSignAndSubmitTransaction(preparedAcquireTxn, options);
     }
 
     /**
