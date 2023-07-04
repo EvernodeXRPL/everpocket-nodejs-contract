@@ -73,12 +73,13 @@ class ClusterContext {
             const electionName = `share_node_info${this.voteContext.getUniqueNumber()}`;
             const elector = new AllVoteElector(0, options?.timeout || TIMEOUT);
             const signer = this.evernodeContext.xrplContext.multiSigner.getSigner();
+            const signerListsInfo = await this.evernodeContext.xrplContext.getSignerList();
             const node = <ClusterNode>{
                 pubkey: this.hpContext.publicKey,
                 contractId: this.hpContext.contractId,
                 isUnl: !!this.hpContext.getContractUnl().find((p: any) => p.publicKey === this.hpContext.publicKey),
                 isQuorum: !!signer,
-                signerWeight: signer ? signer.weight : null
+                signerWeight: signer ? signerListsInfo?.signerList.find(s => s.account === signer.account)?.weight : null
             }
             const nodes: ClusterNode[] = (await this.voteContext.vote(electionName, [node], elector)).map(ob => ob.data);
             this.clusterManager.initializeCluster(nodes);

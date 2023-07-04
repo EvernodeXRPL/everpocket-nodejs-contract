@@ -34,6 +34,7 @@ const testContract = async (contractCtx) => {
         const signerToAdd = nonSigners.length ? nonSigners[0] : null;
         const signerCount = contractCtx.unl.list().length - nonSigners.length;
         const quorum = Math.floor(signerCount * signerWeight * 0.8);
+        const signerToRemove = contractCtx.unl.list().map(n => n.publicKey).find(p => !nonSigners.includes(p));
 
         const voteContext = new evp.VoteContext(contractCtx);
         const hpContext = new evp.HotPocketContext(contractCtx, { voteContext: voteContext });
@@ -122,7 +123,7 @@ const testContract = async (contractCtx) => {
             // () => testVote(voteContext),
             // () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
             // () => renewSignerList(xrplContext),
-            // () => removeXrplSigner(xrplContext, signerToAdd, quorum - signerWeight),
+            // () => removeXrplSigner(xrplContext, signerToRemove, quorum - signerWeight),
             // () => getSignerList(xrplContext),
             // () => multiSignTransaction(xrplContext),
             // () => checkLiveness(utilityContext, ip, port),

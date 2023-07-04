@@ -1,4 +1,4 @@
-import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerPrivate, Memo, URIToken, HookParameter, Transaction, SignatureInfo, Signature } from '../models';
+import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Memo, URIToken, HookParameter, Transaction, Signature } from '../models';
 import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
@@ -108,17 +108,14 @@ class XrplContext {
 
         const elector = new MultiSignedBlobElector(signerCount, signerListInfo, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `sign${this.voteContext.getUniqueNumber()}`;
-        let signatures: SignatureInfo[];
+        let signatures: Signature[];
 
         // If this is a signer, Sign the transaction and collect the signed blob list.
         // Otherwise just collect the signed blob list.
         if (this.isSigner()) {
             const signed = await this.multiSigner.sign(transaction);
             const decodedTx = JSON.parse(JSON.stringify(xrplCodec.decode(signed)));
-            const signature: SignatureInfo = {
-                ...decodedTx.Signers[0],
-                weight: this.multiSigner.getSigner()?.weight
-            };
+            const signature: Signature = decodedTx.Signers[0];
             signatures = (await this.voteContext.vote(electionName, [signature], elector)).map(ob => ob.data);
         }
         else {
@@ -126,7 +123,9 @@ class XrplContext {
         }
 
         // Throw error if there're no enough signatures to fulfil the quorum.
-        const totalWeight = signatures.map(s => s.weight).reduce((a, b) => a + b, 0);
+        const totalWeight = signatures.map(s => {
+            return signerListInfo.signerList.find(i => i.account === s.Signer.Account)!.weight;
+        }).reduce((a, b) => a + b, 0);
         if (totalWeight < signerListInfo.signerQuorum)
             throw `No enough signatures: Total weight: ${totalWeight}, Quorum: ${signerListInfo.signerQuorum}.`;
 
@@ -150,7 +149,7 @@ class XrplContext {
      * @param [options={}] Multisigner options.
      * @returns The new signer list.
      */
-    public async generateNewSignerList(options: MultiSignOptions = {}): Promise<[SignerListInfo, SignerPrivate]> {
+    public async generateNewSignerList(options: MultiSignOptions = {}): Promise<[SignerListInfo, SignerKey]> {
         const curSignerList = await this.getSignerList();
         const quorum = options.quorum || curSignerList?.signerQuorum;
         const signerCount = options.signerCount || curSignerList?.signerList.length;
@@ -161,7 +160,7 @@ class XrplContext {
         const elector = new AllVoteElector(signerCount, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `signerList${this.voteContext.getUniqueNumber()}`;
 
-        let newSigner: SignerPrivate | null = null;
+        let newSigner: SignerKey | null = null;
         let signerList: Signer[];
 
         // If this is a signer, Generate new signer and send it.
@@ -174,10 +173,9 @@ class XrplContext {
                 throw 'Weight or Signer Quorum cannot be empty.';
 
             newSigner = this.multiSigner.generateSigner();
-            newSigner.weight = weight;
             signerList = (await this.voteContext.vote(electionName, [<Signer>{
                 account: newSigner.account,
-                weight: newSigner.weight
+                weight: weight
             }], elector)).map(ob => ob.data);
 
         }
@@ -185,7 +183,7 @@ class XrplContext {
             signerList = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
         }
 
-        return <[SignerListInfo, SignerPrivate]>[{
+        return <[SignerListInfo, SignerKey]>[{
             signerQuorum: quorum,
             signerList: signerList,
         }, newSigner]
@@ -240,15 +238,14 @@ class XrplContext {
         const electionName = `addSigner${this.voteContext.getUniqueNumber()}`;
 
         let signer: Signer;
-        let newSigner: SignerPrivate | null = null;
+        let newSigner: SignerKey | null = null;
         // If this is a the owner, Generate new signer and send it.
         // Otherwise just collect the signer.
         if (pubkey === this.hpContext.publicKey) {
             newSigner = this.multiSigner.generateSigner();
-            newSigner.weight = weight;
             signer = (await this.voteContext.vote(electionName, [<Signer>{
                 account: newSigner.account,
-                weight: newSigner.weight
+                weight: weight
             }], elector)).map(ob => ob.data)[0];
 
         }
@@ -277,14 +274,13 @@ class XrplContext {
         const electionName = `removeSigner${this.voteContext.getUniqueNumber()}`;
 
         let signer: Signer;
-        let curSigner: SignerPrivate | null = null;
+        let curSigner: SignerKey | null = null;
         // If this is a the owner, Generate new signer and send it.
         // Otherwise just collect the signer.
         if (pubkey === this.hpContext.publicKey) {
             curSigner = this.multiSigner.getSigner();
             signer = (await this.voteContext.vote(electionName, [<Signer>{
-                account: curSigner?.account,
-                weight: curSigner?.weight
+                account: curSigner?.account
             }], elector)).map(ob => ob.data)[0];
         }
         else {

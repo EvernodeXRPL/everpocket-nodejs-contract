@@ -1,12 +1,12 @@
 import * as evernode from 'evernode-js-client';
 import * as fs from 'fs';
 import * as kp from 'ripple-keypairs';
-import { SignerPrivate } from '../models';
+import { SignerKey } from '../models';
 import { JSONHelpers } from "../utils";
 
 class MultiSigner {
     private keyPath: string;
-    private signer: SignerPrivate | null = null;
+    private signer: SignerKey | null = null;
     public masterAcc: any;
     public signerAcc: any;
 
@@ -14,7 +14,7 @@ class MultiSigner {
         this.masterAcc = masterAcc;
         this.keyPath = `../${this.masterAcc.address}.key`;
 
-        const data = JSONHelpers.readFromFile<SignerPrivate>(this.keyPath);
+        const data = JSONHelpers.readFromFile<SignerKey>(this.keyPath);
         if (data) {
             this.signer = data;
             this.signerAcc = new evernode.XrplAccount(this.signer.account, this.signer.secret, { xrplApi: this.masterAcc.xrplApi });
@@ -25,7 +25,7 @@ class MultiSigner {
      * Get the signer.
      * @returns Signer info.
      */
-    public getSigner(): SignerPrivate | null {
+    public getSigner(): SignerKey | null {
         return this.signer;
     }
 
@@ -33,7 +33,7 @@ class MultiSigner {
      * Set the signer.
      * @param signer Signer to set.
     */
-    public setSigner(signer: SignerPrivate): void {
+    public setSigner(signer: SignerKey): void {
         this.signer = signer;
         this.signerAcc = new evernode.XrplAccount(this.signer.account, this.signer.secret, { xrplApi: this.masterAcc.xrplApi });
         JSONHelpers.writeToFile(this.keyPath, this.signer);
@@ -52,10 +52,10 @@ class MultiSigner {
      * Generate a key for the node and save the node key in a file named by (../\<master address\>.key).
      * @returns Generated signer info.
      */
-    public generateSigner(): SignerPrivate {
+    public generateSigner(): SignerKey {
         const nodeSecret = kp.generateSeed({ algorithm: "ecdsa-secp256k1" });
         const keypair = kp.deriveKeypair(nodeSecret);
-        return <SignerPrivate>{
+        return <SignerKey>{
             account: kp.deriveAddress(keypair.publicKey),
             secret: nodeSecret
         };

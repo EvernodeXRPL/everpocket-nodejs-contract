@@ -1,11 +1,12 @@
-import { VoteOptions, VoteElectorOptions } from "../vote";
+import { VoteElectorOptions } from "../vote";
 
 export interface Signer {
   account: string;
   weight: number;
 }
 
-export interface SignerPrivate extends Signer {
+export interface SignerKey {
+  account: string;
   secret: string;
 }
 
@@ -20,10 +21,6 @@ export interface Signature {
     TxnSignature: string;
     Account: string;
   }
-}
-
-export interface SignatureInfo extends Signature {
-  weight: number;
 } 
 
 export interface TransactionSubmissionInfo {
