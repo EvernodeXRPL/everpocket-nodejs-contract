@@ -12,7 +12,7 @@ const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
 const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16";
 const ALIVENESS_CHECK_THRESHOLD = 5;
 const MATURITY_LCL_THRESHOLD = 2;
-const TIMEOUT = 6000;
+const TIMEOUT = 10000;
 
 class ClusterContext {
     private clusterManager: ClusterManager;

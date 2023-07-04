@@ -10,7 +10,7 @@ import { JSONHelpers } from "../utils";
 import { VoteElectorOptions } from "../models/vote";
 import HotPocketContext from "./HotPocketContext";
 
-const TIMEOUT = 4000;
+const TIMEOUT = 10000;
 const ACQUIRE_ABANDON_LCL_THRESHOLD = 5;
 
 class EvernodeContext {

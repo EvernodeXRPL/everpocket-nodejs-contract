@@ -85,7 +85,7 @@ async function main() {
                         type: 'cluster_nodes'
                     })).then(reply => {
                         const res = JSON.parse(reply);
-                        if (res && reply.type === 'cluster_nodes' && reply.status === 'ok')
+                        if (res && res.type === 'cluster_nodes' && res.status === 'ok')
                             console.log(res.data);
                         else
                             console.log(res);

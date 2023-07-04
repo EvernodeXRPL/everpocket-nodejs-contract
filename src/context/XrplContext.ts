@@ -7,7 +7,7 @@ import { VoteElectorOptions } from '../models/vote';
 import HotPocketContext from './HotPocketContext';
 import VoteContext from './VoteContext';
 
-const TIMEOUT = 5000;
+const TIMEOUT = 10000;
 
 class XrplContext {
     public hpContext: any;
