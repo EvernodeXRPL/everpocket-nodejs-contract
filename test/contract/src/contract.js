@@ -203,7 +203,7 @@ const extendNode = async (evernodeContext) => {
         const extendingNodeName = token.index;
         const hostAddress = token.Issuer;
         const res = await evernodeContext.extendSubmit(hostAddress, 1, extendingNodeName);
-        console.log(res?.code);
+        console.log(res.code);
     } catch (e) {
         console.error(e);
     } finally {

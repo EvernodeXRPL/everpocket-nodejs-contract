@@ -115,9 +115,7 @@ class XrplContext {
         if (!this.signerListInfo || !signerCount)
             throw 'Could not get signer list';
 
-        /////// TODO: This should be handled in js lib. //////
-        transaction.Fee = `${10 * (signerCount + 2)}`;
-        transaction.NetworkID = evernode.Defaults.get().networkID;
+        transaction.Fee = `${Number(transaction.Fee) * (signerCount + 2)}`;
 
         const elector = new MultiSignedBlobElector(signerCount, this.signerListInfo, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `sign${this.voteContext.getUniqueNumber()}`;
@@ -143,18 +141,8 @@ class XrplContext {
             throw `No enough signatures: Total weight: ${totalWeight}, Quorum: ${this.signerListInfo.signerQuorum}.`;
 
         transaction.Signers = signatures.map(s => <Signature>{ Signer: s.Signer });
-        transaction.SigningPubKey = "";
 
-        // Submit the multi-signed transaction.
-        const res = await this.submitMultisignedTx(transaction).catch(console.error);
-        if (res?.code === "tesSUCCESS")
-            console.log("Transaction submitted successfully");
-        else if (res?.code === "tefPAST_SEQ" || res?.code === "tefALREADY")
-            console.log("Proceeding with pre-submitted transaction");
-        else
-            throw res?.code ? `Transaction failed with error ${res.code}` : 'Transaction failed';
-
-        return res;
+        return await this.xrplAcc.submitMultisigned(transaction);
     }
 
     /**
@@ -207,23 +195,9 @@ class XrplContext {
      * @param [options={}] Multisigner options to set.
      */
     public async setSignerList(signerListInfo: SignerListInfo, options: MultiSignOptions = {}): Promise<void> {
-        const tx =
-        {
-            Flags: 0,
-            TransactionType: "SignerListSet",
-            Account: this.xrplAcc.address,
-            SignerQuorum: signerListInfo.signerQuorum,
-            SignerEntries: [
-                ...signerListInfo.signerList.map(signer => ({
-                    SignerEntry: {
-                        Account: signer.account,
-                        SignerWeight: signer.weight
-                    }
-                })).sort((a, b) => a.SignerEntry.Account < b.SignerEntry.Account ? -1 : 1)
-            ]
-        };
+        const preparedTxn = await this.xrplAcc.prepareSetSignerList(signerListInfo.signerList, { ...options, signerQuorum: signerListInfo.signerQuorum });
 
-        await this.multiSignAndSubmitTransaction(tx, options);
+        await this.multiSignAndSubmitTransaction(preparedTxn, options);
 
         // Reload the signer list after resetting.
         await this.loadSignerList();
@@ -269,14 +243,15 @@ class XrplContext {
         }
 
         // Add signer to the list and renew the signer list. Clone objet to avoid reference.
-        let signerList = <SignerListInfo>{};
+        let signerListInfo = <SignerListInfo>{};
         if (this.signerListInfo)
-            Object.assign(signerList, this.signerListInfo);
+            Object.assign(signerListInfo, this.signerListInfo);
 
-        signerList.signerList.push(signer);
+        signerListInfo.signerList.push(signer);
         if (options.quorum)
-            signerList.signerQuorum = options.quorum;
-        await this.setSignerList(signerList!, options);
+            signerListInfo.signerQuorum = options.quorum;
+
+        await this.setSignerList(signerListInfo, options);
 
         if (newSigner)
             this.multiSigner.setSigner(newSigner);
@@ -306,15 +281,16 @@ class XrplContext {
         }
 
         // Remove signer from the list and renew the signer list. Clone objet to avoid reference.
-        let signerList = <SignerListInfo>{};
+        let signerListInfo = <SignerListInfo>{};
         if (this.signerListInfo)
-            Object.assign(signerList, this.signerListInfo);
+            Object.assign(signerListInfo, this.signerListInfo);
 
-        if (signerList && signer) {
-            signerList.signerList = signerList.signerList.filter(s => s.account != signer.account);
+        if (signerListInfo && signer) {
+            signerListInfo.signerList = signerListInfo.signerList.filter(s => s.account != signer.account);
             if (options.quorum)
-                signerList.signerQuorum = options.quorum;
-            await this.setSignerList(signerList!, options);
+                signerListInfo.signerQuorum = options.quorum;
+
+            await this.setSignerList(signerListInfo, options);
         }
 
         if (curSigner)
@@ -337,81 +313,6 @@ class XrplContext {
         return this.multiSigner.isSignerNode();
     }
 
-    /**
-     * Make amount object for a transaction.
-     * @param amount Amount value to set.
-     * @param currency Currency token to set.
-     * @param issuer Issuer of the currency.
-     * @returns The prepared amount object.
-     */
-    public makeAmountObject(amount: string, currency: string, issuer: string) {
-        if (typeof amount !== 'string')
-            throw "Amount must be a string.";
-        if (currency !== evernode.XrplConstants.XRP && !issuer)
-            throw "Non-XRP currency must have an issuer.";
-
-        const amountObj = (currency == evernode.XrplConstants.XRP) ? amount : {
-            currency: currency,
-            issuer: issuer,
-            value: amount
-        }
-        return amountObj;
-    }
-
-    /**
-     * Perform URITokenBuy transaction
-     * @param uriToken URIToken object to be bought.
-     * @param [memos=[]]  Memos for the transaction (optional).
-     * @param [hookParams=[]]  HookParameters for the transaction (optional).
-     * @param [options={}]  Options to be added to the multi signed submission (optional).
-     * @returns Result of the submitted transaction.
-     */
-
-    public async buyURIToken(uriToken: URIToken, memos: Memo[] = [], hookParams: HookParameter[] = [], options: MultiSignOptions = {}): Promise<void> {
-
-        const tx = {
-            Account: this.xrplAcc.address,
-            TransactionType: "URITokenBuy",
-            Amount: uriToken.Amount,
-            URITokenID: uriToken.index,
-            Memos: undefined,
-            HookParameters: undefined
-        }
-
-        if (memos)
-            tx.Memos = evernode.TransactionHelper.formatMemos(memos);
-
-        if (hookParams)
-            tx.HookParameters = evernode.TransactionHelper.formatHookParams(hookParams);
-
-        return await this.multiSignAndSubmitTransaction(tx, options);
-    }
-
-    /**
-     * Perform a payment
-     * @param toAddr receiver address
-     * @param amount Amount to be send
-     * @param currency currency type
-     * @param [issuer=null]  currency issuer
-     * @param [memos=null]  Memos for the transaction (optional).
-     * @param [hookParams=null]  HookParameters for the transaction (optional).
-     * @param [options={}]  Options to be added to the multi signed submission (optional).
-     * @returns Result of the submitted transaction.
-     */
-    public async makePayment(toAddr: any, amount: any, currency: any, issuer: any = null, memos: Memo[] | null = null, hookParams: HookParameter[] | null = null, options: MultiSignOptions = {}) {
-        const amountObj = this.makeAmountObject(amount, currency, issuer);
-        const tx: Transaction = {
-            TransactionType: 'Payment',
-            Account: this.xrplAcc.address,
-            Amount: amountObj,
-            Destination: toAddr,
-        }
-        if (memos)
-            tx.Memos = evernode.TransactionHelper.formatMemos(memos);
-        if (hookParams)
-            tx.HookParameters = evernode.TransactionHelper.formatHookParams(hookParams);
-        return await this.multiSignAndSubmitTransaction(tx, options);
-    }
 }
 
 export default XrplContext;
