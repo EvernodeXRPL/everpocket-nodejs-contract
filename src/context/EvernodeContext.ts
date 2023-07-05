@@ -95,7 +95,7 @@ class EvernodeContext {
     async #checkForCompletedAcquires(options: VoteElectorOptions = {}): Promise<void> {
         // Check for pending transactions and their completion.
         for (const item of this.getPendingAcquires()) {
-            const txList = await this.xrplContext.xrplAcc.getAccountTrx(item.ledgerIdx);
+            const txList = await this.xrplContext.xrplAcc.getAccountTrx(item.acquireLedgerIdx);
             for (let t of txList) {
                 t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
                 t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
@@ -146,9 +146,9 @@ class EvernodeContext {
         const pendingAcquire = <PendingAcquire>{
             host: hostAddress,
             leaseOfferIdx: leaseOffer.index,
-            refId: res.tx_json.hash,
+            refId: res.id,
             messageKey: messageKey,
-            ledgerIdx: res.details.ledger_index,
+            acquireLedgerIdx: res.details.ledger_index,
             acquireSentOnLcl: this.hpContext.lclSeqNo
         };
 
