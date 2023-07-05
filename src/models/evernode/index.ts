@@ -18,7 +18,7 @@ export interface PendingAcquire {
   leaseOfferIdx: string;
   refId: string;
   messageKey: string;
-  ledgerIdx: number;
+  acquireLedgerIdx: number;
   acquireSentOnLcl: number;
 }
 
