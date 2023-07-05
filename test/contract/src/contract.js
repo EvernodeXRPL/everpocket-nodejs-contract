@@ -202,8 +202,9 @@ const extendNode = async (evernodeContext) => {
         const token = tokens[0];
         const extendingNodeName = token.index;
         const hostAddress = token.Issuer;
+        console.log(`Extending ${extendingNodeName}...`);
         const res = await evernodeContext.extendSubmit(hostAddress, 1, extendingNodeName);
-        console.log(res.code);
+        console.log(`Extended ${extendingNodeName}...`);
     } catch (e) {
         console.error(e);
     } finally {
@@ -341,17 +342,10 @@ const getSignerList = async (xrplContext) => {
 }
 
 const multiSignTransaction = async (xrplContext) => {
-    const tx = {
-        TransactionType: "Payment",
-        Account: masterAddress,
-        Destination: destinationAddress,
-        Amount: "1000",
-        Fee: "12",
-        Flags: 2147483648
-    };
-
     try {
         await xrplContext.init();
+
+        const tx = await xrplContext.xrplAcc.prepareMakePayment(destinationAddress, "1000", "XRP")
 
         console.log("----------- Multi-Signing Transaction");
         await xrplContext.multiSignAndSubmitTransaction(tx);

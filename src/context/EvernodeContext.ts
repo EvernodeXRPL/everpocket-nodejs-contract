@@ -11,7 +11,7 @@ import { VoteElectorOptions } from "../models/vote";
 import HotPocketContext from "./HotPocketContext";
 
 const TIMEOUT = 10000;
-const ACQUIRE_ABANDON_LCL_THRESHOLD = 5;
+const ACQUIRE_ABANDON_LCL_THRESHOLD = 10;
 
 class EvernodeContext {
     private acquireDataFile: string = "acquires.json";
