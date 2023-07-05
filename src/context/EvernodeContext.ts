@@ -95,13 +95,22 @@ class EvernodeContext {
     async #checkForCompletedAcquires(options: VoteElectorOptions = {}): Promise<void> {
         // Check for pending transactions and their completion.
         for (const item of this.getPendingAcquires()) {
+            const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
+                fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
+
+            // Abandon waiting for this node if threshold reached.
+            if (item.acquireSentOnLcl < (this.hpContext.lclSeqNo - ACQUIRE_ABANDON_LCL_THRESHOLD)) {
+                console.log(`Maximum acquire wait threshold reached, Abandoning waiting for ${item.refId}.`)
+                await this.updatePendingAcquireInfo(item, "DELETE");
+                if (privateKey)
+                    fs.unlinkSync(`../${item.messageKey}.txt`);
+            }
+
             const txList = await this.xrplContext.xrplAcc.getAccountTrx(item.acquireLedgerIdx);
             for (let t of txList) {
                 t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
                 t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
 
-                const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
-                    fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
                 const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
                 const res = await tenantClient.extractEvernodeEvent(t.tx);
                 let payload = null;
@@ -112,21 +121,22 @@ class EvernodeContext {
 
                 if (payload) {
                     const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
-                    const elector = new AllVoteElector(1, 1000);
+                    const elector = new AllVoteElector(1, options?.timeout || TIMEOUT);
                     payload = (privateKey ? await this.voteContext.vote(electionName, [payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
 
                     // Updated the acquires if there's a success response.
-                    if (payload !== 'acquire_error')
-                        await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
-                    await this.updatePendingAcquireInfo(item, "DELETE");
-                    if (privateKey)
-                        fs.unlinkSync(`../${item.messageKey}.txt`);
+                    if (payload) {
+                        if (payload !== 'acquire_error')
+                            await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
+                        await this.updatePendingAcquireInfo(item, "DELETE");
+                        if (privateKey)
+                            fs.unlinkSync(`../${item.messageKey}.txt`);
+                    }
                 }
             }
 
         }
     }
-
     /**
      * Acquires a node based on the provided options.
      * @param options Options related to a particular acquire operation.
