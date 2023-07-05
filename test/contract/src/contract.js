@@ -2,7 +2,6 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const exectsFile = "exects.txt";
 const masterAddress = "r3Yss1Ggo5td8zug1G7VnWPCUSYai8pmZ2";
 const masterSecret = "ssHD1y3DUX9TYA2PcUxLWS1TMUo7v";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
@@ -45,7 +44,6 @@ const nomadOptions = {
         "rGnsENqQKqPNQKWMSNxbZcMuubjJaaBpf5",
         "rMaHq7P7ibkbeiykRGyTsdyFEDBRGrLdx6",
         "rHJqCseZFzCveSTdtJuDNpD4ARoMy41E1C",
-        "rGYPizbATsej8iJ4kDeFf7tRysf6ggwcQY",
         "rMu8RLEKTtyWuhko1F5dVZoUAiVpRpi5GB",
         "rhsBuUnoV1yGSpSVYgzFMFeTcFLvg8ZQnh",
         "rhYqbRQpSy7RtQtXjfurprdB4Gj8PAJW2X",
@@ -81,21 +79,13 @@ const testContract = async (contractCtx) => {
             voteContext.feedUnlMessage(node, msg);
         });
 
-        ///// This block is added to avoid forever syncing /////
-        fs.appendFileSync(exectsFile, "ts:" + contractCtx.timestamp + "\n");
-
-        const stats = fs.statSync(exectsFile);
-        if (stats.size > 100 * 1024 * 1024) // If more than 100 MB, empty the file.
-            fs.truncateSync(exectsFile);
-        ////////////////////////////////////////////////////////
-
         ///////// TODO: This part is temporary for preparing multisig /////////
         if (!fs.existsSync('multisig')) {
             const isSigner = !nonSigners.includes(hpContext.publicKey);
 
             await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
 
-            fs.writeFileSync('multisig', 'MULTISIG');
+            fs.writeFileSync('multisig', '');
         }
         ///////////////////////////////////////////////////////////////////////
     }
@@ -213,7 +203,7 @@ const extendNode = async (evernodeContext) => {
         const extendingNodeName = token.index;
         const hostAddress = token.Issuer;
         const res = await evernodeContext.extendSubmit(hostAddress, 1, extendingNodeName);
-        console.log(res?.engine_result);
+        console.log(res?.code);
     } catch (e) {
         console.error(e);
     } finally {
@@ -340,7 +330,7 @@ const getSignerList = async (xrplContext) => {
         await xrplContext.init();
 
         console.log("----------- Getting the signer list");
-        const signerList = await xrplContext.getSignerList();
+        const signerList = xrplContext.getSignerList();
         console.log(signerList);
 
     } catch (e) {

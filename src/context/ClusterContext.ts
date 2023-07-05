@@ -73,7 +73,7 @@ class ClusterContext {
             const electionName = `share_node_info${this.voteContext.getUniqueNumber()}`;
             const elector = new AllVoteElector(0, options?.timeout || TIMEOUT);
             const signer = this.evernodeContext.xrplContext.multiSigner.getSigner();
-            const signerListsInfo = await this.evernodeContext.xrplContext.getSignerList();
+            const signerListsInfo = this.evernodeContext.xrplContext.getSignerList();
             const node = <ClusterNode>{
                 pubkey: this.hpContext.publicKey,
                 contractId: this.hpContext.contractId,

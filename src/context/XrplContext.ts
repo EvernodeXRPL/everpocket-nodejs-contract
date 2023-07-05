@@ -10,6 +10,7 @@ import VoteContext from './VoteContext';
 const TIMEOUT = 10000;
 
 class XrplContext {
+    private signerListInfo: SignerListInfo | null = null;
     public hpContext: any;
     public xrplApi: any;
     public xrplAcc: any;
@@ -29,6 +30,7 @@ class XrplContext {
      */
     public async init(): Promise<void> {
         await this.xrplApi.connect();
+        await this.loadSignerList();
     }
 
     /**
@@ -36,6 +38,18 @@ class XrplContext {
      */
     public async deinit(): Promise<void> {
         await this.xrplApi.disconnect();
+    }
+
+    /**
+     * Load signer list of the account
+     */
+    public async loadSignerList(): Promise<void> {
+        const accountObjects = await this.xrplAcc.getAccountObjects({ type: "signer_list" });
+        if (accountObjects.length > 0) {
+            const signerObject = accountObjects.filter((ob: any) => ob.LedgerEntryType === 'SignerList')[0];
+            const signerList: Signer[] = signerObject.SignerEntries.map((signer: any) => ({ account: signer.SignerEntry.Account, weight: signer.SignerEntry.SignerWeight }));
+            this.signerListInfo = { signerQuorum: signerObject.SignerQuorum, signerList: signerList };
+        }
     }
 
     /**
@@ -96,17 +110,16 @@ class XrplContext {
         transaction.Sequence = txSubmitInfo.sequence;
         transaction.LastLedgerSequence = txSubmitInfo.maxLedgerSequence;
 
-        const signerListInfo = await this.getSignerList();
-        const signerCount = signerListInfo?.signerList.length;
+        const signerCount = this.signerListInfo?.signerList.length;
 
-        if (!signerListInfo || !signerCount)
+        if (!this.signerListInfo || !signerCount)
             throw 'Could not get signer list';
 
         /////// TODO: This should be handled in js lib. //////
         transaction.Fee = `${10 * (signerCount + 2)}`;
         transaction.NetworkID = evernode.Defaults.get().networkID;
 
-        const elector = new MultiSignedBlobElector(signerCount, signerListInfo, options?.voteElectorOptions?.timeout || TIMEOUT);
+        const elector = new MultiSignedBlobElector(signerCount, this.signerListInfo, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `sign${this.voteContext.getUniqueNumber()}`;
         let signatures: Signature[];
 
@@ -124,10 +137,10 @@ class XrplContext {
 
         // Throw error if there're no enough signatures to fulfil the quorum.
         const totalWeight = signatures.map(s => {
-            return signerListInfo.signerList.find(i => i.account === s.Signer.Account)!.weight;
+            return this.signerListInfo!.signerList.find(i => i.account === s.Signer.Account)!.weight;
         }).reduce((a, b) => a + b, 0);
-        if (totalWeight < signerListInfo.signerQuorum)
-            throw `No enough signatures: Total weight: ${totalWeight}, Quorum: ${signerListInfo.signerQuorum}.`;
+        if (totalWeight < this.signerListInfo.signerQuorum)
+            throw `No enough signatures: Total weight: ${totalWeight}, Quorum: ${this.signerListInfo.signerQuorum}.`;
 
         transaction.Signers = signatures.map(s => <Signature>{ Signer: s.Signer });
         transaction.SigningPubKey = "";
@@ -150,9 +163,8 @@ class XrplContext {
      * @returns The new signer list.
      */
     public async generateNewSignerList(options: MultiSignOptions = {}): Promise<[SignerListInfo, SignerKey]> {
-        const curSignerList = await this.getSignerList();
-        const quorum = options.quorum || curSignerList?.signerQuorum;
-        const signerCount = options.signerCount || curSignerList?.signerList.length;
+        const quorum = options.quorum || this.signerListInfo?.signerQuorum;
+        const signerCount = options.signerCount || this.signerListInfo?.signerList.length;
 
         if (!signerCount)
             throw 'Signer count cannot be empty.';
@@ -167,7 +179,7 @@ class XrplContext {
         // Otherwise just collect the signer list.
         if (this.isSigner()) {
             const curSigner = this.multiSigner.getSigner();
-            const weight = options.weight || curSignerList?.signerList.find(s => s.account === curSigner?.account)?.weight;
+            const weight = options.weight || this.signerListInfo?.signerList.find(s => s.account === curSigner?.account)?.weight;
 
             if (!weight || !quorum)
                 throw 'Weight or Signer Quorum cannot be empty.';
@@ -212,6 +224,9 @@ class XrplContext {
         };
 
         await this.multiSignAndSubmitTransaction(tx, options);
+
+        // Reload the signer list after resetting.
+        await this.loadSignerList();
     }
 
     /**
@@ -253,8 +268,11 @@ class XrplContext {
             signer = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
         }
 
-        // Add signer to the list and renew the signer list.
-        let signerList = await this.getSignerList() || <SignerListInfo>{};
+        // Add signer to the list and renew the signer list. Clone objet to avoid reference.
+        let signerList = <SignerListInfo>{};
+        if (this.signerListInfo)
+            Object.assign(signerList, this.signerListInfo);
+
         signerList.signerList.push(signer);
         if (options.quorum)
             signerList.signerQuorum = options.quorum;
@@ -287,8 +305,10 @@ class XrplContext {
             signer = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
         }
 
-        // Remove signer from the list and renew the signer list.
-        let signerList = await this.getSignerList();
+        // Remove signer from the list and renew the signer list. Clone objet to avoid reference.
+        let signerList = <SignerListInfo>{};
+        if (this.signerListInfo)
+            Object.assign(signerList, this.signerListInfo);
 
         if (signerList && signer) {
             signerList.signerList = signerList.signerList.filter(s => s.account != signer.account);
@@ -305,16 +325,8 @@ class XrplContext {
      * Returns the signer list of the account
      * @returns An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || null 
      */
-    public async getSignerList(): Promise<SignerListInfo | null> {
-        const accountObjects = await this.xrplAcc.getAccountObjects({ type: "signer_list" });
-        if (accountObjects.length > 0) {
-            const signerObject = accountObjects.filter((ob: any) => ob.LedgerEntryType === 'SignerList')[0];
-            const signerList: Signer[] = signerObject.SignerEntries.map((signer: any) => ({ account: signer.SignerEntry.Account, weight: signer.SignerEntry.SignerWeight }));
-            const res = { signerQuorum: signerObject.SignerQuorum, signerList: signerList };
-            return res;
-        }
-        else
-            return null;
+    public getSignerList(): SignerListInfo | null {
+        return this.signerListInfo;
     }
 
     /**
