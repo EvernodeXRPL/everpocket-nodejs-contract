@@ -168,6 +168,19 @@ class ClusterManager {
         this.#persist();
     }
 
+    /**
+     * Update the node as a Quorum node.
+     * @param pubkey Public key of the node.
+     */
+    public markAsQuorum(pubkey: string): void {
+        const index = this.clusterData.nodes.findIndex(n => n.pubkey === pubkey);
+
+        if (index >= 0) {
+            this.clusterData.nodes[index].isQuorum = true;
+
+            this.#persist();
+        }
+    }
 }
 
 export default ClusterManager;

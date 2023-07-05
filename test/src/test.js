@@ -14,9 +14,20 @@ const evernodeGovernor = "raVhw4Q8FQr296jdaDLDfZ4JDhh7tFG7SF";
 const MAX_ACQUIRES = 5;
 const MAX_CLUSTER = 8;
 
+const exectsFile = "exects.txt";
+
 const testContract = async (hpContext) => {
     if (!hpContext.readonly) {
         let nonSigners = [];
+
+            ///// This block is added to avoid forever syncing /////
+            fs.appendFileSync(exectsFile, "ts:" + hpContext.timestamp + "\n");
+
+            const stats = fs.statSync(exectsFile);
+            if (stats.size > 100 * 1024 * 1024) // If more than 100 MB, empty the file.
+                fs.truncateSync(exectsFile);
+            ////////////////////////////////////////////////////////
+    
         if (hpContext.unl.list().length > 3)
             nonSigners = (hpContext.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
         if (!nonSigners.length || nonSigners.length === hpContext.unl.list().length)
@@ -79,7 +90,7 @@ const testContract = async (hpContext) => {
             // () => acquireNewNode(evernodeContext),
             // () => extendNode(evernodeContext),
             // () => addNewClusterNode(clusterContext),
-            // () => removeNode(clusterContext),
+            // () => removeNode(xrplContext, clusterContext),
         ];
 
         for (const test of tests) {
@@ -205,19 +216,22 @@ const addNewClusterNode = async (clusterContext) => {
     }
 }
 
-const removeNode = async (clusterContext) => {
+const removeNode = async (xrplContext, clusterContext) => {
     await clusterContext.init();
+    await xrplContext.init();
 
     try {
         const unlNodes = clusterContext.getClusterUnlNodes();
 
         // Remove nodes if max cluster size reached and 5 ledgers after the last node added to UNL.
-        if (unlNodes.length === MAX_CLUSTER && clusterContext.hpContext.lclSeqNo > (Math.max(...unlNodes.filter(n => n.addedToUnlOnLcl).map(n => n.addedToUnlOnLcl)) + 5)) {
-            console.log("Removing node ", unlNodes[unlNodes.length - 1].pubkey);
-            await clusterContext.removeNode(unlNodes[unlNodes.length - 1].pubkey);
-            console.log("Removing node ", unlNodes[unlNodes.length - 2].pubkey);
-            await clusterContext.removeNode(unlNodes[unlNodes.length - 2].pubkey);
-        }
+        // if (unlNodes.length === MAX_CLUSTER && clusterContext.hpContext.lclSeqNo > (Math.max(...unlNodes.filter(n => n.addedToUnlOnLcl).map(n => n.addedToUnlOnLcl)) + 5)) {
+        // Commented out the above condition to test the replace signer logic
+            let isQuorumVar = unlNodes.find(n => n.isQuorum)
+            if(isQuorumVar){
+                console.log("Removing node ", isQuorumVar.pubkey);
+                await clusterContext.removeNode(isQuorumVar.pubkey);
+            }        
+        // }
     } catch (e) {
         console.error(e);
     } finally {

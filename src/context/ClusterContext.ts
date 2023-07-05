@@ -332,25 +332,22 @@ class ClusterContext {
      * @param pubkey Public key of the node to be removed.
      */
     async removeNode(oldPubkey: string): Promise<void> {
-        // Sorting logic to determine new pubkey - yet to be implemented
+        // Sorting logic to determine new pubkey - start
         const clusterNodes = this.getClusterNodes();
 
         // Get isQuorum false nodes
         let isQuorumFalseClusterNodes = clusterNodes.filter((cluster)=> {return cluster.isQuorum === false})
 
-        console.log('isQuorumFalseClusterNodes', isQuorumFalseClusterNodes)
         // Sorting the array using pubkey
         isQuorumFalseClusterNodes.sort((a, b) => a.pubkey.localeCompare(b.pubkey));
 
-        let newPubKey = isQuorumFalseClusterNodes[0]?.pubkey;
-        console.log('old kasun', oldPubkey)
-        console.log('new kasun', newPubKey)
- 
-        clusterNodes.map(async (cluster) => {
-            if(cluster.isQuorum){
-                await this.xrplContext.replaceSignerList(oldPubkey, newPubKey);
-            }
-        })
+        let newPubKey = isQuorumFalseClusterNodes[0]?.pubkey; 
+        // Sorting logic to determine new pubkey - end
+        
+        if(newPubKey){
+           await this.xrplContext.replaceSignerList(oldPubkey, newPubKey);
+            this.clusterManager.markAsQuorum(oldPubkey);
+        }
 
         // Sorting logic to determine new pubkey - yet to be implemented
         // Update patch config.
@@ -361,8 +358,10 @@ class ClusterContext {
         // Update peer list.
         const node = this.clusterManager.getNode(oldPubkey);
         if (node) {
-            let peer = `${node?.ip}:${node?.peerPort}`
-            await this.hpContext.updatePeers(null, [peer]);
+            if(node.ip && node.peerPort){
+                let peer = `${node?.ip}:${node?.peerPort}`
+                await this.hpContext.updatePeers(null, [peer]);
+            }
 
             this.clusterManager.removeNode(oldPubkey);
         }
