@@ -1,15 +1,19 @@
 import { UtilityContext } from "../../context";
 import { AcquiredNode, PendingAcquire } from "../evernode";
 
-export interface ClusterContextOptions {
+export interface ClusterOptions {
   utilityContext: UtilityContext;
+  maturityLclThreshold?: number;
 }
 
 export interface ClusterNode extends AcquiredNode {
   createdOnLcl: number;
   addedToUnlOnLcl?: number;
+  ackReceivedOnLcl?: number;
+  activeOnLcl?: number;
   isUnl: boolean;
   isQuorum: boolean;
+  createdOnTimestamp?: number;
   lifeMoments: number;
   targetLifeMoments: number;
 }

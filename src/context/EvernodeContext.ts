@@ -7,6 +7,10 @@ import { URIToken } from "../models";
 import * as fs from 'fs';
 import * as kp from 'ripple-keypairs';
 import { JSONHelpers } from "../utils";
+import { VoteElectorOptions } from "../models/vote";
+
+const TIMEOUT = 4000;
+const ACQUIRE_ABANDON_LCL_THRESHOLD = 5;
 
 class EvernodeContext {
     public hpContext: any;
@@ -15,8 +19,10 @@ class EvernodeContext {
     private acquireDataFile: string = "acquires.json";
     private acquireData: AcquireData = { acquiredNodes: [], pendingAcquires: [] };
     private registryClient: any;
+    private updatedData: boolean = false;
+    private initialized: boolean = false;
 
-    constructor(xrplContext: XrplContext, governorAddress: string) {
+    public constructor(xrplContext: XrplContext, governorAddress: string) {
         this.xrplContext = xrplContext;
         this.hpContext = this.xrplContext.hpContext;
         this.voteContext = this.xrplContext.voteContext;
@@ -36,7 +42,10 @@ class EvernodeContext {
     /**
      * Initialize the context.
      */
-    async init(): Promise<void> {
+    public async init(): Promise<void> {
+        if (this.initialized)
+            return;
+
         await this.xrplContext.init();
 
         try {
@@ -44,6 +53,7 @@ class EvernodeContext {
             await this.registryClient.connect();
 
             await this.#checkForCompletedAcquires();
+            this.initialized = true;
         } catch (e) {
             await this.deinit();
             throw e;
@@ -53,18 +63,49 @@ class EvernodeContext {
     /**
      * Deinitialize the context.
      */
-    async deinit(): Promise<void> {
+    public async deinit(): Promise<void> {
+        if (!this.initialized)
+            return;
+
+        this.#persistAcquireData();
         if (this.registryClient)
             await this.registryClient.disconnect();
         await this.xrplContext.deinit();
+        this.initialized = false;
+    }
+
+    /**
+     * Persist details of acquires.
+     */
+    #persistAcquireData(): void {
+        if (!this.updatedData)
+            return;
+
+        try {
+            JSONHelpers.writeToFile(this.acquireDataFile, this.acquireData);
+        } catch (error) {
+            throw `Error writing file ${this.acquireDataFile}: ${error}`;
+        }
     }
 
     /**
      * Check whether there're any completed pending acquires.
+     * @param [options={}] Vote options for payload sharing.
      */
-    async #checkForCompletedAcquires(): Promise<void> {
+    async #checkForCompletedAcquires(options: VoteElectorOptions = {}): Promise<void> {
         // Check for pending transactions and their completion.
         for (const item of this.getPendingAcquires()) {
+            const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
+                fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
+
+            // Abandon waiting for this node if threshold reached.
+            if (item.acquireSentOnLcl < (this.hpContext.lclSeqNo - ACQUIRE_ABANDON_LCL_THRESHOLD)) {
+                console.log(`Maximum acquire wait threshold reached, Abandoning waiting for ${item.refId}.`)
+                await this.updatePendingAcquireInfo(item, "DELETE");
+                if (privateKey)
+                    fs.unlinkSync(`../${item.messageKey}.txt`);
+            }
+
             const txnInfo = await this.xrplContext.xrplApi.getTxnInfo(item.refId, {});
             if (txnInfo && txnInfo.validated) {
                 const txList = await this.xrplContext.xrplAcc.getAccountTrx(txnInfo.ledger_index);
@@ -72,8 +113,6 @@ class EvernodeContext {
                     t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
                     t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
 
-                    const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
-                        fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
                     const tenantClient = new evernode.TenantClient(this.xrplContext.xrplAcc.address, null, { messagePrivateKey: privateKey });
                     const res = await tenantClient.extractEvernodeEvent(t.tx);
                     let payload = null;
@@ -84,15 +123,17 @@ class EvernodeContext {
 
                     if (payload) {
                         const electionName = `share_payload${this.voteContext.getUniqueNumber()}`;
-                        const elector = new AllVoteElector(1, 1000);
+                        const elector = new AllVoteElector(1, options?.timeout || TIMEOUT);
                         payload = (privateKey ? await this.voteContext.vote(electionName, [payload], elector) : await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
 
                         // Updated the acquires if there's a success response.
-                        if (payload !== 'acquire_error')
-                            await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
-                        await this.updatePendingAcquireInfo(item, "DELETE");
-                        if (privateKey)
-                            fs.unlinkSync(`../${item.messageKey}.txt`);
+                        if (payload) {
+                            if (payload !== 'acquire_error')
+                                await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
+                            await this.updatePendingAcquireInfo(item, "DELETE");
+                            if (privateKey)
+                                fs.unlinkSync(`../${item.messageKey}.txt`);
+                        }
                     }
                 }
             }
@@ -104,7 +145,7 @@ class EvernodeContext {
      * @param options Options related to a particular acquire operation.
      * @returns Acquire data.
      */
-    async acquireNode(options: AcquireOptions = {}): Promise<PendingAcquire> {
+    public async acquireNode(options: AcquireOptions = {}): Promise<PendingAcquire> {
         // Use provided host or select a host randomly.
         const hostAddress = options.host || await this.decideHost(options.preferredHosts);
         // Choose the lease offer
@@ -115,7 +156,13 @@ class EvernodeContext {
         // Perform acquire txn on the selected host.
         const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
 
-        const pendingAcquire = <PendingAcquire>{ host: hostAddress, leaseOfferIdx: leaseOffer.index, refId: res.tx_json.hash, messageKey: messageKey };
+        const pendingAcquire = <PendingAcquire>{
+            host: hostAddress,
+            leaseOfferIdx: leaseOffer.index,
+            refId: res.tx_json.hash,
+            messageKey: messageKey,
+            acquireSentOnLcl: this.hpContext.lclSeqNo
+        };
 
         // Record as a acquire transaction.
         await this.updatePendingAcquireInfo(pendingAcquire);
@@ -128,7 +175,7 @@ class EvernodeContext {
      * @param acquireRefId Acquire reference.
      * @returns Acquired node.
      */
-    getIfAcquired(acquireRefId: string): AcquiredNode | null {
+    public getIfAcquired(acquireRefId: string): AcquiredNode | null {
         const node = this.acquireData.acquiredNodes.find(n => n.refId == acquireRefId);
         return node ? node : null;
     }
@@ -138,7 +185,7 @@ class EvernodeContext {
      * @param acquireRefId Acquire reference.
      * @returns Pending node.
      */
-    getIfPending(acquireRefId: string): PendingAcquire | null {
+    public getIfPending(acquireRefId: string): PendingAcquire | null {
         const node = this.acquireData.pendingAcquires.find(n => n.refId == acquireRefId);
         return node ? node : null;
     }
@@ -146,9 +193,10 @@ class EvernodeContext {
     /**
      * Decides a lease offer collectively.
      * @param hostAddress Host that should be used to take lease offers.
+     * @param [options={}] Vote options for lease decision.
      * @returns URIToken related to the lease offer.
      */
-    async decideLeaseOffer(hostAddress: string): Promise<URIToken> {
+    public async decideLeaseOffer(hostAddress: string, options: VoteElectorOptions = {}): Promise<URIToken> {
         // Get transaction details to use for xrpl tx submission.
         const hostClient = new evernode.HostClient(hostAddress);
         const leaseOffers = await hostClient.getLeaseOffers();
@@ -158,7 +206,7 @@ class EvernodeContext {
             throw "NO_LEASE_OFFER";
 
         const electionName = `lease_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(3, 1000));
+        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -174,9 +222,10 @@ class EvernodeContext {
     /**
      * Decides a host collectively.
      * @param [preferredHosts=null] List of proffered host addresses.
+     * @param [options={}] Vote options for host decision.
      * @returns Decided host address.
      */
-    async decideHost(preferredHosts: string[] | null = null): Promise<string> {
+    public async decideHost(preferredHosts: string[] | null = null, options: VoteElectorOptions = {}): Promise<string> {
         const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
 
         // Choose from hosts that have available instances.
@@ -190,7 +239,7 @@ class EvernodeContext {
             throw 'There are no vacant hosts in the network';
 
         const electionName = `host_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(3, 1000));
+        const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -205,14 +254,15 @@ class EvernodeContext {
 
     /**
      * Decide a encryption key pair collectively
+     * @param [options={}] Vote options for message key decision.
      * @returns Public key of the decided key pair.
      */
-    async decideMessageKey(): Promise<string> {
+    public async decideMessageKey(options: VoteElectorOptions = {}): Promise<string> {
         const seed = kp.generateSeed();
         const keyPair: Record<string, any> = kp.deriveKeypair(seed);
 
         const electionName = `message_key_selection${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [keyPair.publicKey], new AllVoteElector(3, 1000));
+        const voteRound = this.voteContext.vote(electionName, [keyPair.publicKey], new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -236,6 +286,28 @@ class EvernodeContext {
     }
 
     /**
+     * Get evernode configuration.
+     * @returns The evernode configuration.
+     */
+    public getEvernodeConfig() {
+        return this.registryClient.config;
+    }
+
+    /**
+     * Get the current evernode moment.
+     * @param [options={}] Vote options to collect the current moment value.
+     * @returns The current moment value
+     */
+    public async getCurMoment(options: VoteElectorOptions = {}) {
+        // Vote for node created moment.
+        const electionName = `share_node_create_moment${this.voteContext.getUniqueNumber()}`;
+        const elector = new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT);
+        const moment = await this.registryClient.getMoment();
+        const nodes: number[] = (await this.voteContext.vote(electionName, [moment], elector)).map(ob => ob.data).sort();
+        return nodes[0];
+    }
+
+    /**
      * Submits the acquire transaction
      * @param hostAddress Relevant host address
      * @param leaseOffer Relevant URIToken of the lease offer
@@ -243,7 +315,7 @@ class EvernodeContext {
      * @param options
      * @returns Result of the submitted transaction.
      */
-    async acquireSubmit(hostAddress: string, leaseOffer: URIToken, messageKey: string, options: AcquireOptions = {}): Promise<any> {
+    public async acquireSubmit(hostAddress: string, leaseOffer: URIToken, messageKey: string, options: AcquireOptions = {}): Promise<any> {
         // Get transaction details to use for xrpl tx submission.
         const hostClient = new evernode.HostClient(hostAddress);
 
@@ -281,7 +353,7 @@ class EvernodeContext {
      * @param {object} options This is an optional field and contains necessary details for the transactions.
      * @returns The transaction result.
      */
-    async extendSubmit(hostAddress: string, extension: number, tokenID: string, options: any = {}): Promise<any> {
+    public async extendSubmit(hostAddress: string, extension: number, tokenID: string, options: any = {}): Promise<any> {
         const leaseToken = (await this.xrplContext.xrplAcc.getURITokens()).find((t: any) => t.index === tokenID);
         if (!leaseToken)
             throw 'No lease token for given token id';
@@ -301,27 +373,16 @@ class EvernodeContext {
      * Fetches registered hosts
      * @returns An array of hosts that are having vacant leases.
      */
-    async getHosts(): Promise<any[]> {
+    public async getHosts(): Promise<any[]> {
         const allHosts = await this.registryClient.getActiveHosts();
         return allHosts.filter((h: { maxInstances: number; activeInstances: number; }) => (h.maxInstances - h.activeInstances) > 0);
-    }
-
-    /**
-     * Persist details of acquires.
-     */
-    persistAcquireData(): void {
-        try {
-            JSONHelpers.writeToFile(this.acquireDataFile, this.acquireData);
-        } catch (error) {
-            throw `Error writing file ${this.acquireDataFile}: ${error}`;
-        }
     }
 
     /**
      * Fetches details of successful acquires.
      * @returns an array of instance acquisitions that are completed.
      */
-    getAcquiredNodes(): AcquiredNode[] {
+    public getAcquiredNodes(): AcquiredNode[] {
         return this.acquireData.acquiredNodes;
     }
 
@@ -329,7 +390,7 @@ class EvernodeContext {
      * Fetches details of pending acquires.
      * @returns an array of instance acquisitions that are in progress.
      */
-    getPendingAcquires(): PendingAcquire[] {
+    public getPendingAcquires(): PendingAcquire[] {
         return this.acquireData.pendingAcquires;
     }
 
@@ -338,7 +399,7 @@ class EvernodeContext {
      * @param uri URI of the URIToken
      * @returns decoded content of the URI
      */
-    decodeLeaseTokenUri(uri: string): LeaseURIInfo {
+    public decodeLeaseTokenUri(uri: string): LeaseURIInfo {
         return evernode.UtilHelpers.decodeLeaseTokenUri(uri);
     }
 
@@ -348,7 +409,7 @@ class EvernodeContext {
      * @param element Element to be added or removed
      * @param mode Type of operation ("INSERT" or "DELETE")
      */
-    async updatePendingAcquireInfo(element: PendingAcquire, mode: string = "INSERT"): Promise<void> {
+    public async updatePendingAcquireInfo(element: PendingAcquire, mode: string = "INSERT"): Promise<void> {
         if (mode === "INSERT")
             this.acquireData.pendingAcquires.push(element); // modify the array as needed
         else {
@@ -360,7 +421,7 @@ class EvernodeContext {
                 this.acquireData.pendingAcquires.splice(indexToRemove, 1);
             }
         }
-        this.persistAcquireData();
+        this.updatedData = true;
     }
 
     /**
@@ -369,7 +430,7 @@ class EvernodeContext {
      * @param element Element to be added or removed
      * @param mode Type of operation ("INSERT" or "DELETE")
      */
-    async updateAcquiredNodeInfo(element: AcquiredNode, mode: string = "INSERT"): Promise<void> {
+    public async updateAcquiredNodeInfo(element: AcquiredNode, mode: string = "INSERT"): Promise<void> {
         if (mode === "INSERT")
             this.acquireData.acquiredNodes.push(element); // modify the array as needed
         else {
@@ -381,7 +442,21 @@ class EvernodeContext {
                 this.acquireData.acquiredNodes.splice(indexToRemove, 1);
             }
         }
-        this.persistAcquireData();
+        this.updatedData = true;
+    }
+
+    /**
+     * Check wether there are any pending acquires to decrypt from running host.
+     * @returns true if there are any operations otherwise false.
+     */
+    public hasPendingOperations(): boolean {
+        // Check if this node has message keys for pending acquires.
+        for (const item of this.getPendingAcquires()) {
+            if (fs.existsSync(`../${item.messageKey}.txt`))
+                return true;
+        }
+
+        return false;
     }
 }
 

@@ -1,3 +1,5 @@
+import { InstanceConfig } from "../evernode";
+
 export interface UnlNode {
   publicKey?: string;
   activeOn?: number;
@@ -17,11 +19,6 @@ export class Peer {
       throw 'IP and Port cannot be empty.'
     return `${this.ip}:${this.port}`
   }
-}
-
-export interface Contract {
-  targetNodeCount: number;
-  targetLifeTime: number;
 }
 
 export interface User {

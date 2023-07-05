@@ -1,32 +1,35 @@
 import { AcquireOptions } from "../models/evernode";
-import { Contract, Peer, User } from "../models";
+import { Peer, User } from "../models";
 import { Buffer } from 'buffer';
 import { EvernodeContext, UtilityContext, VoteContext, XrplContext } from "../context";
-import { ClusterContextOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
+import { ClusterOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
 import { ClusterManager } from "../cluster";
 import { AllVoteElector } from "../vote/vote-electors";
+import { VoteElectorOptions } from "../models/vote";
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
 const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16";
 const ALIVENESS_CHECK_THRESHOLD = 5;
+const TIMEOUT = 4000;
 
 class ClusterContext {
     private clusterManager: ClusterManager;
     private userMessageProcessing: boolean;
+    private maturityLclThreshold: number;
+    private initialized: boolean = false;
     public hpContext: any;
     public voteContext: VoteContext;
     public evernodeContext: EvernodeContext;
     public utilityContext: UtilityContext;
-    public contract: Contract;
     public xrplContext: XrplContext;
 
-    public constructor(evernodeContext: EvernodeContext, contract: Contract, options: ClusterContextOptions, xrplContext: XrplContext) {
+    public constructor(evernodeContext: EvernodeContext, options: ClusterOptions) {
         this.evernodeContext = evernodeContext;
         this.hpContext = this.evernodeContext.hpContext;
-        this.contract = contract;
         this.utilityContext = options?.utilityContext || new UtilityContext(this.hpContext);
         this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
+        this.maturityLclThreshold = options.maturityLclThreshold || 2;
         this.userMessageProcessing = false;
         this.xrplContext = this.evernodeContext.xrplContext;
     }
@@ -35,13 +38,19 @@ class ClusterContext {
      * Initiates the operations regarding the cluster.
      */
     public async init(): Promise<void> {
+        if (this.initialized)
+            return;
+
         await this.evernodeContext.init();
 
         try {
             await this.#setupClusterInfo();
+            await this.#updateActiveness();
             await this.#checkForPendingNodes();
-            await this.#checkForNewNodes();
+            await this.#checkForMatured();
+            await this.#checkForAcknowledged();
             await this.#checkForExtends();
+            this.initialized = true;
         } catch (e) {
             await this.deinit();
             throw e;
@@ -52,23 +61,48 @@ class ClusterContext {
      * Deinitiates the operations regarding the cluster.
      */
     public async deinit(): Promise<void> {
+        if (!this.initialized)
+            return;
+
+        this.clusterManager.persist();
         await this.evernodeContext.deinit();
+        this.initialized = false;
     }
 
-    async #setupClusterInfo() {
+    /**
+     * Setup initial cluster info and prepare the data file.
+     * @param [options={}] Vote options to collect the vote info. 
+     */
+    async #setupClusterInfo(options: VoteElectorOptions = {}): Promise<void> {
         const clusterNodes = this.getClusterNodes();
         if (clusterNodes.length === 0) {
             const electionName = `share_node_info${this.voteContext.getUniqueNumber()}`;
-            const elector = new AllVoteElector(0, 2000);
-            const contrctConfig = await this.hpContext.getConfig();
+            const elector = new AllVoteElector(0, options?.timeout || TIMEOUT);
+            const contractConfig = await this.hpContext.getConfig();
             const node = <ClusterNode>{
                 pubkey: this.hpContext.publicKey,
-                contractId: contrctConfig.id,
-                isUnl: !!contrctConfig.unl.find((k: string) => k === this.hpContext.publicKey),
+                contractId: contractConfig.id,
+                isUnl: !!contractConfig.unl.find((k: string) => k === this.hpContext.publicKey),
                 isQuorum: this.evernodeContext.xrplContext.isSigner()
             }
             const nodes: ClusterNode[] = (await this.voteContext.vote(electionName, [node], elector)).map(ob => ob.data);
             this.clusterManager.addNodes(nodes);
+        }
+    }
+
+    /**
+     * Mark the activeness of nodes.
+     */
+    async #updateActiveness(): Promise<void> {
+        const unl = this.hpContext.unl.list();
+        const hpconfig = await this.hpContext.getConfig();
+
+        for (const u of unl) {
+            const gap = Math.abs(u.activeOn - this.hpContext.timestamp);
+            // If last active timestamp is before the twice of roundtime, This node must be active.
+            if (!u.activeOn || gap <= (hpconfig.consensus.roundtime * 2)) {
+                this.clusterManager.markAsActive(u.publicKey, this.hpContext.lclSeqNo);
+            }
         }
     }
 
@@ -85,6 +119,8 @@ class ClusterContext {
                 // Remove node if aliveness check threshold reached.
                 if (node.aliveCheckCount > ALIVENESS_CHECK_THRESHOLD) {
                     this.clusterManager.removePending(node.refId);
+
+                    console.log(`Pending node ${node.refId} is removed since it's not alive.`);
                     continue;
                 }
 
@@ -98,6 +134,7 @@ class ClusterContext {
                         refId: node.refId,
                         contractId: info.contractId,
                         createdOnLcl: this.hpContext.lclSeqNo,
+                        createdOnTimestamp: this.hpContext.timestamp,
                         host: node.host,
                         ip: info.ip,
                         name: info.name,
@@ -109,12 +146,17 @@ class ClusterContext {
                         lifeMoments: 1,
                         targetLifeMoments: node.targetLifeMoments
                     });
+
+                    console.log(`Added node ${info.pubkey} to the cluster as nonUnl.`);
                 }
 
             }
             // If the pending node is not in the pending acquire, this acquire should be failed.
-            else if (!info && !this.evernodeContext.getIfPending(node.refId))
+            else if (!info && !this.evernodeContext.getIfPending(node.refId)) {
                 this.clusterManager.removePending(node.refId);
+
+                console.log(`Pending node ${node.refId} is removed due to unavailability.`);
+            }
         }
     }
 
@@ -123,13 +165,36 @@ class ClusterContext {
      */
     async #checkForExtends(): Promise<void> {
         const clusterNodes = this.getClusterNodes();
+        const pendingExtends = clusterNodes.filter(n => n.targetLifeMoments > n.lifeMoments);
 
-        for (const node of clusterNodes.filter(n => n.targetLifeMoments > n.lifeMoments)) {
-            const extension = this.contract.targetLifeTime - 1;
+        for (const pendingExtend of pendingExtends) {
+            const extension = pendingExtend.targetLifeMoments - pendingExtend.lifeMoments;
             try {
-                const res = await this.evernodeContext.extendSubmit(node.host, extension, node.name);
+                console.log(`Extending node ${pendingExtend.pubkey} by ${extension}.`);
+                const res = await this.evernodeContext.extendSubmit(pendingExtend.host, extension, pendingExtend.name);
                 if (res)
-                    this.clusterManager.updateLifeMoments(node.pubkey, node.lifeMoments + extension);
+                    this.clusterManager.updateLifeMoments(pendingExtend.pubkey, pendingExtend.lifeMoments + extension);
+            } catch (e) {
+                console.error(e)
+            }
+        }
+    }
+
+    /**
+     * Check for maturity acknowledged nodes.
+     */
+    async #checkForAcknowledged(): Promise<void> {
+        // Add one by one to Unl to avoid forking.
+        const clusterNodes = this.getClusterNodes();
+        const pendingAcknowledged = clusterNodes
+            .filter(n => !n.isUnl && n.ackReceivedOnLcl && (n.ackReceivedOnLcl + this.maturityLclThreshold) < this.hpContext.lclSeqNo)
+            .sort((a, b) => (a.ackReceivedOnLcl || 0) < (b.ackReceivedOnLcl || 0) ? -1 : 1);
+
+        if (pendingAcknowledged && pendingAcknowledged.length > 0) {
+            const node = pendingAcknowledged[0];
+            try {
+                console.log(`Adding node ${node.pubkey} as a Unl node.`);
+                await this.addToUnl(node.pubkey);
             } catch (e) {
                 console.error(e)
             }
@@ -139,12 +204,14 @@ class ClusterContext {
     /**
      * Check for new node which are synced and matured.
      */
-    async #checkForNewNodes(): Promise<void> {
+    async #checkForMatured(): Promise<void> {
         const selfNode = this.clusterManager.getNode(this.hpContext.publicKey);
 
         // If this node is not in UNL acknowledge others to add to UNL.
-        if (selfNode && !selfNode.isUnl)
+        if (selfNode && !selfNode.isUnl && !selfNode.ackReceivedOnLcl) {
             await this.#acknowledgeMaturity();
+            console.log(`Maturity acknowledgement sent.`);
+        }
     }
 
     /**
@@ -164,15 +231,16 @@ class ClusterContext {
      * Get all Unl nodes in the cluster.
      * @returns List of nodes in the cluster which are in Unl.
      */
-    getClusterUnlNodes(): ClusterNode[] {
-        return this.clusterManager.getUnlNodes();
+    public getClusterUnlNodes(): ClusterNode[] {
+        // Filter out the nodes which are not persisted in the HotPocket Unl yet.
+        return this.clusterManager.getUnlNodes().filter(n => this.hpContext.unl.list().find((p: any) => p.publicKey === n.pubkey));
     }
 
     /**
      * Get all nodes in the cluster.
      * @returns List of nodes in the cluster.
      */
-    getClusterNodes(): ClusterNode[] {
+    public getClusterNodes(): ClusterNode[] {
         return this.clusterManager.getNodes();
     }
 
@@ -180,8 +248,16 @@ class ClusterContext {
      * Get all pending nodes.
      * @returns List of pending nodes.
      */
-    getPendingNodes(): PendingNode[] {
+    public getPendingNodes(): PendingNode[] {
         return this.clusterManager.getPending();
+    }
+
+    /**
+     * Get the pending + cluster node count in the cluster.
+     * @returns Total number of cluster nodes.
+     */
+    public totalCount(): number {
+        return (this.getClusterNodes().length + this.getPendingNodes().length)
     }
 
     /**
@@ -223,6 +299,9 @@ class ClusterContext {
             response.type = message.type;
             switch (response.type) {
                 case ClusterMessageType.MATURED: {
+                    // Set status as fail for default.
+                    response.status = ClusterMessageResponseStatus.FAIL;
+
                     // Process user messages sequentially to avoid conflicts.
                     // Lock the user message processor.
                     await this.#acquireUserMessageProc();
@@ -232,15 +311,18 @@ class ClusterContext {
                         // Add to UNL if exist. Note: The node's user connection will be made from node's public key.
                         if (user.publicKey === message.nodePubkey) {
                             const node = this.clusterManager.getNode(message.nodePubkey);
-                            response.status = (node && await this.addToUnl(message.nodePubkey)) ? ClusterMessageResponseStatus.OK : ClusterMessageResponseStatus.FAIL;
+                            if (node) {
+                                this.clusterManager.markAsMatured(message.nodePubkey, this.hpContext.lclSeqNo)
+                                response.status = ClusterMessageResponseStatus.OK;
+                                console.log(`Maturity acknowledgement received from node ${message.nodePubkey}.`);
+                            }
                         }
-                        response.status = ClusterMessageResponseStatus.FAIL;
-                        await user.send(JSON.stringify(response));
                     }
                     catch (e) {
                         console.error(e);
                     }
                     finally {
+                        await user.send(JSON.stringify(response));
                         // Release the user message processor.
                         this.#releaseUserMessageProc();
                     }
@@ -262,7 +344,7 @@ class ClusterContext {
     /**
      * Acquire and add new node to the cluster.
      * @param [lifeMoments=1] Amount of life moments for the instance.
-     * @param options Acquire instance options.
+     * @param [options={}]  Acquire instance options.
      */
     public async addNewClusterNode(lifeMoments: number = 1, options: AcquireOptions = {}): Promise<void> {
         const hpconfig = await this.hpContext.getConfig();
@@ -301,37 +383,36 @@ class ClusterContext {
     /**
      * Add a node to cluster and mark as UNL.
      * @param node Cluster node to be added.
-     * @returns The status of the addition as a boolean figure.
      */
-    public async addToCluster(node: ClusterNode): Promise<boolean> {
+    public async addToCluster(node: ClusterNode): Promise<void> {
         // Check if node exists in the cluster.
         const existing = this.clusterManager.getNode(node.pubkey);
         if (!existing)
             this.clusterManager.addNode(node);
 
-        return await this.addToUnl(node.pubkey);
+        await this.addToUnl(node.pubkey);
     }
 
     /**
      * Mark existing node as a UNL node.
      * @param pubkey Public key of the node.
-     * @returns The status of the addition as a boolean figure.
      */
-    public async addToUnl(pubkey: string) {
-        if (this.clusterManager.markAsUnl(pubkey, this.hpContext.lclSeqNo)) {
-            const hpconfig = await this.hpContext.getConfig();
-            hpconfig.unl.push(pubkey);
-            await this.hpContext.updateConfig(hpconfig);
-            return true;
-        }
-        return false;
+    public async addToUnl(pubkey: string): Promise<void> {
+        this.clusterManager.markAsUnl(pubkey, this.hpContext.lclSeqNo);
+
+        const hpconfig = await this.hpContext.getConfig();
+        hpconfig.unl.push(pubkey);
+        await this.hpContext.updateConfig(hpconfig);
     }
 
     /**
-     * Removes a provided a node from the cluster.
+     * Removes a provided a node from the cluster and replace the removed signer.
      * @param pubkey Public key of the node to be removed.
      */
-    async removeNode(oldPubkey: string): Promise<void> {
+    public async removeNode(oldPubkey: string): Promise<void> {
+        // If this node contains pending operations, This node cannot be removed until they are completed.
+        if (await this.hasPendingOperations(oldPubkey))
+            throw 'This node cannot be removed yet. It has pending operations.'
         // Sorting logic to determine new pubkey - start
         const clusterNodes = this.getClusterNodes();
 
@@ -350,10 +431,13 @@ class ClusterContext {
         }
 
         // Sorting logic to determine new pubkey - yet to be implemented
-        // Update patch config.
+        // Update patch config if node exists in UNL.
         let config = await this.hpContext.getConfig();
-        config.unl = config.unl.filter((p: string) => p != oldPubkey);
-        await this.hpContext.updateConfig(config);
+        const index = config.unl.findIndex((p: string) => p === oldPubkey);
+        if (index > -1) {
+            config.unl.splice(index, 1);
+            await this.hpContext.updateConfig(config);
+        }
 
         // Update peer list.
         const node = this.clusterManager.getNode(oldPubkey);
@@ -366,6 +450,26 @@ class ClusterContext {
             this.clusterManager.removeNode(oldPubkey);
         }
     }
+
+    /**
+     * Check wether there're pending operations for a node.
+     * @param pubkey Public key of the node to check.
+     * @param [options={}] Vote options to collect the check.
+     * @returns true if there're pending operations otherwise false.
+     */
+    public async hasPendingOperations(pubkey: string, options: VoteElectorOptions = {}): Promise<boolean> {
+        const elector = new AllVoteElector(1, options?.timeout || TIMEOUT);
+        const electionName = `removeSigner${this.voteContext.getUniqueNumber()}`;
+
+        if (pubkey === this.hpContext.publicKey) {
+            const hasPending = this.evernodeContext.hasPendingOperations();
+            return (await this.voteContext.vote(electionName, [hasPending], elector)).map(ob => ob.data)[0];
+        }
+        else {
+            return (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+        }
+    }
+
 }
 
 export default ClusterContext;

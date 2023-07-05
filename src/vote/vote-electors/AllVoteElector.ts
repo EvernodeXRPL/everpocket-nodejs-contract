@@ -2,8 +2,8 @@ import * as EventEmitter from 'events';
 import VoteContext from '../../context/VoteContext';
 
 class AllVoteElector {
-    desiredVoteCount: number;
-    timeout: number;
+    protected desiredVoteCount: number;
+    protected timeout: number;
 
     public constructor(desiredVoteCount: number, timeout: number) {
         this.desiredVoteCount = desiredVoteCount;
@@ -14,6 +14,7 @@ class AllVoteElector {
      * Evaluate the election.
      * @param electionName Election identifier.
      * @param voteEmitter Event emitter which the votes are fed into,
+     * @param context Vote context for the election.
      * @returns Evaluated votes as a promise.
      */
     election(electionName: string, voteEmitter: EventEmitter, context: VoteContext): Promise<any[]> {
