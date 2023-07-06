@@ -1,4 +1,4 @@
-import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Memo, URIToken, HookParameter, Transaction, Signature } from '../models';
+import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Signature } from '../models';
 import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
@@ -302,7 +302,7 @@ class XrplContext {
 
         const removeElection = `removeSigner${this.voteContext.getUniqueNumber()}`;
         let oldSigner: Signer;
-        let oldSignerKey: SignerPrivate | null = null;
+        let oldSignerKey: SignerKey | null = null;
         // If this is a the owner, get the signer and send it.
         // Otherwise just collect the signer.
         if (oldPubKey === this.hpContext.publicKey) {
@@ -317,7 +317,7 @@ class XrplContext {
 
         const addElection = `addSigner${this.voteContext.getUniqueNumber()}`;
         let newSigner: Signer;
-        let newSignerKey: SignerPrivate | null = null;
+        let newSignerKey: SignerKey | null = null;
         // If this is a the owner, generate a new signer and send it.
         // Otherwise just collect the signer.
         if (newPubKey === this.hpContext.publicKey) {
@@ -330,7 +330,7 @@ class XrplContext {
             newSigner = (await this.voteContext.subscribe(addElection, elector)).map(ob => ob.data)[0];
         }
 
-        let signerListInfo = await this.getSignerList();
+        let signerListInfo = this.getSignerList();
 
         if (signerListInfo && newSigner && oldSigner) {
             // Remove signer from the list and renew the signer list.
@@ -344,8 +344,7 @@ class XrplContext {
                 signerListInfo.signerQuorum = options.quorum;
             }
 
-            const preparedTxn = await this.xrplAcc.prepareSetSignerList(signerListInfo.signerList, { ...options, signerQuorum: signerListInfo.signerQuorum });
-            await this.multiSignAndSubmitTransaction(preparedTxn, options);
+            await this.setSignerList(signerListInfo, options);
         }
         else {
             throw `Cluster signer params cannot be fetched.`
