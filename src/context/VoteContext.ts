@@ -6,14 +6,14 @@ import { AllVoteElector } from '../vote/vote-electors';
 import { VoteOptions } from '../models/vote';
 
 class VoteContext {
-    public hpContext: any;
+    private contractContext: any;
     private eventEmitter: EventEmitter = new EventEmitter();
     private voteSerializer: VoteSerializer;
     private uniqueNumber: number = 0;
     private voteCollection: any = {};
 
-    public constructor(hpContext: any, options: VoteOptions = {}) {
-        this.hpContext = hpContext;
+    public constructor(contractContext: any, options: VoteOptions = {}) {
+        this.contractContext = contractContext;
         this.voteSerializer = options.voteSerializer || new VoteSerializer();
     }
 
@@ -56,7 +56,7 @@ class VoteContext {
         // Cast our vote(s).
         await Promise.all(new Array().concat(votes).map(v => {
             const msg = this.voteSerializer.serializeVote(electionName, v);
-            return this.hpContext.unl.send(msg);
+            return this.contractContext.unl.send(msg);
         }));
 
         // Get election result.

@@ -8,19 +8,20 @@ import * as fs from 'fs';
 import * as kp from 'ripple-keypairs';
 import { JSONHelpers } from "../utils";
 import { VoteElectorOptions } from "../models/vote";
+import HotPocketContext from "./HotPocketContext";
 
-const TIMEOUT = 4000;
-const ACQUIRE_ABANDON_LCL_THRESHOLD = 5;
+const TIMEOUT = 10000;
+const ACQUIRE_ABANDON_LCL_THRESHOLD = 10;
 
 class EvernodeContext {
-    public hpContext: any;
-    public xrplContext: XrplContext;
-    public voteContext: VoteContext;
     private acquireDataFile: string = "acquires.json";
     private acquireData: AcquireData = { acquiredNodes: [], pendingAcquires: [] };
     private registryClient: any;
     private updatedData: boolean = false;
     private initialized: boolean = false;
+    public hpContext: HotPocketContext;
+    public xrplContext: XrplContext;
+    public voteContext: VoteContext;
 
     public constructor(xrplContext: XrplContext, governorAddress: string) {
         this.xrplContext = xrplContext;
@@ -64,9 +65,6 @@ class EvernodeContext {
      * Deinitialize the context.
      */
     public async deinit(): Promise<void> {
-        if (!this.initialized)
-            return;
-
         this.#persistAcquireData();
         if (this.registryClient)
             await this.registryClient.disconnect();
@@ -204,7 +202,7 @@ class EvernodeContext {
             throw "NO_LEASE_OFFER";
 
         const electionName = `lease_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT));
+        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -237,7 +235,7 @@ class EvernodeContext {
             throw 'There are no vacant hosts in the network';
 
         const electionName = `host_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT));
+        const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -260,7 +258,7 @@ class EvernodeContext {
         const keyPair: Record<string, any> = kp.deriveKeypair(seed);
 
         const electionName = `message_key_selection${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [keyPair.publicKey], new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT));
+        const voteRound = this.voteContext.vote(electionName, [keyPair.publicKey], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
         let sortCollection = collection.sort((a, b) => {
@@ -299,7 +297,7 @@ class EvernodeContext {
     public async getCurMoment(options: VoteElectorOptions = {}) {
         // Vote for node created moment.
         const electionName = `share_node_create_moment${this.voteContext.getUniqueNumber()}`;
-        const elector = new AllVoteElector(this.hpContext.unl.list().length, options?.timeout || TIMEOUT);
+        const elector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT);
         const moment = await this.registryClient.getMoment();
         const nodes: number[] = (await this.voteContext.vote(electionName, [moment], elector)).map(ob => ob.data).sort();
         return nodes[0];

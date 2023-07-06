@@ -1,8 +1,9 @@
-import { InstanceConfig } from "../evernode";
+import { VoteContext } from "../../context";
+import { VoteOptions } from "../vote";
 
 export interface UnlNode {
-  publicKey?: string;
-  activeOn?: number;
+  publicKey: string;
+  activeOn: number;
 }
 
 export class Peer {
@@ -30,4 +31,9 @@ export interface User {
 
 export interface ConnectionOptions {
   timeout?: number;
+}
+
+export interface HotPocketOptions {
+  voteContext?: VoteContext;
+  voteOptions?: VoteOptions;
 }

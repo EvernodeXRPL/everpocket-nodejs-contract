@@ -1,5 +1,6 @@
 import { NomadOptions } from "../models/nomad";
 import ClusterContext from "./ClusterContext";
+import HotPocketContext from "./HotPocketContext";
 
 const IMMATURE_PRUNE_LCL_THRESHOLD = 10;
 const INACTIVE_PRUNE_LCL_THRESHOLD = 4;
@@ -9,7 +10,7 @@ class NomadContext {
     private initialized: boolean = false;
     public clusterContext: ClusterContext;
     public options: NomadOptions;
-    public hpContext: any;
+    public hpContext: HotPocketContext;
 
     public constructor(clusterContext: ClusterContext, contract: NomadOptions) {
         this.clusterContext = clusterContext;
@@ -34,9 +35,6 @@ class NomadContext {
      * Deinitialize the nomad contract.
      */
     public async deinit(): Promise<void> {
-        if (!this.initialized)
-            return;
-
         await this.clusterContext.deinit();
         this.initialized = false;
     }
