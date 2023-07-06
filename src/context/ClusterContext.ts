@@ -432,12 +432,17 @@ class ClusterContext {
 
         // Sorting logic to determine new pubkey - yet to be implemented
         // Update patch config if node exists in UNL.
+        // let config = await this.hpContext.getConfig();
+        // const index = config.unl.findIndex((p: string) => p === oldPubkey);
+        // if (index > -1) {
+        //     config.unl.splice(index, 1);
+        //     await this.hpContext.updateConfig(config);
+        // }
+
         let config = await this.hpContext.getConfig();
-        const index = config.unl.findIndex((p: string) => p === oldPubkey);
-        if (index > -1) {
-            config.unl.splice(index, 1);
-            await this.hpContext.updateConfig(config);
-        }
+        config.unl = config.unl.filter((p: string) => p != oldPubkey);
+        await this.hpContext.updateConfig(config);
+        ///
 
         // Update peer list.
         const node = this.clusterManager.getNode(oldPubkey);

@@ -213,6 +213,8 @@ class ClusterManager {
 
         if (index >= 0) {
             this.clusterData.nodes[index].isQuorum = true;
+
+            this.updated = true;
         }
     }
 }
