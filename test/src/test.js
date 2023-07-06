@@ -26,7 +26,6 @@ const testContract = async (hpContext) => {
         ////////////////////////////////////////////////////////
 
         let nonSigners = [];
-
         if (hpContext.unl.list().length > 3)
             nonSigners = (hpContext.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
         if (!nonSigners.length || nonSigners.length === hpContext.unl.list().length)
@@ -73,7 +72,6 @@ const testContract = async (hpContext) => {
                 "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
                 "rhXBNAJbHKym75tazYAxcEbghNN6vLyYZE",
                 "rKqDVS5fYEWDNivosnFiri1bXfqt2ebj7q",
-                "rP3MGBqPdAXVrBGvP1Hn1UFozuaQvSxMMQ",
                 "rErmdQZLmAauqjY7ig8KeLAGhfxeVAHHnA",
                 "rnG2Q9cqrmCvWNZvMG4JHzG96deqEg5HDx",
                 "rB2SBLDLBUwaUV2QegZxoztpkJLgh1Kvcx",
@@ -83,7 +81,6 @@ const testContract = async (hpContext) => {
                 "rGnsENqQKqPNQKWMSNxbZcMuubjJaaBpf5",
                 "rMaHq7P7ibkbeiykRGyTsdyFEDBRGrLdx6",
                 "rHJqCseZFzCveSTdtJuDNpD4ARoMy41E1C",
-                "rGYPizbATsej8iJ4kDeFf7tRysf6ggwcQY",
                 "rMu8RLEKTtyWuhko1F5dVZoUAiVpRpi5GB",
                 "rhsBuUnoV1yGSpSVYgzFMFeTcFLvg8ZQnh",
                 "rhYqbRQpSy7RtQtXjfurprdB4Gj8PAJW2X",
@@ -129,8 +126,8 @@ const testContract = async (hpContext) => {
             // () => checkLiveness(utilityContext, ip, port),
             // () => acquireNewNode(evernodeContext),
             // () => extendNode(evernodeContext),
-            // () => addNewClusterNode(clusterContext),
-            // () => removeNode(xrplContext, clusterContext),
+            () => addNewClusterNode(clusterContext),
+            () => removeNode(clusterContext),
             // () => runNomadContract(nomadContext)
         ];
 
@@ -257,28 +254,25 @@ const addNewClusterNode = async (clusterContext) => {
     }
 }
 
-const removeNode = async (xrplContext, clusterContext) => {
+const removeNode = async (clusterContext) => {
     await clusterContext.init();
-    await xrplContext.init();
 
     try {
         const unlNodes = clusterContext.getClusterUnlNodes();
 
         // Remove nodes if max cluster size reached and 5 ledgers after the last node added to UNL.
-        // if (unlNodes.length === MAX_CLUSTER && clusterContext.hpContext.lclSeqNo > (Math.max(...unlNodes.filter(n => n.addedToUnlOnLcl).map(n => n.addedToUnlOnLcl)) + 5)) {
-        // Commented out the above condition to test the replace signer logic
-            let isQuorumVar = unlNodes.find(n => n.isQuorum)
-            if(isQuorumVar){
-                console.log("Removing node ", isQuorumVar.pubkey);
-                await clusterContext.removeNode(isQuorumVar.pubkey);
-            }        
-        // }
+        if (unlNodes.length === MAX_CLUSTER && clusterContext.hpContext.lclSeqNo > (Math.max(...unlNodes.filter(n => n.addedToUnlOnLcl).map(n => n.addedToUnlOnLcl)) + 2)) {
+            const nonQuorumNode = unlNodes.find(n => n.isQuorum);
+            if (nonQuorumNode) {
+                console.log("Removing node ", nonQuorumNode.pubkey);
+                await clusterContext.removeNode(nonQuorumNode.pubkey);
+            }
+        }
     } catch (e) {
         console.error(e);
     } finally {
         await clusterContext.deinit();
     }
-
 }
 
 const runNomadContract = async (nomadContext) => {

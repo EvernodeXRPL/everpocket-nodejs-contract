@@ -28,10 +28,10 @@ class ClusterContext {
         this.hpContext = this.evernodeContext.hpContext;
         this.utilityContext = options?.utilityContext || new UtilityContext(this.hpContext);
         this.voteContext = this.evernodeContext.voteContext;
+        this.xrplContext = this.evernodeContext.xrplContext;
         this.clusterManager = new ClusterManager();
         this.maturityLclThreshold = options.maturityLclThreshold || 2;
         this.userMessageProcessing = false;
-        this.xrplContext = this.evernodeContext.xrplContext;
     }
 
     /**
@@ -406,53 +406,46 @@ class ClusterContext {
     }
 
     /**
-     * Removes a provided a node from the cluster and replace the removed signer.
+     * Removes a provided a node from the cluster.
      * @param pubkey Public key of the node to be removed.
      */
-    public async removeNode(oldPubkey: string): Promise<void> {
+    public async removeNode(pubkey: string): Promise<void> {
         // If this node contains pending operations, This node cannot be removed until they are completed.
-        if (await this.hasPendingOperations(oldPubkey))
+        if (await this.hasPendingOperations(pubkey))
             throw 'This node cannot be removed yet. It has pending operations.'
-        // Sorting logic to determine new pubkey - start
-        const clusterNodes = this.getClusterNodes();
 
-        // Get isQuorum false nodes
-        let isQuorumFalseClusterNodes = clusterNodes.filter((cluster)=> {return cluster.isQuorum === false})
+        const node = this.clusterManager.getNode(pubkey);
 
-        // Sorting the array using pubkey
-        isQuorumFalseClusterNodes.sort((a, b) => a.pubkey.localeCompare(b.pubkey));
+        if (node?.isQuorum) {
+            // Sorting logic to determine new pubkey - start
+            const clusterNodes = this.getClusterNodes();
+            // Get isQuorum false nodes and select one.
+            const nonQuorumNodes = clusterNodes.filter(n => !n.isQuorum).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
 
-        let newPubKey = isQuorumFalseClusterNodes[0]?.pubkey; 
-        // Sorting logic to determine new pubkey - end
-        
-        if(newPubKey){
-           await this.xrplContext.replaceSignerList(oldPubkey, newPubKey);
-            this.clusterManager.markAsQuorum(oldPubkey);
+            let newSignerPubkey = nonQuorumNodes[0]?.pubkey;
+
+            if (newSignerPubkey) {
+                await this.xrplContext.replaceSignerList(pubkey, newSignerPubkey);
+                this.clusterManager.markAsQuorum(newSignerPubkey);
+            }
         }
 
-        // Sorting logic to determine new pubkey - yet to be implemented
         // Update patch config if node exists in UNL.
-        // let config = await this.hpContext.getConfig();
-        // const index = config.unl.findIndex((p: string) => p === oldPubkey);
-        // if (index > -1) {
-        //     config.unl.splice(index, 1);
-        //     await this.hpContext.updateConfig(config);
-        // }
-
         let config = await this.hpContext.getConfig();
-        config.unl = config.unl.filter((p: string) => p != oldPubkey);
-        await this.hpContext.updateConfig(config);
-        ///
+        const index = config.unl.findIndex((p: string) => p === pubkey);
+        if (index > -1) {
+            config.unl.splice(index, 1);
+            await this.hpContext.updateConfig(config);
+        }
 
         // Update peer list.
-        const node = this.clusterManager.getNode(oldPubkey);
         if (node) {
-            if(node.ip && node.peerPort){
+            if (node.ip && node.peerPort) {
                 let peer = `${node?.ip}:${node?.peerPort}`
                 await this.hpContext.updatePeers(null, [peer]);
             }
 
-            this.clusterManager.removeNode(oldPubkey);
+            this.clusterManager.removeNode(pubkey);
         }
     }
 
