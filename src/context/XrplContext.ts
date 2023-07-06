@@ -330,7 +330,10 @@ class XrplContext {
             newSigner = (await this.voteContext.subscribe(addElection, elector)).map(ob => ob.data)[0];
         }
 
-        let signerListInfo = this.getSignerList();
+        // Replace signer from the list and renew the signer list. Clone objet to avoid reference.
+        let signerListInfo = <SignerListInfo>{};
+        if (this.signerListInfo)
+            Object.assign(signerListInfo, this.signerListInfo);
 
         if (signerListInfo && newSigner && oldSigner) {
             // Remove signer from the list and renew the signer list.
