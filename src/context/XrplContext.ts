@@ -135,7 +135,7 @@ class XrplContext {
 
         // Throw error if there're no enough signatures to fulfil the quorum.
         const totalWeight = signatures.map(s => {
-            return this.signerListInfo!.signerList.find(i => i.account === s.Signer.Account)!.weight;
+            return (this.signerListInfo?.signerList?.find(i => i.account === s.Signer.Account)?.weight || 0);
         }).reduce((a, b) => a + b, 0);
         if (totalWeight < this.signerListInfo.signerQuorum)
             throw `No enough signatures: Total weight: ${totalWeight}, Quorum: ${this.signerListInfo.signerQuorum}.`;
