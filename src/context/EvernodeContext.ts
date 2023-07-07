@@ -148,6 +148,9 @@ class EvernodeContext {
 
         const messageKey = await this.decideMessageKey();
 
+        if(!leaseOffer || !messageKey)
+            throw "Could not decide aquire params.";
+            
         // Perform acquire txn on the selected host.
         const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
 
