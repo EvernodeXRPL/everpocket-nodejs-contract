@@ -1,16 +1,29 @@
 import { Buffer } from 'buffer';
-import { ConnectionOptions, Peer } from '../models';
+import { ConnectionOptions, HotPocketOptions, Peer, UnlNode } from '../models';
 import { ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType } from '../models/cluster';
+import VoteContext from './VoteContext';
+const HotPocket = require('hotpocket-js-client');
 
 const TIMEOUT = 60000;
 
-const HotPocket = require('hotpocket-js-client');
-class UtilityContext {
-    private hpContext: any;
+class HotPocketContext {
     private hpClient: any;
+    private contractContext: any;
+    public voteContext: any;
+    public publicKey: string;
+    public contractId: string;
+    public lclSeqNo: number;
+    public lclHash: string;
+    public timestamp: number;
 
-    constructor(hpContext: any) {
-        this.hpContext = hpContext;
+    constructor(contractContext: any, options: HotPocketOptions = {}) {
+        this.contractContext = contractContext;
+        this.publicKey = this.contractContext.publicKey;
+        this.contractId = this.contractContext.contractId;
+        this.lclSeqNo = this.contractContext.lclSeqNo;
+        this.lclHash = this.contractContext.lclHash;
+        this.timestamp = this.contractContext.timestamp;
+        this.voteContext = options.voteContext || new VoteContext(this.contractContext, options.voteOptions)
     }
 
     /**
@@ -23,11 +36,15 @@ class UtilityContext {
             await this.hpClient.close();
 
         const keys = (useNewKeyPair) ? await HotPocket.generateKeys() : {
-            privateKey: new Uint8Array(Buffer.from(this.hpContext.privateKey, 'hex')),
-            publicKey: new Uint8Array(Buffer.from(this.hpContext.publicKey, 'hex'))
+            privateKey: new Uint8Array(Buffer.from(this.contractContext.privateKey, 'hex')),
+            publicKey: new Uint8Array(Buffer.from(this.contractContext.publicKey, 'hex'))
         }
 
-        this.hpClient = await HotPocket.createClient(nodes.map(n => `wss://${n.toString()}`), keys);
+        const nodesToTry = nodes.filter(n => n.ip && n.port).map(n => `wss://${n.toString()}`);
+        if (!nodesToTry || !nodesToTry.length)
+            throw `There are no nodes ip port info to connect.`;
+
+        this.hpClient = await HotPocket.createClient(nodesToTry, keys);
     }
 
     /**
@@ -86,9 +103,10 @@ class UtilityContext {
      * @returns the liveliness as a boolean figure.
      */
     public async checkLiveness(node: Peer): Promise<boolean> {
-        return new Promise<boolean>(async (resolve) => {
+        const address = node.toString();
+        return new Promise<boolean>(async (resolve, reject) => {
             await this.#connectAndHandle([node], () => {
-                console.log(`Hot Pocket live at wss://${node.toString()}`);
+                console.log(`Hot Pocket live at wss://${address}`);
             }, (data: any, error: any) => {
                 if (error) {
                     console.error(error);
@@ -97,7 +115,10 @@ class UtilityContext {
                 else
                     resolve(true);
                 return;
-            }, { timeout: 6000 });
+            }, { timeout: 6000 }).catch(e => {
+                reject(e);
+                return;
+            });
         });
     }
 
@@ -140,9 +161,45 @@ class UtilityContext {
                 else
                     resolve();
                 return;
-            }, { timeout: 60000 });
+            }, { timeout: 60000 }).catch(e => {
+                reject(e);
+                return;
+            });
         });
+    }
+
+    /**
+     * Get the contract config.
+     * @returns The contract config.
+     */
+    public async getContractConfig(): Promise<any> {
+        return await this.contractContext.getConfig();
+    }
+
+    /**
+     * Update the contract config.
+     * @returns The contract config.
+     */
+    public async updateContractConfig(config: any): Promise<void> {
+        await this.contractContext.updateConfig(config);
+    }
+
+    /**
+     * Get the contract unl.
+     * @returns The contract unl.
+     */
+    public getContractUnl(): UnlNode[] {
+        return this.contractContext.unl.list();
+    }
+
+    /**
+     * Update the HotPocket peer list.
+     * @param toAdd Peer list to add.
+     * @param [toRemove=[]] Peer list to remove.
+     */
+    public async updatePeers(toAdd: string[] | null, toRemove: string[] | null = null): Promise<void> {
+        await this.contractContext.updatePeers(toAdd, toRemove);
     }
 }
 
-export default UtilityContext;
+export default HotPocketContext;

@@ -1,6 +1,6 @@
 export { default as XrplContext } from './XrplContext'
 export { default as VoteContext } from './VoteContext'
 export { default as EvernodeContext } from './EvernodeContext'
-export { default as UtilityContext } from './UtilityContext'
+export { default as HotPocketContext } from './HotPocketContext'
 export { default as ClusterContext } from './ClusterContext'
 export { default as NomadContext } from './NomadContext'

@@ -1,8 +1,6 @@
-import { UtilityContext } from "../../context";
 import { AcquiredNode, PendingAcquire } from "../evernode";
 
 export interface ClusterOptions {
-  utilityContext: UtilityContext;
   maturityLclThreshold?: number;
 }
 
@@ -13,6 +11,7 @@ export interface ClusterNode extends AcquiredNode {
   activeOnLcl?: number;
   isUnl: boolean;
   isQuorum: boolean;
+  signerWeight?: number;
   createdOnTimestamp?: number;
   lifeMoments: number;
   targetLifeMoments: number;
@@ -24,22 +23,25 @@ export interface PendingNode extends PendingAcquire {
 }
 
 export interface ClusterData {
+  initialized: boolean,
   nodes: ClusterNode[],
   pendingNodes: PendingNode[]
 }
 
 export interface ClusterMessage {
   type: ClusterMessageType;
-  nodePubkey: string;
+  data?: any;
 }
 
 export interface ClusterMessageResponse {
   type: ClusterMessageType;
   status: ClusterMessageResponseStatus;
+  data?: any;
 }
 
 export enum ClusterMessageType {
   MATURED = "maturity_ack",
+  CLUSTER_NODES = "cluster_nodes",
   UNKNOWN = "unknown"
 }
 
