@@ -242,10 +242,10 @@ const removeNode = async (clusterContext) => {
 
     // Remove nodes if max cluster size reached and 5 ledgers after the last node added to UNL.
     if (unlNodes.length === MAX_CLUSTER && clusterContext.hpContext.lclSeqNo > (Math.max(...unlNodes.filter(n => n.addedToUnlOnLcl).map(n => n.addedToUnlOnLcl)) + 2)) {
-        const nonQuorumNode = unlNodes.find(n => n.isQuorum);
-        if (nonQuorumNode) {
-            console.log("Removing node ", nonQuorumNode.pubkey);
-            await clusterContext.removeNode(nonQuorumNode.pubkey);
+        const quorumNode = unlNodes.find(n => n.signerAddress);
+        if (quorumNode) {
+            console.log("Removing node ", quorumNode.pubkey);
+            await clusterContext.removeNode(quorumNode.pubkey);
         }
     }
 }

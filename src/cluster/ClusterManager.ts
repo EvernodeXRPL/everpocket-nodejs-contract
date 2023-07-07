@@ -234,12 +234,13 @@ class ClusterManager {
     /**
      * Update the node as a quorum node.
      * @param pubkey Public key of the node.
+     * @param signerAddress Signer address of the node.
      */
-    public markAsQuorum(pubkey: string): void {
+    public markAsQuorum(pubkey: string, signerAddress: string): void {
         const index = this.clusterData.nodes.findIndex(n => n.pubkey === pubkey);
 
         if (index >= 0) {
-            this.clusterData.nodes[index].isQuorum = true;
+            this.clusterData.nodes[index].signerAddress = signerAddress;
             this.updated = true;
         }
     }
