@@ -77,6 +77,7 @@ class NomadContext {
             const nodeExpiryTs = (node.createdOnTimestamp || 0) + (node.lifeMoments * momentSize * 1000);
 
             let prune = false;
+            let force = true;
             // Prune unl nodes if inactive. Only consider the nodes which are added to Unl before this ledger.
             if (node.isUnl && ((node.addedToUnlOnLcl || 0) < curLcl) &&
                 (curLcl - (node.activeOnLcl || 0)) > INACTIVE_PRUNE_LCL_THRESHOLD) {
@@ -97,10 +98,12 @@ class NomadContext {
                 console.log(`Pruning the node ${node.pubkey} due to expiring.`);
                 console.log(`Expiry ts: ${nodeExpiryTs}, Current ts: ${curTimestamp}`);
                 prune = true;
+                // When removing nodes close to expire, Do not force remove them which might cause to fail pending acquires.
+                force = false;
             }
 
             if (prune) {
-                await this.clusterContext.removeNode(node.pubkey).catch(console.error);
+                await this.clusterContext.removeNode(node.pubkey, force).catch(console.error);
             }
         }
     }

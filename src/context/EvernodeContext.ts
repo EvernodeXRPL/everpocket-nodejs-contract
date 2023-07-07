@@ -148,6 +148,9 @@ class EvernodeContext {
 
         const messageKey = await this.decideMessageKey();
 
+        if(!leaseOffer || !messageKey)
+            throw "Could not decide aquire params.";
+            
         // Perform acquire txn on the selected host.
         const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
 
@@ -420,20 +423,6 @@ class EvernodeContext {
             }
         }
         this.updatedData = true;
-    }
-
-    /**
-     * Check wether there are any pending acquires to decrypt from running host.
-     * @returns true if there are any operations otherwise false.
-     */
-    public hasPendingOperations(): boolean {
-        // Check if this node has message keys for pending acquires.
-        for (const item of this.getPendingAcquires()) {
-            if (fs.existsSync(`../${item.messageKey}.txt`))
-                return true;
-        }
-
-        return false;
     }
 }
 
