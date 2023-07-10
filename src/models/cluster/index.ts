@@ -10,8 +10,7 @@ export interface ClusterNode extends AcquiredNode {
   ackReceivedOnLcl?: number;
   activeOnLcl?: number;
   isUnl: boolean;
-  isQuorum: boolean;
-  signerWeight?: number;
+  signerAddress?: string;
   createdOnTimestamp?: number;
   lifeMoments: number;
   targetLifeMoments: number;

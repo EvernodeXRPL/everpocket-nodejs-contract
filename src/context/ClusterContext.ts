@@ -73,13 +73,11 @@ class ClusterContext {
             const electionName = `share_node_info${this.voteContext.getUniqueNumber()}`;
             const elector = new AllVoteElector(0, options?.timeout || TIMEOUT);
             const signer = this.evernodeContext.xrplContext.multiSigner.getSigner();
-            const signerListsInfo = this.evernodeContext.xrplContext.getSignerList();
             const node = <ClusterNode>{
                 pubkey: this.hpContext.publicKey,
                 contractId: this.hpContext.contractId,
                 isUnl: !!this.hpContext.getContractUnl().find((p: any) => p.publicKey === this.hpContext.publicKey),
-                isQuorum: !!signer,
-                signerWeight: signer ? signerListsInfo?.signerList.find(s => s.account === signer.account)?.weight : null
+                signerAddress: signer ? signer.account : null
             }
             const nodes: ClusterNode[] = (await this.voteContext.vote(electionName, [node], elector)).map(ob => ob.data);
             this.clusterManager.initializeCluster(nodes);
@@ -144,7 +142,6 @@ class ClusterContext {
                             pubkey: info.pubkey,
                             userPort: info.userPort,
                             isUnl: false,
-                            isQuorum: false,
                             lifeMoments: 1,
                             targetLifeMoments: node.targetLifeMoments
                         });
@@ -430,11 +427,27 @@ class ClusterContext {
     /**
      * Removes a provided a node from the cluster.
      * @param pubkey Public key of the node to be removed.
+     * @param [force=false] Force remove. (This might cause to fail some pending operations).
      */
-    public async removeNode(pubkey: string): Promise<void> {
-        // If this node contains pending operations, This node cannot be removed until they are completed.
-        if (await this.hasPendingOperations(pubkey))
-            throw 'This node cannot be removed yet. It has pending operations.'
+    public async removeNode(pubkey: string, force: boolean = false): Promise<void> {
+        // If there ares pending acquires, There could be issues while removing the node.
+        if (!force && this.getPendingNodes().length > 0)
+            throw 'Nodes cannot be removed, There are pending acquires.'
+
+        const node = this.clusterManager.getNode(pubkey);
+
+        if (node?.signerAddress) {
+            // Sorting logic to determine new pubkey - start
+            const clusterNodes = this.getClusterNodes();
+            const nonQuorumNodes = clusterNodes.filter(n => !n.signerAddress).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
+
+            let newSignerPubkey = nonQuorumNodes[0]?.pubkey;
+
+            if (newSignerPubkey) {
+                const newAddress = await this.evernodeContext.xrplContext.replaceSignerList(pubkey, node.signerAddress, newSignerPubkey);
+                this.clusterManager.markAsQuorum(newSignerPubkey, newAddress);
+            }
+        }
 
         // Update patch config if node exists in UNL.
         let config = await this.hpContext.getContractConfig();
@@ -445,7 +458,6 @@ class ClusterContext {
         }
 
         // Update peer list.
-        const node = this.clusterManager.getNode(pubkey);
         if (node) {
             if (node?.ip && node?.peerPort) {
                 let peer = `${node?.ip}:${node?.peerPort}`
@@ -453,25 +465,6 @@ class ClusterContext {
             }
 
             this.clusterManager.removeNode(pubkey);
-        }
-    }
-
-    /**
-     * Check wether there're pending operations for a node.
-     * @param pubkey Public key of the node to check.
-     * @param [options={}] Vote options to collect the check.
-     * @returns true if there're pending operations otherwise false.
-     */
-    public async hasPendingOperations(pubkey: string, options: VoteElectorOptions = {}): Promise<boolean> {
-        const elector = new AllVoteElector(1, options?.timeout || TIMEOUT);
-        const electionName = `removeSigner${this.voteContext.getUniqueNumber()}`;
-
-        if (pubkey === this.hpContext.publicKey) {
-            const hasPending = this.evernodeContext.hasPendingOperations();
-            return (await this.voteContext.vote(electionName, [hasPending], elector)).map(ob => ob.data)[0];
-        }
-        else {
-            return (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
         }
     }
 }
