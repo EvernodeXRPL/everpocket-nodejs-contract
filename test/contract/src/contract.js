@@ -67,7 +67,6 @@ const nomadOptions = {
         "rH1NTQ73pksxX7Z8rEN6XrcibgEd34uJXo",
         "rMCwzwHRLr8CtHW4RkSXSyTT79Srhn3fYn",
         "rDVBMoZ6QcMS12Ty3aBNwrNPPfvHHdvkde",
-        "rEs4LSoKdvTD1FwuymktQBRkkNUcEnua3s",
         "rL8TFrxk2tAAeRdf2z8AwoNeEdkEhvybk5",
         "rKuuh8E2HR4wxxKDu8whZZw7icgSHxq8aE"
     ],
