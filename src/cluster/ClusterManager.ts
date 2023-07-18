@@ -66,7 +66,7 @@ class ClusterManager {
      */
     public addPending(node: PendingNode): void {
         // Return if pending node already exist.
-        if (this.clusterData.pendingNodes.findIndex(n => n.refId === node.refId) > 0)
+        if (this.clusterData.pendingNodes.findIndex(n => n.refId === node.refId) >= 0)
             return;
 
         this.clusterData.pendingNodes.push(node);
@@ -98,7 +98,7 @@ class ClusterManager {
     public increaseAliveCheck(refId: string): void {
         const index = this.clusterData.pendingNodes.findIndex(n => n.refId === refId);
 
-        if (index > 0) {
+        if (index >= 0) {
             this.clusterData.pendingNodes[index].aliveCheckCount++;
             this.updated = true;
         }
@@ -166,7 +166,7 @@ class ClusterManager {
     public updateLifeMoments(pubkey: string, lifeMoments: number): void {
         const index = this.clusterData.nodes.findIndex(n => n.pubkey === pubkey);
 
-        if (index > 0) {
+        if (index >= 0) {
             this.clusterData.nodes[index].lifeMoments = lifeMoments;
             this.updated = true;
         }

@@ -11,7 +11,7 @@ const TIMEOUT = 10000;
 
 class XrplContext {
     private signerListInfo: SignerListInfo | null = null;
-    public hpContext: any;
+    public hpContext: HotPocketContext;
     public xrplApi: any;
     public xrplAcc: any;
     public multiSigner: MultiSigner;
@@ -44,7 +44,13 @@ class XrplContext {
      * Load signer list of the account
      */
     public async loadSignerList(): Promise<void> {
-        const accountObjects = await this.xrplAcc.getAccountObjects({ type: "signer_list" });
+        const accountObjects = await new Promise<any[]>(async (resolve) => {
+            let accountObjects: any[] = [];
+            setTimeout(() => {
+                resolve(accountObjects);
+            }, 5000);
+            accountObjects = await this.xrplAcc.getAccountObjects({ type: "signer_list" });
+        });
         if (accountObjects.length > 0) {
             const signerObject = accountObjects.filter((ob: any) => ob.LedgerEntryType === 'SignerList')[0];
             const signerList: Signer[] = signerObject.SignerEntries.map((signer: any) => ({ account: signer.SignerEntry.Account, weight: signer.SignerEntry.SignerWeight }));
@@ -57,7 +63,28 @@ class XrplContext {
      * @returns Current sequence number.
      */
     public async getSequence(): Promise<number> {
-        return await this.xrplAcc.getSequence()
+        return await new Promise<number>(async (resolve) => {
+            let sequence = -1;
+            setTimeout(() => {
+                resolve(sequence);
+            }, 2000);
+            sequence = await this.xrplAcc.getSequence();
+        });
+    }
+
+    /**
+     * Get transaction list of the master account starting from a ledger.
+     * @param ledgerIndex Starting ledger index.
+     * @returns LIst of transactions
+     */
+    public async getTransactions(ledgerIndex: number): Promise<any[]> {
+        return await new Promise<any[]>(async (resolve) => {
+            let txList: any[] = [];
+            setTimeout(() => {
+                resolve(txList);
+            }, 5000);
+            txList = await this.xrplAcc.getAccountTrx(ledgerIndex);
+        });
     }
 
     /**
@@ -75,10 +102,19 @@ class XrplContext {
      */
     public async getTransactionSubmissionInfo(options: VoteElectorOptions = {}): Promise<TransactionSubmissionInfo> {
         // Decide a sequence number and max ledger sequence to send the same transaction from all the nodes.
-        const infos: TransactionSubmissionInfo[] = (await this.voteContext.vote(`transactionInfo${this.voteContext.getUniqueNumber()}`, [<TransactionSubmissionInfo>{
-            sequence: await this.getSequence(),
-            maxLedgerSequence: this.getMaxLedgerSequence()
-        }], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT))).map(ob => ob.data);
+        const electionName = `transactionInfo${this.voteContext.getUniqueNumber()}`;
+        const elector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT);
+        let infos: TransactionSubmissionInfo[];
+        const sequence = await this.getSequence();
+        if (sequence >= 0) {
+            infos = (await this.voteContext.vote(electionName, [<TransactionSubmissionInfo>{
+                sequence: sequence,
+                maxLedgerSequence: this.getMaxLedgerSequence()
+            }], elector)).map(ob => ob.data);
+        }
+        else {
+            infos = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
+        }
 
         return <TransactionSubmissionInfo>{
             sequence: infos.map(i => i.sequence).sort()[0],
@@ -117,7 +153,7 @@ class XrplContext {
 
         transaction.Fee = `${Number(transaction.Fee) * (signerCount + 2)}`;
 
-        const elector = new MultiSignedBlobElector(signerCount, this.signerListInfo, options?.voteElectorOptions?.timeout || TIMEOUT);
+        const elector = new MultiSignedBlobElector(signerCount, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `sign${this.voteContext.getUniqueNumber()}`;
         let signatures: Signature[];
 
@@ -140,7 +176,10 @@ class XrplContext {
         if (totalWeight < this.signerListInfo.signerQuorum)
             throw `No enough signatures: Total weight: ${totalWeight}, Quorum: ${this.signerListInfo.signerQuorum}.`;
 
-        transaction.Signers = signatures.map(s => <Signature>{ Signer: s.Signer });
+        transaction.Signers = signatures.map(s => <Signature>{ Signer: s.Signer }).sort((a, b) => a.Signer.SigningPubKey.localeCompare(b.Signer.SigningPubKey));
+
+        console.log(transaction);
+        console.log(transaction.Signers.map((s: any) => s.Signer));
 
         return await this.xrplAcc.submitMultisigned(transaction);
     }
@@ -308,7 +347,7 @@ class XrplContext {
      * @param [options={}] Multisigner options to override.
      * @returns New signer address.
      */
-    async replaceSignerList(oldPubKey: string, oldSignerAddress: string, newPubKey: string, options: MultiSignOptions = {}): Promise<string> {
+    async replaceSignerList(oldPubKey: string, oldSignerAddress: string, newPubKey: string, options: MultiSignOptions = {}): Promise<string | null> {
         const elector = new AllVoteElector(1, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `replaceSigner${this.voteContext.getUniqueNumber()}`;
 
@@ -341,24 +380,25 @@ class XrplContext {
             signer = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
         }
 
-        if (!signer)
-            throw `Could not generate a new signer.`
+        if (signer) {
+            // Replace old signer with new signer.
+            signerListInfo.signerList[oldSignerIndex].account = signer.account;
+            if (options.quorum)
+                signerListInfo.signerQuorum = options.quorum;
 
-        // Replace old signer with new signer.
-        signerListInfo.signerList[oldSignerIndex].account = signer.account;
-        if (options.quorum)
-            signerListInfo.signerQuorum = options.quorum;
+            await this.setSignerList(signerListInfo, options);
 
-        await this.setSignerList(signerListInfo, options);
+            if (newSigner)
+                this.multiSigner.setSigner(newSigner);
 
-        if (newSigner)
-            this.multiSigner.setSigner(newSigner);
+            // Remove old signer and add new signer.
+            if (oldPubKey === this.hpContext.publicKey)
+                this.multiSigner.removeSigner();
 
-        // Remove old signer and add new signer.
-        if (oldPubKey === this.hpContext.publicKey)
-            this.multiSigner.removeSigner();
+            return signer.account;
+        }
 
-        return signer.account;
+        return null;
     }
 
     /**

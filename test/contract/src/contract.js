@@ -2,8 +2,12 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "r3Yss1Ggo5td8zug1G7VnWPCUSYai8pmZ2";
-const masterSecret = "ssHD1y3DUX9TYA2PcUxLWS1TMUo7v";
+// const masterAddress = "rsmLXFmK3JXBhrgkSdKwZajw5aZGytwSYM";
+// const masterSecret = "ssfa1M58u9MS6ydeiVfLMm15fDGym";
+// const masterAddress = "rEPcjCRnb92LLBpszboyn9Qf9uvTk3nNET";
+// const masterSecret = "ssnUDXJicaoaQ67K1Fjw9m7NqwPNb";
+const masterAddress = "rNZqGPtr4EqzQXua7Wnw8gphcSrmms11KC";
+// const masterSecret = "sniJWbbBKMXaDJMGXedPsdQn6e8Wy";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
 const ip = "localhost";
@@ -15,13 +19,11 @@ const MAX_ACQUIRES = 5;
 const MAX_CLUSTER = 8;
 
 const nomadOptions = {
-    targetNodeCount: 30,
-    targetLifeMoments: 4,
+    targetNodeCount: 10,
+    targetLifeMoments: 2,
     preferredHosts: [
         "rP4zJ6ZWoHYC8cj6GkWHyiUJT15xwzLCLm",
         "rwqWhVJZ1SgXBBpBNQ194sdDNBbUZTaTem",
-        "rP9qLtcfbymrhLfsFsiz86iPhFqCqkgRXW",
-        "rE29fENEy8GBiFhcAnagCLBbJ7XqnaVmSX",
         "rLkSafYKvf5vBfFyQMVB6touhUnS6j5HR9",
         "rKUq1MnzfqnZAUArkE2ttL1n4UavwUzGrn",
         "rahTwEZefDFtShmgjsArNzxTCT8Zj8HXKN",
@@ -29,7 +31,6 @@ const nomadOptions = {
         "rrssGm5h8aWncB3CGMuQ2WGfexubbeCTLV",
         "rEmGJ3uu7DSrNfM5JSZnFtMjYhLbSmVJ3A",
         "rfBQaUjF9UZWjdJ33hGDeas1hEXK7DmfCV",
-        "rswHs4bzLBSyfd2fWtjuzUxAqudfrzRDtT",
         "r4dVikgRzdVuZcFfMWJWiUo8iJxmYGDmiS",
         "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
         "rhXBNAJbHKym75tazYAxcEbghNN6vLyYZE",
@@ -37,7 +38,6 @@ const nomadOptions = {
         "rErmdQZLmAauqjY7ig8KeLAGhfxeVAHHnA",
         "rnG2Q9cqrmCvWNZvMG4JHzG96deqEg5HDx",
         "rB2SBLDLBUwaUV2QegZxoztpkJLgh1Kvcx",
-        "r931fvw3imdtULs522s5VqV9EaQ21pu6ja",
         "r4LF5L5tq7JdsAUY5YUXjAU1J6xZtm47HP",
         "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
         "rGnsENqQKqPNQKWMSNxbZcMuubjJaaBpf5",
@@ -46,7 +46,30 @@ const nomadOptions = {
         "rMu8RLEKTtyWuhko1F5dVZoUAiVpRpi5GB",
         "rhsBuUnoV1yGSpSVYgzFMFeTcFLvg8ZQnh",
         "rhYqbRQpSy7RtQtXjfurprdB4Gj8PAJW2X",
-        "rfZFCjpFD1zhJP3DsSWy9NVUCmm9Kkhg4w"
+        "rfZFCjpFD1zhJP3DsSWy9NVUCmm9Kkhg4w",
+        "raRpwPCbMGfTgEDnHD7nQCUYbXwkNYKThA",
+        "rD6Lgdxzq3dr42JD4F1bwF86BaCwAaeQWu",
+        "rfuvNytxfavNgN57WqGfQR3duhUAsy8PEY",
+        "rHf3nHTdrMRKwP8hVXifsZAGQxhixmrvgu",
+        "r3VUJWNCHxq5yV1fcfXPaJ3ozcL2SSy88F",
+        "rDMiTtcVEnSvoeS8uh71fS2vdpQpP33gCN",
+        "rDt8RqBshBPGRgeWdjpBRzoMYxmLwZKCKo",
+        "rEtBQShEjRXGPVC9AsmySJSaVtSsVZcR6p",
+        "rsuXd4vQpzyktVhxNMEZdgKLLmA1j4VJQi",
+        "rNcXiJ89mQ8ZEx6Wfwq9eMd9mXXn5JSSKs",
+        "r4HrG4pxwdbfdqDQkaVKHeCVjLmNfKsyTE",
+        "rQLYPp4iGPraESkvkw6Ta5kacgigAabYQQ",
+        "rstzrHRW8RMo6Gmvme7DAnbAnZP8VesbA2",
+        "rKrSVLgaKQANTSEv1bY4cT4PVThCzFXpX6",
+        "r3Y9u4azTbcT95Ja7CDJzUHXV7N3sCSKP1",
+        "rhKW2ihYKtd71yeuZK7f2KPXBXJ6byVdVo",
+        "rKqvyMy6T4Uuefutu242yVKrtqRRwLxm7a",
+        "rH1NTQ73pksxX7Z8rEN6XrcibgEd34uJXo",
+        "rMCwzwHRLr8CtHW4RkSXSyTT79Srhn3fYn",
+        "rDVBMoZ6QcMS12Ty3aBNwrNPPfvHHdvkde",
+        "rEs4LSoKdvTD1FwuymktQBRkkNUcEnua3s",
+        "rL8TFrxk2tAAeRdf2z8AwoNeEdkEhvybk5",
+        "rKuuh8E2HR4wxxKDu8whZZw7icgSHxq8aE"
     ],
     instanceCfg: {
         config: {
@@ -59,14 +82,14 @@ const nomadOptions = {
 
 const testContract = async (contractCtx) => {
     let nonSigners = [];
-    if (contractCtx.unl.list().length > 3)
-        nonSigners = (contractCtx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
-    if (!nonSigners.length || nonSigners.length === contractCtx.unl.list().length)
-        nonSigners = contractCtx.unl.list().slice(0, 1).map(n => n.publicKey);
+    // if (contractCtx.unl.list().length > 3)
+    //     nonSigners = (contractCtx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
+    // if (!nonSigners.length || nonSigners.length === contractCtx.unl.list().length)
+    //     nonSigners = contractCtx.unl.list().slice(0, 1).map(n => n.publicKey);
 
     const signerToAdd = nonSigners.length ? nonSigners[0] : null;
     const signerCount = contractCtx.unl.list().length - nonSigners.length;
-    const quorum = Math.floor(signerCount * signerWeight * 0.8);
+    const quorum = Math.floor(signerCount * signerWeight * 0.6);
     const signerToRemove = contractCtx.unl.list().map(n => n.publicKey).find(p => !nonSigners.includes(p));
 
     const voteContext = new evp.VoteContext(contractCtx);
@@ -79,13 +102,13 @@ const testContract = async (contractCtx) => {
         });
 
         ///////// TODO: This part is temporary for preparing multisig /////////
-        if (!fs.existsSync('multisig')) {
-            const isSigner = !nonSigners.includes(hpContext.publicKey);
+        // if (!fs.existsSync('multisig')) {
+        //     const isSigner = !nonSigners.includes(hpContext.publicKey);
 
-            await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
+        //     await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
 
-            fs.writeFileSync('multisig', '');
-        }
+        //     fs.writeFileSync('multisig', '');
+        // }
         ///////////////////////////////////////////////////////////////////////
     }
 
@@ -110,7 +133,7 @@ const testContract = async (contractCtx) => {
 
     if (!contractCtx.readonly) {
         const tests = [
-            // () => testVote(voteContext),
+            () => testVote(voteContext),
             // () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
             // () => renewSignerList(xrplContext),
             // () => removeXrplSigner(xrplContext, signerToRemove, quorum - signerWeight),
@@ -145,11 +168,24 @@ const testContract = async (contractCtx) => {
 // Voting examples.
 const testVote = async (voteContext) => {
     // Send votes to an election.
-    const r1 = voteContext.vote("firstRound", [1, 2], new evp.AllVoteElector(10, 1000));
-    const r2 = voteContext.vote("secondRound", [6, 7], new evp.AllVoteElector(10, 1000));
+    const r1 = voteContext.vote("firstRound", [Math.ceil((Math.random() * 10))], new evp.AllVoteElector(10, 1000));
+    const r2 = voteContext.vote("secondRound", [Math.ceil((Math.random() * 10))], new evp.AllVoteElector(10, 1000));
+    const r3 = voteContext.vote("thirdRound", [{
+        SigningPubKey: '03FBBF4D613A46855D393A9C48F17E9935840335665F4F892BD88505CC1CA4E075',
+        TxnSignature: '3045022100F13CEAC221F5FEECF954356F21FBFE9944D30A6734DCD24C064937DE2A75E222022020F089A2B59DB5DFDBA7EEC375C2B61A41FB48A2A42BE60DE8E3B52820F870F2',
+        Account: 'rhBEKz6Sa26L13TjFB2SiYDjuPFazDnnqH',
+        Sequence: Math.ceil((Math.random() * 10))
+    }], new evp.AllVoteElector(10, 1000));
 
-    console.log('First round votes', (await r1).map(v => v.data));
-    console.log('Second round votes', (await r2).map(v => v.data));
+    const firstList = (await r1).map(v => v.data);
+    console.log('First round votes', firstList);
+    fs.appendFileSync('first.txt', firstList?.length ? firstList.sort()[0].toString() : '');
+    const secondList = (await r2).map(v => v.data);
+    console.log('Second round votes', secondList);
+    fs.appendFileSync('second.txt', secondList?.length ? secondList.sort()[0].toString() : '');
+    const thirdList = (await r3).map(v => v.data);
+    console.log('Second round votes', thirdList);
+    fs.appendFileSync('thir.txt', thirdList?.length ? JSON.stringify(thirdList.sort()) : '');
 }
 
 const addXrplSigner = async (xrplContext, publickey, quorum = null) => {
@@ -260,6 +296,39 @@ const runNomadContract = async (nomadContext) => {
 
     console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
     console.log("Unl: ", nomadContext.clusterContext.hpContext.getContractUnl().map(n => n.publicKey));
+
+    //////////////////// Start of test code for the streamer ////////////////////
+
+    if (nomadContext.hpContext.lclSeqNo % 5 === 0) {
+        try {
+            const ws = require('ws');
+
+            const port = 8080;
+            const ip = '45.76.178.184';
+            const address = `ws://${ip}:${port}`;
+            const message = {
+                contract_id: nomadContext.hpContext.contractId,
+                cluster: nomadContext.clusterContext.getClusterNodes()
+            };
+
+            const connection = new ws(address)
+
+            connection.onopen = () => {
+                connection.send(JSON.stringify(message));
+                connection.close();
+            }
+
+            connection.onerror = (error) => {
+                connection.close();
+                throw error;
+            }
+        }
+        catch (e) {
+            console.error('Stream web socket error: ', e);
+        }
+    }
+
+    ///////////////////// End of test code for the streamer /////////////////////
 
     await nomadContext.init();
 }

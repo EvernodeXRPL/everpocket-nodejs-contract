@@ -102,9 +102,11 @@ class EvernodeContext {
                 await this.updatePendingAcquireInfo(item, "DELETE");
                 if (privateKey)
                     fs.unlinkSync(`../${item.messageKey}.txt`);
+                continue;
             }
 
-            const txList = await this.xrplContext.xrplAcc.getAccountTrx(item.acquireLedgerIdx);
+            const txList = await this.xrplContext.getTransactions(item.acquireLedgerIdx);
+
             for (let t of txList) {
                 t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
                 t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
@@ -148,9 +150,9 @@ class EvernodeContext {
 
         const messageKey = await this.decideMessageKey();
 
-        if(!leaseOffer || !messageKey)
+        if (!leaseOffer || !messageKey)
             throw "Could not decide aquire params.";
-            
+
         // Perform acquire txn on the selected host.
         const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
 
@@ -196,26 +198,32 @@ class EvernodeContext {
      * @returns URIToken related to the lease offer.
      */
     public async decideLeaseOffer(hostAddress: string, options: VoteElectorOptions = {}): Promise<URIToken> {
-        // Get transaction details to use for xrpl tx submission.
-        const hostClient = new evernode.HostClient(hostAddress);
-        const leaseOffers = await hostClient.getLeaseOffers();
-        const leaseOffer = leaseOffers && leaseOffers[0];
-
-        if (!leaseOffer)
-            throw "NO_LEASE_OFFER";
-
-        const electionName = `lease_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
-        let collection = (await voteRound).map((v) => v.data);
-
-        let sortCollection = collection.sort((a, b) => {
-            if (a.index === b.index) {
-                return 0;
-            }
-            return a.index > b.index ? 1 : -1;
+        let leaseOffer = await new Promise<number>(async (resolve) => {
+            let leaseOffer: any;
+            setTimeout(() => {
+                resolve(leaseOffer);
+            }, 2000);
+            // Get transaction details to use for xrpl tx submission.
+            const hostClient = new evernode.HostClient(hostAddress);
+            const leaseOffers = await hostClient.getLeaseOffers();
+            leaseOffer = leaseOffers && leaseOffers[0];
         });
 
-        return sortCollection[0];
+        const electionName = `lease_selector${this.voteContext.getUniqueNumber()}`;
+        const elector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT);
+
+        let leaseOffers: any[];
+        if (leaseOffer) {
+            leaseOffers = (await this.voteContext.vote(electionName, [leaseOffer], elector)).map(ob => ob.data);
+        }
+        else {
+            leaseOffers = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
+        }
+
+        if (!leaseOffers || !leaseOffers.length)
+            throw "NO_LEASE_OFFER";
+
+        return leaseOffers.sort((a, b) => a.index.localeCompare(b.index))[0];
     }
 
     /**
@@ -264,12 +272,7 @@ class EvernodeContext {
         const voteRound = this.voteContext.vote(electionName, [keyPair.publicKey], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
-        let sortCollection = collection.sort((a, b) => {
-            if (a === b) {
-                return 0;
-            }
-            return a > b ? 1 : -1;
-        });
+        let sortCollection = collection.sort((a, b) => a.localeCompare(b));
 
         if (sortCollection[0] === keyPair.publicKey) {
             fs.writeFile(`../${keyPair.publicKey}.txt`, keyPair.privateKey, (err) => {
