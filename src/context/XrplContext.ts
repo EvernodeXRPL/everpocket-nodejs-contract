@@ -159,9 +159,8 @@ class XrplContext {
         return this.transactionData.validated;
     }
 
-    public isTransactionSuccess(hash: string): boolean {
-        const res = this.getValidatedTransactions().find(t => t.hash === hash);
-        return res.meta.TransactionResult === "tesSUCCESS";
+    public getValidatedTransaction(hash: string): any {
+        return this.getValidatedTransactions().find(t => t.hash === hash);
     }
 
     /**
@@ -190,13 +189,7 @@ class XrplContext {
      * @returns LIst of transactions
      */
     public async getTransactions(ledgerIndex: number): Promise<any[]> {
-        return await new Promise<any[]>(async (resolve) => {
-            let txList: any[] = [];
-            setTimeout(() => {
-                resolve(txList);
-            }, 5000);
-            txList = await this.xrplAcc.getAccountTrx(ledgerIndex);
-        });
+        return await this.xrplAcc.getAccountTrx(ledgerIndex);
     }
 
     /**
@@ -301,7 +294,7 @@ class XrplContext {
 
         const sorted = Object.entries<number>(votes).sort((a, b) => b[1] - a[1]);
 
-        const txSubmitElector = new AllVoteElector(1, options?.voteElectorOptions?.timeout || TIMEOUT);
+        const txSubmitElector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.voteElectorOptions?.timeout || TIMEOUT);
         const txSubmitElectionName = `txSubmit${this.voteContext.getUniqueNumber()}`;
         let txResults;
         if (sorted.length && (sorted[0][1] >= this.hpContext.getContractUnl().length * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
@@ -318,7 +311,7 @@ class XrplContext {
         if (!txResults || !txResults.length)
             throw 'Could not decide a transaction to submit.';
 
-        const txResult = txResults[0];
+        const txResult = txResults.find(r => r.res?.result?.engine_result === "tesSUCCESS") || txResults[0];
 
         if (txResult.error)
             throw txResult.error;

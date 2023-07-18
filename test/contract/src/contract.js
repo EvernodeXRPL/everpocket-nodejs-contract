@@ -2,12 +2,12 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-// const masterAddress = "rsmLXFmK3JXBhrgkSdKwZajw5aZGytwSYM";
+const masterAddress = "rsmLXFmK3JXBhrgkSdKwZajw5aZGytwSYM";
 // const masterSecret = "ssfa1M58u9MS6ydeiVfLMm15fDGym";
 // const masterAddress = "rEPcjCRnb92LLBpszboyn9Qf9uvTk3nNET";
 // const masterSecret = "ssnUDXJicaoaQ67K1Fjw9m7NqwPNb";
-const masterAddress = "rNZqGPtr4EqzQXua7Wnw8gphcSrmms11KC";
-const masterSecret = "sniJWbbBKMXaDJMGXedPsdQn6e8Wy";
+// const masterAddress = "rNZqGPtr4EqzQXua7Wnw8gphcSrmms11KC";
+// const masterSecret = "sniJWbbBKMXaDJMGXedPsdQn6e8Wy";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
 const ip = "localhost";
@@ -19,7 +19,7 @@ const MAX_ACQUIRES = 5;
 const MAX_CLUSTER = 8;
 
 const nomadOptions = {
-    targetNodeCount: 10,
+    targetNodeCount: 25,
     targetLifeMoments: 2,
     preferredHosts: [
         "rP4zJ6ZWoHYC8cj6GkWHyiUJT15xwzLCLm",
@@ -102,13 +102,13 @@ const testContract = async (contractCtx) => {
         });
 
         ///////// TODO: This part is temporary for preparing multisig /////////
-        if (!fs.existsSync('multisig')) {
-            const isSigner = !nonSigners.includes(hpContext.publicKey);
+        // if (!fs.existsSync('multisig')) {
+        //     const isSigner = !nonSigners.includes(hpContext.publicKey);
 
-            await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
+        //     await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
 
-            fs.writeFileSync('multisig', '');
-        }
+        //     fs.writeFileSync('multisig', '');
+        // }
         ///////////////////////////////////////////////////////////////////////
     }
 
@@ -144,7 +144,7 @@ const testContract = async (contractCtx) => {
             // () => extendNode(evernodeContext),
             // () => addNewClusterNode(clusterContext),
             // () => removeNode(clusterContext),
-            // () => runNomadContract(nomadContext)
+            () => runNomadContract(nomadContext)
         ];
 
         try {

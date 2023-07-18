@@ -135,22 +135,32 @@ class EvernodeContext {
     async #checkForCompletedAcquires(options: VoteElectorOptions = {}): Promise<void> {
         // Check for pending transactions and their completion.
         for (const item of this.getPendingAcquires()) {
-            if (!this.xrplContext.isTransactionSuccess(item.refId))
+            const validated = this.xrplContext.getValidatedTransaction(item.refId);
+            if (!validated)
                 continue;
 
             const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
                 fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
 
             // Abandon waiting for this node if threshold reached.
+            let remove = false;
+            if (validated.meta.TransactionResult !== "tesSUCCESS") {
+                console.log(`Transaction  failed for ${item.refId} with code: ${validated.meta.TransactionResult}.`);
+                remove = true;
+            }
             if (item.acquireSentOnLcl < (this.hpContext.lclSeqNo - ACQUIRE_ABANDON_LCL_THRESHOLD)) {
-                console.log(`Maximum acquire wait threshold reached, Abandoning waiting for ${item.refId}.`)
+                console.log(`Maximum acquire wait threshold reached, Abandoning waiting for ${item.refId}.`);
+                remove = true;
+            }
+
+            if (remove) {
                 this.#updatePendingAcquireInfo(item, "DELETE");
                 if (privateKey)
                     fs.unlinkSync(`../${item.messageKey}.txt`);
                 continue;
             }
 
-            const txList = await this.xrplContext.getTransactions(item.acquireLedgerIdx);
+            const txList = await this.xrplContext.getTransactions(validated.ledger_index);
 
             for (let t of txList) {
                 t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
@@ -207,7 +217,6 @@ class EvernodeContext {
             leaseOfferIdx: leaseOffer.index,
             refId: res.tx_json.hash,
             messageKey: messageKey,
-            acquireLedgerIdx: res.ledger_index,
             acquireSentOnLcl: this.hpContext.lclSeqNo
         };
 
