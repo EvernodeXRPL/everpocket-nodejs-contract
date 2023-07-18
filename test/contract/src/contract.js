@@ -7,7 +7,7 @@ const fs = require('fs');
 // const masterAddress = "rEPcjCRnb92LLBpszboyn9Qf9uvTk3nNET";
 // const masterSecret = "ssnUDXJicaoaQ67K1Fjw9m7NqwPNb";
 const masterAddress = "rNZqGPtr4EqzQXua7Wnw8gphcSrmms11KC";
-// const masterSecret = "sniJWbbBKMXaDJMGXedPsdQn6e8Wy";
+const masterSecret = "sniJWbbBKMXaDJMGXedPsdQn6e8Wy";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
 const ip = "localhost";
@@ -102,13 +102,13 @@ const testContract = async (contractCtx) => {
         });
 
         ///////// TODO: This part is temporary for preparing multisig /////////
-        // if (!fs.existsSync('multisig')) {
-        //     const isSigner = !nonSigners.includes(hpContext.publicKey);
+        if (!fs.existsSync('multisig')) {
+            const isSigner = !nonSigners.includes(hpContext.publicKey);
 
-        //     await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
+            await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
 
-        //     fs.writeFileSync('multisig', '');
-        // }
+            fs.writeFileSync('multisig', '');
+        }
         ///////////////////////////////////////////////////////////////////////
     }
 
@@ -133,7 +133,7 @@ const testContract = async (contractCtx) => {
 
     if (!contractCtx.readonly) {
         const tests = [
-            () => testVote(voteContext),
+            // () => testVote(voteContext),
             // () => addXrplSigner(xrplContext, signerToAdd, quorum + signerWeight),
             // () => renewSignerList(xrplContext),
             // () => removeXrplSigner(xrplContext, signerToRemove, quorum - signerWeight),

@@ -21,7 +21,12 @@ export interface Signature {
     TxnSignature: string;
     Account: string;
   }
-} 
+}
+
+export interface TransactionData {
+  pending: any[];
+  validated: any[];
+}
 
 export interface TransactionSubmissionInfo {
   sequence: number;

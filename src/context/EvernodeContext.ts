@@ -87,19 +87,64 @@ class EvernodeContext {
     }
 
     /**
+     * Updates the detail file with inserts and deletes of
+     * pending acquires
+     * @param element Element to be added or removed
+     * @param mode Type of operation ("INSERT" or "DELETE")
+     */
+    #updatePendingAcquireInfo(element: PendingAcquire, mode: string = "INSERT"): void {
+        if (mode === "INSERT")
+            this.acquireData.pendingAcquires.push(element); // modify the array as needed
+        else {
+            // Find the index of the record to remove
+            const indexToRemove = this.acquireData.pendingAcquires.findIndex((record: { leaseOfferIdx: string; }) => record.leaseOfferIdx === element.leaseOfferIdx);
+
+            // Check if the record exists in the array, and remove it if found
+            if (indexToRemove !== -1) {
+                this.acquireData.pendingAcquires.splice(indexToRemove, 1);
+            }
+        }
+        this.updatedData = true;
+    }
+
+    /**
+     * Updates the detail file with inserts and deletes of
+     * successful acquires
+     * @param element Element to be added or removed
+     * @param mode Type of operation ("INSERT" or "DELETE")
+     */
+    #updateAcquiredNodeInfo(element: AcquiredNode, mode: string = "INSERT"): void {
+        if (mode === "INSERT")
+            this.acquireData.acquiredNodes.push(element); // modify the array as needed
+        else {
+            // Find the index of the record to remove
+            const indexToRemove = this.acquireData.acquiredNodes.findIndex((record: { name: string; }) => record.name === element.name);
+
+            // Check if the record exists in the array, and remove it if found
+            if (indexToRemove !== -1) {
+                this.acquireData.acquiredNodes.splice(indexToRemove, 1);
+            }
+        }
+        this.updatedData = true;
+    }
+
+    /**
      * Check whether there're any completed pending acquires.
      * @param [options={}] Vote options for payload sharing.
      */
     async #checkForCompletedAcquires(options: VoteElectorOptions = {}): Promise<void> {
         // Check for pending transactions and their completion.
         for (const item of this.getPendingAcquires()) {
+            if (!this.xrplContext.isTransactionSuccess(item.refId))
+                continue;
+
             const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
                 fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
 
             // Abandon waiting for this node if threshold reached.
             if (item.acquireSentOnLcl < (this.hpContext.lclSeqNo - ACQUIRE_ABANDON_LCL_THRESHOLD)) {
                 console.log(`Maximum acquire wait threshold reached, Abandoning waiting for ${item.refId}.`)
-                await this.updatePendingAcquireInfo(item, "DELETE");
+                this.#updatePendingAcquireInfo(item, "DELETE");
                 if (privateKey)
                     fs.unlinkSync(`../${item.messageKey}.txt`);
                 continue;
@@ -127,8 +172,8 @@ class EvernodeContext {
                     // Updated the acquires if there's a success response.
                     if (payload) {
                         if (payload !== 'acquire_error')
-                            await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
-                        await this.updatePendingAcquireInfo(item, "DELETE");
+                            this.#updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
+                        this.#updatePendingAcquireInfo(item, "DELETE");
                         if (privateKey)
                             fs.unlinkSync(`../${item.messageKey}.txt`);
                     }
@@ -137,6 +182,7 @@ class EvernodeContext {
 
         }
     }
+
     /**
      * Acquires a node based on the provided options.
      * @param options Options related to a particular acquire operation.
@@ -159,14 +205,14 @@ class EvernodeContext {
         const pendingAcquire = <PendingAcquire>{
             host: hostAddress,
             leaseOfferIdx: leaseOffer.index,
-            refId: res.id,
+            refId: res.tx_json.hash,
             messageKey: messageKey,
-            acquireLedgerIdx: res.details.ledger_index,
+            acquireLedgerIdx: res.ledger_index,
             acquireSentOnLcl: this.hpContext.lclSeqNo
         };
 
         // Record as a acquire transaction.
-        await this.updatePendingAcquireInfo(pendingAcquire);
+        this.#updatePendingAcquireInfo(pendingAcquire);
 
         return pendingAcquire;
     }
@@ -198,32 +244,21 @@ class EvernodeContext {
      * @returns URIToken related to the lease offer.
      */
     public async decideLeaseOffer(hostAddress: string, options: VoteElectorOptions = {}): Promise<URIToken> {
-        let leaseOffer = await new Promise<number>(async (resolve) => {
-            let leaseOffer: any;
-            setTimeout(() => {
-                resolve(leaseOffer);
-            }, 2000);
-            // Get transaction details to use for xrpl tx submission.
-            const hostClient = new evernode.HostClient(hostAddress);
-            const leaseOffers = await hostClient.getLeaseOffers();
-            leaseOffer = leaseOffers && leaseOffers[0];
-        });
+        // Get transaction details to use for xrpl tx submission.
+        const hostClient = new evernode.HostClient(hostAddress);
+        const leaseOffers = await hostClient.getLeaseOffers();
+        const leaseOffer = leaseOffers && leaseOffers[0];
 
-        const electionName = `lease_selector${this.voteContext.getUniqueNumber()}`;
-        const elector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT);
-
-        let leaseOffers: any[];
-        if (leaseOffer) {
-            leaseOffers = (await this.voteContext.vote(electionName, [leaseOffer], elector)).map(ob => ob.data);
-        }
-        else {
-            leaseOffers = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
-        }
-
-        if (!leaseOffers || !leaseOffers.length)
+        if (!leaseOffer)
             throw "NO_LEASE_OFFER";
 
-        return leaseOffers.sort((a, b) => a.index.localeCompare(b.index))[0];
+        const electionName = `lease_selector${this.voteContext.getUniqueNumber()}`;
+        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
+        let collection = (await voteRound).map((v) => v.data);
+
+        let sortCollection = collection.sort((a, b) => a.index.localeCompare(b.index));
+
+        return sortCollection[0];
     }
 
     /**
@@ -384,48 +419,6 @@ class EvernodeContext {
      */
     public decodeLeaseTokenUri(uri: string): LeaseURIInfo {
         return evernode.UtilHelpers.decodeLeaseTokenUri(uri);
-    }
-
-    /**
-     * Updates the detail file with inserts and deletes of
-     * pending acquires
-     * @param element Element to be added or removed
-     * @param mode Type of operation ("INSERT" or "DELETE")
-     */
-    public async updatePendingAcquireInfo(element: PendingAcquire, mode: string = "INSERT"): Promise<void> {
-        if (mode === "INSERT")
-            this.acquireData.pendingAcquires.push(element); // modify the array as needed
-        else {
-            // Find the index of the record to remove
-            const indexToRemove = this.acquireData.pendingAcquires.findIndex((record: { leaseOfferIdx: string; }) => record.leaseOfferIdx === element.leaseOfferIdx);
-
-            // Check if the record exists in the array, and remove it if found
-            if (indexToRemove !== -1) {
-                this.acquireData.pendingAcquires.splice(indexToRemove, 1);
-            }
-        }
-        this.updatedData = true;
-    }
-
-    /**
-     * Updates the detail file with inserts and deletes of
-     * successful acquires
-     * @param element Element to be added or removed
-     * @param mode Type of operation ("INSERT" or "DELETE")
-     */
-    public async updateAcquiredNodeInfo(element: AcquiredNode, mode: string = "INSERT"): Promise<void> {
-        if (mode === "INSERT")
-            this.acquireData.acquiredNodes.push(element); // modify the array as needed
-        else {
-            // Find the index of the record to remove
-            const indexToRemove = this.acquireData.acquiredNodes.findIndex((record: { name: string; }) => record.name === element.name);
-
-            // Check if the record exists in the array, and remove it if found
-            if (indexToRemove !== -1) {
-                this.acquireData.acquiredNodes.splice(indexToRemove, 1);
-            }
-        }
-        this.updatedData = true;
     }
 }
 

@@ -1,16 +1,22 @@
-import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Signature } from '../models';
+import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Signature, TransactionData } from '../models';
 import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
 import * as evernode from 'evernode-js-client';
+import * as crypto from 'crypto';
 import { VoteElectorOptions } from '../models/vote';
 import HotPocketContext from './HotPocketContext';
 import VoteContext from './VoteContext';
+import { JSONHelpers } from '../utils';
 
 const TIMEOUT = 10000;
+const TRANSACTION_VOTE_THRESHOLD = 0.8;
 
 class XrplContext {
+    private transactionDataFile: string = "transactions.json";
+    private transactionData: TransactionData = { pending: [], validated: [] };
     private signerListInfo: SignerListInfo | null = null;
+    private updatedData: boolean = false;
     public hpContext: HotPocketContext;
     public xrplApi: any;
     public xrplAcc: any;
@@ -23,6 +29,12 @@ class XrplContext {
         this.xrplApi = options.xrplApi || new evernode.XrplApi();
         this.xrplAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
         this.multiSigner = new MultiSigner(this.xrplAcc);
+
+        const data = JSONHelpers.readFromFile<TransactionData>(this.transactionDataFile);
+        if (data)
+            this.transactionData = data;
+        else
+            JSONHelpers.writeToFile(this.transactionDataFile, this.transactionData);
     }
 
     /**
@@ -31,26 +43,132 @@ class XrplContext {
     public async init(): Promise<void> {
         await this.xrplApi.connect();
         await this.loadSignerList();
+        await this.#checkForValidateTransactions();
     }
 
     /**
      * Deinitialize the xrpl context.
      */
     public async deinit(): Promise<void> {
+        this.#persistTransactionData();
         await this.xrplApi.disconnect();
+    }
+
+    /**
+     * Persist details of transactions.
+     */
+    #persistTransactionData(): void {
+        if (!this.updatedData)
+            return;
+
+        try {
+            JSONHelpers.writeToFile(this.transactionDataFile, this.transactionData);
+        } catch (error) {
+            throw `Error writing file ${this.transactionDataFile}: ${error}`;
+        }
+    }
+
+    /**
+     * Updates the detail file with inserts and deletes of
+     * pending acquires
+     * @param element Element to be added or removed
+     * @param mode Type of operation ("INSERT" or "DELETE")
+     */
+    #addPendingTransaction(transactionResult: any): void {
+        const resultCode = transactionResult?.engine_result;
+        if (resultCode !== "tesSUCCESS" && resultCode !== "tefPAST_SEQ" && resultCode !== "tefALREADY")
+            throw resultCode ? `Transaction failed with error ${resultCode}` : 'Transaction failed';
+
+        if (this.transactionData.pending.findIndex(t => t.hash === transactionResult?.tx_json?.hash) >= 0)
+            return;
+
+        this.transactionData.pending.push(transactionResult?.tx_json);
+        this.updatedData = true;
+    }
+
+    /**
+     * Updates the detail file with inserts and deletes of
+     * pending acquires
+     * @param element Element to be added or removed
+     * @param mode Type of operation ("INSERT" or "DELETE")
+     */
+    #removePendingTransaction(hash: any): void {
+        const index = this.transactionData.pending.findIndex(t => t.hash === hash);
+        if (index === -1)
+            return;
+
+        this.transactionData.pending.splice(index, 1); // modify the array as needed
+        this.updatedData = true;
+    }
+
+    /**
+     * Updates the detail file with inserts and deletes of
+     * successful acquires
+     * @param element Element to be added or removed
+     * @param mode Type of operation ("INSERT" or "DELETE")
+     */
+    #addValidatedTransaction(validated: any): void {
+        const index = this.transactionData.pending.findIndex(t => t.hash === validated.hash);
+
+        if (index === -1)
+            throw 'Invalid validated transaction.'
+
+        if (this.transactionData.validated.findIndex(t => t.hash === validated.hash) == -1)
+            this.transactionData.validated.push(validated);
+
+        this.transactionData.pending.splice(index, 1);
+        this.updatedData = true;
+    }
+
+    /**
+     * Check whether there're any completed pending acquires.
+     * @param [options={}] Vote options for payload sharing.
+     */
+    async #checkForValidateTransactions(): Promise<void> {
+        for (const item of this.getPendingTransactions()) {
+            const txnInfo = await this.xrplApi.getTxnInfo(item.hash, {});
+            if (txnInfo && txnInfo.validated) {
+                console.log(`Transaction validated with code ${txnInfo?.meta?.TransactionResult}.`);
+                this.#addValidatedTransaction(txnInfo);
+                return;
+            }
+
+            const latestLedger = this.xrplApi.ledgerIndex;
+
+            if (item.LastLedgerSequence < latestLedger) {
+                console.error(`The latest ledger sequence ${latestLedger} is greater than the transaction's LastLedgerSequence (${item.LastLedgerSequence}).\n` +
+                    `Preliminary result: ${item}`);
+                this.#removePendingTransaction(item.hash);
+            }
+        }
+    }
+
+    /**
+     * Fetches details of successful acquires.
+     * @returns an array of instance acquisitions that are completed.
+     */
+    public getPendingTransactions(): any[] {
+        return this.transactionData.pending;
+    }
+
+    /**
+     * Fetches details of pending acquires.
+     * @returns an array of instance acquisitions that are in progress.
+     */
+    public getValidatedTransactions(): any[] {
+        return this.transactionData.validated;
+    }
+
+    public isTransactionSuccess(hash: string): boolean {
+        const res = this.getValidatedTransactions().find(t => t.hash === hash);
+        return res.meta.TransactionResult === "tesSUCCESS";
     }
 
     /**
      * Load signer list of the account
      */
     public async loadSignerList(): Promise<void> {
-        const accountObjects = await new Promise<any[]>(async (resolve) => {
-            let accountObjects: any[] = [];
-            setTimeout(() => {
-                resolve(accountObjects);
-            }, 5000);
-            accountObjects = await this.xrplAcc.getAccountObjects({ type: "signer_list" });
-        });
+        const accountObjects = await this.xrplAcc.getAccountObjects({ type: "signer_list" });
         if (accountObjects.length > 0) {
             const signerObject = accountObjects.filter((ob: any) => ob.LedgerEntryType === 'SignerList')[0];
             const signerList: Signer[] = signerObject.SignerEntries.map((signer: any) => ({ account: signer.SignerEntry.Account, weight: signer.SignerEntry.SignerWeight }));
@@ -63,13 +181,7 @@ class XrplContext {
      * @returns Current sequence number.
      */
     public async getSequence(): Promise<number> {
-        return await new Promise<number>(async (resolve) => {
-            let sequence = -1;
-            setTimeout(() => {
-                resolve(sequence);
-            }, 2000);
-            sequence = await this.xrplAcc.getSequence();
-        });
+        return await this.xrplAcc.getSequence();
     }
 
     /**
@@ -102,22 +214,13 @@ class XrplContext {
      */
     public async getTransactionSubmissionInfo(options: VoteElectorOptions = {}): Promise<TransactionSubmissionInfo> {
         // Decide a sequence number and max ledger sequence to send the same transaction from all the nodes.
-        const electionName = `transactionInfo${this.voteContext.getUniqueNumber()}`;
-        const elector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT);
-        let infos: TransactionSubmissionInfo[];
-        const sequence = await this.getSequence();
-        if (sequence >= 0) {
-            infos = (await this.voteContext.vote(electionName, [<TransactionSubmissionInfo>{
-                sequence: sequence,
-                maxLedgerSequence: this.getMaxLedgerSequence()
-            }], elector)).map(ob => ob.data);
-        }
-        else {
-            infos = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
-        }
+        const infos: TransactionSubmissionInfo[] = (await this.voteContext.vote(`transactionInfo${this.voteContext.getUniqueNumber()}`, [<TransactionSubmissionInfo>{
+            sequence: await this.getSequence(),
+            maxLedgerSequence: this.getMaxLedgerSequence()
+        }], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT))).map(ob => ob.data);
 
         return <TransactionSubmissionInfo>{
-            sequence: infos.map(i => i.sequence).sort()[0],
+            sequence: infos.map(i => i.sequence).sort((a, b) => b - a)[0],
             maxLedgerSequence: infos.map(i => i.maxLedgerSequence).sort((a, b) => b - a)[0]
         };
     }
@@ -178,10 +281,53 @@ class XrplContext {
 
         transaction.Signers = signatures.map(s => <Signature>{ Signer: s.Signer }).sort((a, b) => a.Signer.SigningPubKey.localeCompare(b.Signer.SigningPubKey));
 
-        console.log(transaction);
-        console.log(transaction.Signers.map((s: any) => s.Signer));
+        const voteHash = crypto.createHash('sha256');
+        voteHash.update(JSON.stringify(transaction));
+        const voteDigest = voteHash.digest('hex');
 
-        return await this.xrplAcc.submitMultisigned(transaction);
+        const txVoteHashElector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.voteElectorOptions?.timeout || TIMEOUT);
+        const txVoteHashElectionName = `txVoteHash${this.voteContext.getUniqueNumber()}`;
+
+        let txVoteHashes = (await this.voteContext.vote(txVoteHashElectionName, [voteDigest], txVoteHashElector)).map(ob => ob.data);
+
+        let votes: any = {};
+
+        for (const txVoteHash of txVoteHashes) {
+            if (!votes[txVoteHash])
+                votes[txVoteHash] = 1;
+            else
+                votes[txVoteHash]++;
+        }
+
+        const sorted = Object.entries<number>(votes).sort((a, b) => b[1] - a[1]);
+
+        const txSubmitElector = new AllVoteElector(1, options?.voteElectorOptions?.timeout || TIMEOUT);
+        const txSubmitElectionName = `txSubmit${this.voteContext.getUniqueNumber()}`;
+        let txResults;
+        if (sorted.length && (sorted[0][1] >= this.hpContext.getContractUnl().length * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
+            let error;
+            const res = await this.xrplAcc.submitMultisigned(transaction).catch((e: any) => {
+                error = e;
+            });
+            txResults = (await this.voteContext.vote(txSubmitElectionName, [res ? { res: res } : { error: error }], txSubmitElector)).map(ob => ob.data);
+        }
+        else {
+            txResults = (await this.voteContext.subscribe(txSubmitElectionName, txSubmitElector)).map(ob => ob.data);
+        }
+
+        if (!txResults || !txResults.length)
+            throw 'Could not decide a transaction to submit.';
+
+        const txResult = txResults[0];
+
+        if (txResult.error)
+            throw txResult.error;
+
+        console.log(txResult.res.result.engine_result);
+
+        this.#addPendingTransaction(txResult.res.result);
+
+        return txResult.res.result;
     }
 
     /**
@@ -380,25 +526,24 @@ class XrplContext {
             signer = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
         }
 
-        if (signer) {
-            // Replace old signer with new signer.
-            signerListInfo.signerList[oldSignerIndex].account = signer.account;
-            if (options.quorum)
-                signerListInfo.signerQuorum = options.quorum;
+        if (!signer)
+            throw `Could not generate a new signer.`
 
-            await this.setSignerList(signerListInfo, options);
+        // Replace old signer with new signer.
+        signerListInfo.signerList[oldSignerIndex].account = signer.account;
+        if (options.quorum)
+            signerListInfo.signerQuorum = options.quorum;
 
-            if (newSigner)
-                this.multiSigner.setSigner(newSigner);
+        await this.setSignerList(signerListInfo, options);
 
-            // Remove old signer and add new signer.
-            if (oldPubKey === this.hpContext.publicKey)
-                this.multiSigner.removeSigner();
+        if (newSigner)
+            this.multiSigner.setSigner(newSigner);
 
-            return signer.account;
-        }
+        // Remove old signer and add new signer.
+        if (oldPubKey === this.hpContext.publicKey)
+            this.multiSigner.removeSigner();
 
-        return null;
+        return signer.account;
     }
 
     /**
@@ -416,7 +561,6 @@ class XrplContext {
     public isSigner(): boolean {
         return this.multiSigner.isSignerNode();
     }
-
 }
 
 export default XrplContext;
