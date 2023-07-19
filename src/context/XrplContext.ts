@@ -10,7 +10,7 @@ import VoteContext from './VoteContext';
 import { JSONHelpers } from '../utils';
 
 const TIMEOUT = 10000;
-const TRANSACTION_VOTE_THRESHOLD = 0.6;
+const TRANSACTION_VOTE_THRESHOLD = 0.5;
 
 class XrplContext {
     private transactionDataFile: string = "transactions.json";
@@ -301,7 +301,7 @@ class XrplContext {
         const txSubmitElector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.voteElectorOptions?.timeout || TIMEOUT);
         const txSubmitElectionName = `txSubmit${this.voteContext.getUniqueNumber()}`;
         let txResults;
-        if (sorted.length && voteDigest === sorted[0][0]) {
+        if (sorted.length && sorted[0][1] >= (this.hpContext.getContractUnl().length * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
             let error;
             const res = await this.xrplAcc.submitMultisigned(transaction).catch((e: any) => {
                 error = e;
