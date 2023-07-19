@@ -1,14 +1,10 @@
 import EventEmitter = require("events");
 import VoteContext from "../context/VoteContext";
-import { Signer, SignerListInfo } from "../models";
 import { AllVoteElector } from "../vote/vote-electors";
 
 class MultiSignedBlobElector extends AllVoteElector {
-    private signerListInfo: SignerListInfo;
-
-    public constructor(desiredVoteCount: number, signerListInfo: SignerListInfo, timeout: number) {
+    public constructor(desiredVoteCount: number, timeout: number) {
         super(desiredVoteCount, timeout);
-        this.signerListInfo = signerListInfo;
     }
 
     /**
@@ -24,17 +20,8 @@ class MultiSignedBlobElector extends AllVoteElector {
             const timer = setTimeout(() => resolve(context.resolveVotes(electionName)), this.timeout);
 
             voteEmitter.on(electionName, (collected: any[]) => {
-                const currSignerWeight = collected.reduce((total: number, co: any) => {
-                    const signer = this.signerListInfo.signerList.find((ob: Signer) => ob.account == co.data.account);
-                    if (signer)
-                        return total + signer.weight;
-                    else
-                        return 0;
-                }, 0);
-
-
-                // If signer Quorum is satisfied, submit the transaction
-                if (currSignerWeight == this.signerListInfo.signerQuorum) {
+                // Resolve immediately if we have the required no. of messages.
+                if (this.desiredVoteCount && collected.length === this.desiredVoteCount) {
                     clearTimeout(timer);
                     resolve(context.resolveVotes(electionName));
                 }

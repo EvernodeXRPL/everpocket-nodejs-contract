@@ -89,6 +89,11 @@ class ClusterContext {
                 signerAddress: signer ? signer.account : null
             }
             const nodes: ClusterNode[] = (await this.voteContext.vote(electionName, [node], elector)).map(ob => ob.data);
+
+            const unlCount = this.hpContext.getContractUnl().length;
+            if (nodes.length < unlCount)
+                throw `Could not collect UNL node info. Unl node count ${unlCount}, Received ${nodes.length}.`
+
             this.clusterManager.initializeCluster(nodes);
             console.log('Initialized the cluster data with node info.');
         }
@@ -521,8 +526,10 @@ class ClusterContext {
             let newSignerPubkey = nonQuorumNodes[0]?.pubkey;
 
             if (newSignerPubkey) {
+                console.log(`Replacing the signer ${pubkey} with ${newSignerPubkey}...`);
                 const newAddress = await this.evernodeContext.xrplContext.replaceSignerList(pubkey, node.signerAddress, newSignerPubkey);
-                this.clusterManager.markAsQuorum(newSignerPubkey, newAddress);
+                if (newAddress)
+                    this.clusterManager.markAsQuorum(newSignerPubkey, newAddress);
             }
         }
 

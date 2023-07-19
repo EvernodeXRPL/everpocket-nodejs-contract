@@ -66,7 +66,7 @@ class ClusterManager {
      */
     public addPending(node: PendingNode): void {
         // Return if pending node already exist.
-        if (this.clusterData.pendingNodes.findIndex(n => n.refId === node.refId) > 0)
+        if (this.clusterData.pendingNodes.findIndex(n => n.refId === node.refId) >= 0)
             return;
 
         this.clusterData.pendingNodes.push(node);
