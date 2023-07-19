@@ -450,7 +450,7 @@ class ClusterContext {
 
             if (newSignerPubkey) {
                 console.log(`Replacing the signer ${pubkey} with ${newSignerPubkey}...`);
-                const newAddress = await this.evernodeContext.xrplContext.replaceSignerList(pubkey, node.signerAddress, newSignerPubkey);
+                const newAddress = await this.evernodeContext.xrplContext.replaceSignerList(pubkey, node.signerAddress, newSignerPubkey).catch(console.error);
                 if (newAddress)
                     this.clusterManager.markAsQuorum(newSignerPubkey, newAddress);
             }
