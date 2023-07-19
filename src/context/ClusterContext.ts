@@ -13,6 +13,9 @@ const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16
 const ALIVENESS_CHECK_THRESHOLD = 5;
 const MATURITY_LCL_THRESHOLD = 2;
 const TIMEOUT = 10000;
+const DEFAULT_SIGNER_PERCENTAGE = 60;
+const DEFAULT_SIGNER_QUORUM_PERCENTAGE = 80;
+const DEFAULT_SIGNER_WEIGHT = 1;
 
 class ClusterContext {
     private clusterManager: ClusterManager;
@@ -22,6 +25,8 @@ class ClusterContext {
     public hpContext: HotPocketContext;
     public voteContext: VoteContext;
     public evernodeContext: EvernodeContext;
+    public targetSignerPercentage: number;
+    public quorumPercentage: number;
 
     public constructor(evernodeContext: EvernodeContext, options: ClusterOptions = {}) {
         this.evernodeContext = evernodeContext;
@@ -30,6 +35,8 @@ class ClusterContext {
         this.clusterManager = new ClusterManager();
         this.maturityLclThreshold = options.maturityLclThreshold || MATURITY_LCL_THRESHOLD;
         this.userMessageProcessing = false;
+        this.targetSignerPercentage = options.targetSignerPercentage || DEFAULT_SIGNER_PERCENTAGE;
+        this.quorumPercentage = options.quorumPercentage || DEFAULT_SIGNER_QUORUM_PERCENTAGE;
     }
 
     /**
@@ -48,6 +55,8 @@ class ClusterContext {
             await this.#checkForMatured();
             await this.#checkForAcknowledged();
             await this.#checkForExtends();
+            await this.#manageSignerList();
+
             this.initialized = true;
         } catch (e) {
             await this.deinit();
@@ -82,6 +91,74 @@ class ClusterContext {
             const nodes: ClusterNode[] = (await this.voteContext.vote(electionName, [node], elector)).map(ob => ob.data);
             this.clusterManager.initializeCluster(nodes);
             console.log('Initialized the cluster data with node info.');
+        }
+
+        // Helping to make connections
+        const detailedClusterNodes = this.clusterManager.getNodes();
+        const initialKnownPeers = detailedClusterNodes.filter(n => n.isUnl && n.pubkey !== this.hpContext.publicKey).map(kp => { return `${kp.ip}:${kp.peerPort}` });
+        if (initialKnownPeers)
+            await this.hpContext.updatePeers(initialKnownPeers);
+    }
+
+    /**
+     * Verify and refactor signer list as per the configuration.
+     */
+    async #manageSignerList() {
+        const unlNodes = this.clusterManager.getNodes()?.filter(n => n.isUnl);
+        const signerInfo = this.evernodeContext.xrplContext.getSignerList();
+        if (signerInfo) {
+            let currSignerPercentage = Math.ceil(signerInfo.signerList.length * 100 / unlNodes.length);
+            let totalWeight = signerInfo.signerList.reduce((acc, s) => { return acc + s.weight }, 0);
+            try {
+                if (currSignerPercentage != this.targetSignerPercentage) {
+                    if (this.targetSignerPercentage > currSignerPercentage) {
+                        let currSignerPercentage = Math.ceil(signerInfo.signerList.length * 100 / unlNodes.length);
+                        const newPercentage = Math.ceil((currSignerPercentage + (100 / unlNodes.length)));
+                        if (newPercentage > this.targetSignerPercentage)
+                            throw "New percentage exceeds target signer percentage";
+
+                        const nonSigners = unlNodes.filter(n => !n.signerAddress && n.isUnl && n?.addedToUnlOnLcl && (n?.addedToUnlOnLcl + 2 < this.hpContext.lclSeqNo)).sort((a, b) => a.addedToUnlOnLcl! - b.addedToUnlOnLcl!);
+                        if (!nonSigners)
+                            throw "No UNL non-signer nodes were found.";
+
+                        const newSigner = nonSigners[0];
+
+                        totalWeight += DEFAULT_SIGNER_WEIGHT;
+                        const newQuorum = Math.ceil((totalWeight) * this.quorumPercentage / 100);
+                        newSigner.signerAddress = await this.evernodeContext.xrplContext.addXrplSigner(newSigner.pubkey, DEFAULT_SIGNER_WEIGHT, { quorum: newQuorum });
+                        console.log(`Appointed a new Signer : ${newSigner.signerAddress}`);
+                        this.clusterManager.markAsQuorum(newSigner.pubkey, newSigner.signerAddress);
+
+                    } else {
+                        const newPercentage = Math.ceil((currSignerPercentage - (100 / unlNodes.length)));
+                        if (newPercentage < this.targetSignerPercentage)
+                            throw "New percentage falls behind target signer percentage.";
+
+                        const currNewSigners = unlNodes.filter(n => n.signerAddress && (n?.addedToUnlOnLcl) && (n?.addedToUnlOnLcl + 2 < this.hpContext.lclSeqNo)).sort((a, b) => b.addedToUnlOnLcl! - a.addedToUnlOnLcl!);
+
+                        if (!currNewSigners)
+                            throw "No prunable signers were found.";
+
+                        const removingSigner = currNewSigners[0];
+                        const signerDetails = signerInfo.signerList.find(n => n.account === removingSigner.signerAddress);
+                        if (signerDetails) {
+                            totalWeight -= signerDetails.weight;
+                            const newQuorum = Math.ceil((totalWeight) * this.quorumPercentage / 100);
+                            await this.evernodeContext.xrplContext.removeXrplSigner(removingSigner.pubkey, { quorum: newQuorum });
+                            console.log(`Removed a Signer : ${removingSigner.signerAddress}`);
+                            delete removingSigner.signerAddress;
+                            this.clusterManager.updateNode(removingSigner.pubkey, { ...removingSigner });
+                        }
+                    }
+                } else if (signerInfo.signerQuorum !== Math.ceil((totalWeight) * this.quorumPercentage / 100)) {
+                    this.evernodeContext.xrplContext.setSignerList({ ...signerInfo, signerQuorum: Math.ceil((totalWeight) * this.quorumPercentage / 100) });
+                } else {
+                    console.log("Signer List is stabilized for this round.")
+                }
+
+            } catch (e) {
+                console.log(`Signer List Revision was not successful: ${e}`)
+            }
         }
     }
 
@@ -175,7 +252,7 @@ class ClusterContext {
                 console.log(`Extending node ${pendingExtend.pubkey} by ${extension}.`);
                 const res = await this.evernodeContext.extendSubmit(pendingExtend.host, extension, pendingExtend.name);
                 if (res)
-                    this.clusterManager.updateLifeMoments(pendingExtend.pubkey, pendingExtend.lifeMoments + extension);
+                    this.clusterManager.updateNode(pendingExtend.pubkey, { lifeMoments: pendingExtend.lifeMoments + extension });
             } catch (e) {
                 console.error(e)
             }

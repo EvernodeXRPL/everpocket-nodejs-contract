@@ -98,7 +98,7 @@ class ClusterManager {
     public increaseAliveCheck(refId: string): void {
         const index = this.clusterData.pendingNodes.findIndex(n => n.refId === refId);
 
-        if (index > 0) {
+        if (index >= 0) {
             this.clusterData.pendingNodes[index].aliveCheckCount++;
             this.updated = true;
         }
@@ -159,15 +159,15 @@ class ClusterManager {
     }
 
     /**
-     * Update the life moments of the node.
+     * Update a node.
      * @param pubkey Public key of the node.
-     * @param lifeMoments Life moments value.
+     * @param options Fields related to the update.
      */
-    public updateLifeMoments(pubkey: string, lifeMoments: number): void {
+    public updateNode(pubkey: string, options: Partial<ClusterNode>): void {
         const index = this.clusterData.nodes.findIndex(n => n.pubkey === pubkey);
 
-        if (index > 0) {
-            this.clusterData.nodes[index].lifeMoments = lifeMoments;
+        if (index >= 0 && Object.keys(options).length > 0) {
+            this.clusterData.nodes[index] = { ...this.clusterData.nodes[index], ...options };
             this.updated = true;
         }
     }

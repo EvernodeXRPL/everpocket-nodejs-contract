@@ -2,6 +2,8 @@ import { AcquiredNode, PendingAcquire } from "../evernode";
 
 export interface ClusterOptions {
   maturityLclThreshold?: number;
+  quorumPercentage?: number;
+  targetSignerPercentage?: number;
 }
 
 export interface ClusterNode extends AcquiredNode {
@@ -22,9 +24,9 @@ export interface PendingNode extends PendingAcquire {
 }
 
 export interface ClusterData {
-  initialized: boolean,
-  nodes: ClusterNode[],
-  pendingNodes: PendingNode[]
+  initialized: boolean;
+  nodes: ClusterNode[];
+  pendingNodes: PendingNode[];
 }
 
 export interface ClusterMessage {
