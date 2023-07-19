@@ -13,7 +13,7 @@ const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16
 const ALIVENESS_CHECK_THRESHOLD = 5;
 const MATURITY_LCL_THRESHOLD = 2;
 const TIMEOUT = 10000;
-const DEFAULT_SIGNER_PERCENTAGE = 60;
+const DEFAULT_SIGNER_PERCENTAGE = 75;
 const DEFAULT_SIGNER_QUORUM_PERCENTAGE = 80;
 const DEFAULT_SIGNER_WEIGHT = 1;
 
@@ -122,8 +122,8 @@ class ClusterContext {
                         if (newPercentage > this.targetSignerPercentage)
                             throw "New percentage exceeds target signer percentage";
 
-                        const nonSigners = unlNodes.filter(n => !n.signerAddress && n.isUnl && n?.addedToUnlOnLcl && (n?.addedToUnlOnLcl + 2 < this.hpContext.lclSeqNo)).sort((a, b) => a.addedToUnlOnLcl! - b.addedToUnlOnLcl!);
-                        if (!nonSigners)
+                        const nonSigners = unlNodes.filter(n => !n?.signerAddress && n.isUnl && n?.addedToUnlOnLcl && (n?.addedToUnlOnLcl + 2 < this.hpContext.lclSeqNo)).sort((a, b) => a.addedToUnlOnLcl! - b.addedToUnlOnLcl!);
+                        if (nonSigners.length == 0)
                             throw "No UNL non-signer nodes were found.";
 
                         const newSigner = nonSigners[0];
@@ -139,13 +139,13 @@ class ClusterContext {
                         if (newPercentage < this.targetSignerPercentage)
                             throw "New percentage falls behind target signer percentage.";
 
-                        const currNewSigners = unlNodes.filter(n => n.signerAddress && (n?.addedToUnlOnLcl) && (n?.addedToUnlOnLcl + 2 < this.hpContext.lclSeqNo)).sort((a, b) => b.addedToUnlOnLcl! - a.addedToUnlOnLcl!);
+                        const currSigners = unlNodes.filter(n => n?.signerAddress && (n.createdOnLcl + 2 < this.hpContext.lclSeqNo)).sort((a, b) => b.createdOnLcl - a.createdOnLcl);
 
-                        if (!currNewSigners)
+                        if (currSigners.length == 0)
                             throw "No prunable signers were found.";
 
-                        const removingSigner = currNewSigners[0];
-                        const signerDetails = signerInfo.signerList.find(n => n.account === removingSigner.signerAddress);
+                        const removingSigner = currSigners[0];
+                        const signerDetails = signerInfo.signerList.find(n => n.account === removingSigner?.signerAddress);
                         if (signerDetails) {
                             totalWeight -= signerDetails.weight;
                             const newQuorum = Math.ceil((totalWeight) * this.quorumPercentage / 100);

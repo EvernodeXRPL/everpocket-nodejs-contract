@@ -2,8 +2,8 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rsmLXFmK3JXBhrgkSdKwZajw5aZGytwSYM";
-// const masterSecret = "ssfa1M58u9MS6ydeiVfLMm15fDGym";
+const masterAddress = "rh8dQMntB4Rfq2tFLNdhTXAS1jmTkKeyyL";
+const masterSecret = "snthHQo7X95yNibxooVQaZu3W4s8e";
 // const masterAddress = "rEPcjCRnb92LLBpszboyn9Qf9uvTk3nNET";
 // const masterSecret = "ssnUDXJicaoaQ67K1Fjw9m7NqwPNb";
 // const masterAddress = "rNZqGPtr4EqzQXua7Wnw8gphcSrmms11KC";
@@ -16,7 +16,7 @@ const port = 8081;
 const evernodeGovernor = "rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL";
 
 const MAX_ACQUIRES = 5;
-const MAX_CLUSTER = 8;
+const MAX_CLUSTER = 5;
 
 const nomadOptions = {
     targetNodeCount: 25,
@@ -140,9 +140,9 @@ const testContract = async (contractCtx) => {
             // () => checkLiveness(utilityContext, ip, port),
             // () => acquireNewNode(evernodeContext),
             // () => extendNode(evernodeContext),
-            // () => addNewClusterNode(clusterContext),
+            () => addNewClusterNode(clusterContext),
             // () => removeNode(clusterContext),
-            () => runNomadContract(nomadContext)
+            // () => runNomadContract(nomadContext)
         ];
 
         try {
