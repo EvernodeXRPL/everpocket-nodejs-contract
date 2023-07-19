@@ -33,7 +33,6 @@ const nomadOptions = {
         "rfBQaUjF9UZWjdJ33hGDeas1hEXK7DmfCV",
         "r4dVikgRzdVuZcFfMWJWiUo8iJxmYGDmiS",
         "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
-        "rhXBNAJbHKym75tazYAxcEbghNN6vLyYZE",
         "rKqDVS5fYEWDNivosnFiri1bXfqt2ebj7q",
         "rErmdQZLmAauqjY7ig8KeLAGhfxeVAHHnA",
         "rnG2Q9cqrmCvWNZvMG4JHzG96deqEg5HDx",
