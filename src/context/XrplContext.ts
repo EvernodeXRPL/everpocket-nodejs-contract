@@ -1,5 +1,5 @@
-import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Signature, TransactionData } from '../models';
-import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
+import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Signature, TransactionData, TransactionInfo } from '../models';
+import { MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
 import * as evernode from 'evernode-js-client';
@@ -10,7 +10,7 @@ import VoteContext from './VoteContext';
 import { JSONHelpers } from '../utils';
 
 const TIMEOUT = 10000;
-const TRANSACTION_VOTE_THRESHOLD = 0.8;
+const TRANSACTION_VOTE_THRESHOLD = 0.6;
 
 class XrplContext {
     private transactionDataFile: string = "transactions.json";
@@ -69,74 +69,73 @@ class XrplContext {
     }
 
     /**
-     * Updates the detail file with inserts and deletes of
-     * pending acquires
-     * @param element Element to be added or removed
-     * @param mode Type of operation ("INSERT" or "DELETE")
+     * Add transaction to the pending list.
+     * @param info Transaction info to be add as pending.
      */
-    #addPendingTransaction(transactionResult: any): void {
-        const resultCode = transactionResult?.engine_result;
+    #addPendingTransaction(info: TransactionInfo): void {
+        const resultCode = info.resultCode;
         if (resultCode !== "tesSUCCESS" && resultCode !== "tefPAST_SEQ" && resultCode !== "tefALREADY")
             throw resultCode ? `Transaction failed with error ${resultCode}` : 'Transaction failed';
 
-        if (this.transactionData.pending.findIndex(t => t.hash === transactionResult?.tx_json?.hash) >= 0)
+        if (this.transactionData.pending.findIndex(t => t.hash === info.hash) >= 0)
             return;
 
-        this.transactionData.pending.push(transactionResult?.tx_json);
+        this.transactionData.pending.push(info);
         this.updatedData = true;
     }
 
     /**
-     * Updates the detail file with inserts and deletes of
-     * pending acquires
-     * @param element Element to be added or removed
-     * @param mode Type of operation ("INSERT" or "DELETE")
+     * Remove transaction from the pending list.
+     * @param hash Transaction hash to be removed.
      */
-    #removePendingTransaction(hash: any): void {
+    #removePendingTransaction(hash: string): void {
         const index = this.transactionData.pending.findIndex(t => t.hash === hash);
         if (index === -1)
             return;
-
-        this.transactionData.pending.splice(index, 1); // modify the array as needed
-        this.updatedData = true;
-    }
-
-    /**
-     * Updates the detail file with inserts and deletes of
-     * successful acquires
-     * @param element Element to be added or removed
-     * @param mode Type of operation ("INSERT" or "DELETE")
-     */
-    #addValidatedTransaction(validated: any): void {
-        const index = this.transactionData.pending.findIndex(t => t.hash === validated.hash);
-
-        if (index === -1)
-            throw 'Invalid validated transaction.'
-
-        if (this.transactionData.validated.findIndex(t => t.hash === validated.hash) == -1)
-            this.transactionData.validated.push(validated);
 
         this.transactionData.pending.splice(index, 1);
         this.updatedData = true;
     }
 
     /**
-     * Check whether there're any completed pending acquires.
-     * @param [options={}] Vote options for payload sharing.
+     * Mark a transaction as validated.
+     * @param hash Transaction hash to be validated.
+     * @param ledgerIndex Ledger index the transaction is validated.
+     * @param resultCode Transaction result code.
+     */
+    #markTransactionAsValidated(hash: string, ledgerIndex: number, resultCode: string): void {
+        const index = this.transactionData.pending.findIndex(t => t.hash === hash);
+
+        if (index === -1)
+            throw 'Invalid validated transaction.'
+
+        if (this.transactionData.validated.findIndex(t => t.hash === hash) == -1) {
+            let pending = this.transactionData.pending[index];
+            pending.ledgerIndex = ledgerIndex;
+            pending.resultCode = resultCode;
+            this.transactionData.validated.push(pending);
+        }
+
+        this.transactionData.pending.splice(index, 1);
+        this.updatedData = true;
+    }
+
+    /**
+     * Check whether there're any validated.
      */
     async #checkForValidateTransactions(): Promise<void> {
         for (const item of this.getPendingTransactions()) {
             const txnInfo = await this.xrplApi.getTxnInfo(item.hash, {});
             if (txnInfo && txnInfo.validated) {
                 console.log(`Transaction validated with code ${txnInfo?.meta?.TransactionResult}.`);
-                this.#addValidatedTransaction(txnInfo);
+                this.#markTransactionAsValidated(txnInfo.hash, txnInfo.ledger_index, txnInfo.meta.TransactionResult);
                 return;
             }
 
             const latestLedger = this.xrplApi.ledgerIndex;
 
-            if (item.LastLedgerSequence < latestLedger) {
-                console.error(`The latest ledger sequence ${latestLedger} is greater than the transaction's LastLedgerSequence (${item.LastLedgerSequence}).\n` +
+            if (item.lastLedgerSequence < latestLedger) {
+                console.error(`The latest ledger sequence ${latestLedger} is greater than the transaction's LastLedgerSequence (${item.lastLedgerSequence}).\n` +
                     `Preliminary result: ${item}`);
                 this.#removePendingTransaction(item.hash);
             }
@@ -144,23 +143,28 @@ class XrplContext {
     }
 
     /**
-     * Fetches details of successful acquires.
-     * @returns an array of instance acquisitions that are completed.
+     * Fetches details of submitted non validated transactions.
+     * @returns an array of transactions that are not validated.
      */
-    public getPendingTransactions(): any[] {
+    public getPendingTransactions(): TransactionInfo[] {
         return this.transactionData.pending;
     }
 
     /**
-     * Fetches details of pending acquires.
-     * @returns an array of instance acquisitions that are in progress.
+     * Fetches details of submitted validated transactions.
+     * @returns an array of transactions that are validated.
      */
-    public getValidatedTransactions(): any[] {
+    public getValidatedTransactions(): TransactionInfo[] {
         return this.transactionData.validated;
     }
 
-    public getValidatedTransaction(hash: string): any {
-        return this.getValidatedTransactions().find(t => t.hash === hash);
+    /**
+     * Get the transaction of the hash if validated.
+     * @param hash Transaction hash.
+     * @returns The transaction if validated.
+     */
+    public getValidatedTransaction(hash: string): TransactionInfo | null {
+        return (this.getValidatedTransactions().find(t => t.hash === hash) || null);
     }
 
     /**
@@ -249,7 +253,7 @@ class XrplContext {
 
         transaction.Fee = `${Number(transaction.Fee) * (signerCount + 2)}`;
 
-        const elector = new MultiSignedBlobElector(signerCount, options?.voteElectorOptions?.timeout || TIMEOUT);
+        const elector = new AllVoteElector(signerCount, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `sign${this.voteContext.getUniqueNumber()}`;
         let signatures: Signature[];
 
@@ -297,7 +301,7 @@ class XrplContext {
         const txSubmitElector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.voteElectorOptions?.timeout || TIMEOUT);
         const txSubmitElectionName = `txSubmit${this.voteContext.getUniqueNumber()}`;
         let txResults;
-        if (sorted.length && (sorted[0][1] >= this.hpContext.getContractUnl().length * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
+        if (sorted.length && voteDigest === sorted[0][0]) {
             let error;
             const res = await this.xrplAcc.submitMultisigned(transaction).catch((e: any) => {
                 error = e;
@@ -316,9 +320,13 @@ class XrplContext {
         if (txResult.error)
             throw txResult.error;
 
-        console.log(txResult.res.result.engine_result);
+        console.log(`Transaction submitted with code ${txResult.res.result.engine_result}.`);
 
-        this.#addPendingTransaction(txResult.res.result);
+        this.#addPendingTransaction(<TransactionInfo>{
+            hash: txResult.res.result.tx_json.hash,
+            lastLedgerSequence: txResult.res.result.tx_json.LastLedgerSequence,
+            resultCode: txResult.res.result.engine_result
+        });
 
         return txResult.res.result;
     }

@@ -2,7 +2,7 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rsmLXFmK3JXBhrgkSdKwZajw5aZGytwSYM";
+// const masterAddress = "rsmLXFmK3JXBhrgkSdKwZajw5aZGytwSYM";
 // const masterSecret = "ssfa1M58u9MS6ydeiVfLMm15fDGym";
 // const masterAddress = "rEPcjCRnb92LLBpszboyn9Qf9uvTk3nNET";
 // const masterSecret = "ssnUDXJicaoaQ67K1Fjw9m7NqwPNb";

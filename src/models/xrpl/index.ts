@@ -23,9 +23,16 @@ export interface Signature {
   }
 }
 
+export interface TransactionInfo {
+  hash: string;
+  resultCode: string;
+  lastLedgerSequence: number;
+  ledgerIndex?: number;
+}
+
 export interface TransactionData {
-  pending: any[];
-  validated: any[];
+  pending: TransactionInfo[];
+  validated: TransactionInfo[];
 }
 
 export interface TransactionSubmissionInfo {

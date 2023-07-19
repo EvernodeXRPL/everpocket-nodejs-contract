@@ -135,6 +135,7 @@ class EvernodeContext {
     async #checkForCompletedAcquires(options: VoteElectorOptions = {}): Promise<void> {
         // Check for pending transactions and their completion.
         for (const item of this.getPendingAcquires()) {
+            // Check if transaction is validated. If not skip.
             const validated = this.xrplContext.getValidatedTransaction(item.refId);
             if (!validated)
                 continue;
@@ -142,13 +143,19 @@ class EvernodeContext {
             const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
                 fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
 
-            // Abandon waiting for this node if threshold reached.
             let remove = false;
-            if (validated.meta.TransactionResult !== "tesSUCCESS") {
-                console.log(`Transaction  failed for ${item.refId} with code: ${validated.meta.TransactionResult}.`);
+            // Remove transaction if failed.
+            if (validated.resultCode !== "tesSUCCESS") {
+                console.log(`Transaction failed for ${item.refId} with code: ${validated.resultCode}.`);
                 remove = true;
             }
-            if (item.acquireSentOnLcl < (this.hpContext.lclSeqNo - ACQUIRE_ABANDON_LCL_THRESHOLD)) {
+            // Remove if no ledger index.
+            else if (!validated.ledgerIndex) {
+                console.log(`No ledger index for the transaction ${item.refId}.`);
+                remove = true;
+            }
+            // Abandon waiting for this node if threshold reached.
+            else if (item.acquireSentOnLcl < (this.hpContext.lclSeqNo - ACQUIRE_ABANDON_LCL_THRESHOLD)) {
                 console.log(`Maximum acquire wait threshold reached, Abandoning waiting for ${item.refId}.`);
                 remove = true;
             }
@@ -160,7 +167,7 @@ class EvernodeContext {
                 continue;
             }
 
-            const txList = await this.xrplContext.getTransactions(validated.ledger_index);
+            const txList = await this.xrplContext.getTransactions(validated.ledgerIndex!);
 
             for (let t of txList) {
                 t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
