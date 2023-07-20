@@ -356,10 +356,7 @@ class XrplContext {
 
         this.#addPendingTransaction(txResult.res);
 
-        console.log(txResult)
-
         return txResult.res;
-
     }
 
     /**
