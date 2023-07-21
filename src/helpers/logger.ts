@@ -44,7 +44,7 @@ function warn(...args: any[]): void {
 }
 
 function error(...args: any[]): void {
-    console.log(`${FgRed}${getDate()}: %s${Reset}`, ...args);
+    console.error(`${FgRed}${getDate()}: %s${Reset}`, ...args);
 }
 
 function log(...args: any[]): void {
