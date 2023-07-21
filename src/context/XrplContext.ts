@@ -11,6 +11,7 @@ import { JSONHelpers } from '../utils';
 
 const TIMEOUT = 10000;
 const TRANSACTION_VOTE_THRESHOLD = 0.5;
+const VOTE_PERCENTAGE_THRESHOLD = 80;
 
 class XrplContext {
     private transactionDataFile: string = "transactions.json";
@@ -297,38 +298,65 @@ class XrplContext {
         }
 
         const sorted = Object.entries<number>(votes).sort((a, b) => b[1] - a[1]);
+        const totalVotes = sorted.map(n => n[1]).reduce((acc, curr) => acc + curr, 0);
 
-        const txSubmitElector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.voteElectorOptions?.timeout || TIMEOUT);
+        const unlNodeCount = this.hpContext.getContractUnl().length;
+
+        // NOTE : Total Vote count should be considerable enough to make submission decision.
+        if (sorted.length && (unlNodeCount && (Math.ceil(totalVotes * 100 / unlNodeCount)) < VOTE_PERCENTAGE_THRESHOLD))
+            throw 'Could not decide a transaction to submit.';
+
+        const txSubmitElector = new AllVoteElector(unlNodeCount, options?.voteElectorOptions?.timeout || TIMEOUT);
         const txSubmitElectionName = `txSubmit${this.voteContext.getUniqueNumber()}`;
         let txResults;
-        if (sorted.length && sorted[0][1] > (this.hpContext.getContractUnl().length * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
+        if (sorted.length && sorted[0][1] > (unlNodeCount * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
             let error;
             const res = await this.xrplAcc.submitMultisigned(transaction).catch((e: any) => {
                 error = e;
             });
-            txResults = (await this.voteContext.vote(txSubmitElectionName, [res ? { res: res } : { error: error }], txSubmitElector)).map(ob => ob.data);
+
+            // In order to share a light weight content via NPL.
+            const customRes = <TransactionInfo>{
+                hash: res.result.tx_json.hash,
+                lastLedgerSequence: res.result.tx_json.LastLedgerSequence,
+                resultCode: res.result.engine_result
+            };
+
+            txResults = (await this.voteContext.vote(txSubmitElectionName, [res ? { res: customRes } : { error: error }], txSubmitElector)).map(ob => ob.data);
         }
         else {
             txResults = (await this.voteContext.subscribe(txSubmitElectionName, txSubmitElector)).map(ob => ob.data);
         }
 
         if (!txResults || !txResults.length)
-            throw 'Could not decide a transaction to submit.';
+            throw 'Could not consider as a valid transaction.';
 
-        const txResult = txResults.find(r => r.res?.result?.engine_result === "tesSUCCESS") || txResults[0];
+        // Check whether majority aligned submission or not.
+        const successfulSubmissions = txResults.filter(r => (r.res?.resultCode === "tesSUCCESS" || r.res?.resultCode === "tefPAST_SEQ" || r.res?.resultCode === "tefALREADY"));
+        if (successfulSubmissions.length * 100 / unlNodeCount < VOTE_PERCENTAGE_THRESHOLD)
+            throw 'Could not consider as a valid transaction.';
 
-        if (txResult.error)
-            throw txResult.error;
-
-        console.log(`Transaction submitted with code ${txResult.res.result.engine_result}.`);
-
-        this.#addPendingTransaction(<TransactionInfo>{
-            hash: txResult.res.result.tx_json.hash,
-            lastLedgerSequence: txResult.res.result.tx_json.LastLedgerSequence,
-            resultCode: txResult.res.result.engine_result
+        const sortedResults = txResults.sort((a, b) => {
+            if ("res" in a && !("res" in b)) {
+                return -1;
+            } else if (!("res" in a) && "res" in b) {
+                return 1;
+            } else {
+                return 0;
+            }
         });
 
-        return txResult.res.result;
+        const txResult = sortedResults.find(r => r.res?.resultCode === "tesSUCCESS") || sortedResults[0];
+
+        // NOTE : Commented as it will not hit with above throwing condition.
+        // if (txResult.error)
+        //     throw txResult.error;
+
+        console.log(`Transaction submitted with code ${txResult.res.resultCode}.`);
+
+        this.#addPendingTransaction(txResult.res);
+
+        return txResult.res;
     }
 
     /**
