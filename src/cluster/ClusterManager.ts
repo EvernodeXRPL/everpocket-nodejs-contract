@@ -244,6 +244,22 @@ class ClusterManager {
             this.updated = true;
         }
     }
+
+    /**
+     * Increase the attempt count for signer replacements.
+     * @param pubkey Public key of the node.
+     */
+    public increaseSignerReplaceFailedAttempts(pubkey: string): void {
+        const index = this.clusterData.nodes.findIndex(n => n.pubkey === pubkey);
+
+        if (index >= 0) {
+            if (!this.clusterData.nodes[index].signerReplaceFailedAttempts)
+                this.clusterData.nodes[index].signerReplaceFailedAttempts = 1;
+            else
+                this.clusterData.nodes[index].signerReplaceFailedAttempts!++;
+            this.updated = true;
+        }
+    }
 }
 
 export default ClusterManager;

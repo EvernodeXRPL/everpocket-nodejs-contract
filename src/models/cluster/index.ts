@@ -14,6 +14,7 @@ export interface ClusterNode extends AcquiredNode {
   createdOnTimestamp?: number;
   lifeMoments: number;
   targetLifeMoments: number;
+  signerReplaceFailedAttempts?: number;
 }
 
 export interface PendingNode extends PendingAcquire {

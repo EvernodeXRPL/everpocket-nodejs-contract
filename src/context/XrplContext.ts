@@ -8,6 +8,7 @@ import { VoteElectorOptions } from '../models/vote';
 import HotPocketContext from './HotPocketContext';
 import VoteContext from './VoteContext';
 import { JSONHelpers } from '../utils';
+import { error, log } from '../helpers/logger';
 
 const TIMEOUT = 10000;
 const TRANSACTION_VOTE_THRESHOLD = 0.5;
@@ -27,7 +28,8 @@ class XrplContext {
     public constructor(hpContext: HotPocketContext, address: string, secret: string | null = null, options: XrplOptions = {}) {
         this.hpContext = hpContext;
         this.voteContext = hpContext.voteContext;
-        this.xrplApi = options.xrplApi || new evernode.XrplApi();
+        // Do not handle connection failures in XrplApi to avoid contract hanging.
+        this.xrplApi = options.xrplApi || new evernode.XrplApi(null, { handleConnectionFailures: false });
         this.xrplAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
         this.multiSigner = new MultiSigner(this.xrplAcc);
 
@@ -44,6 +46,7 @@ class XrplContext {
     public async init(): Promise<void> {
         await this.xrplApi.connect();
         await this.loadSignerList();
+        this.#checkSignerValidity();
         await this.#checkForValidateTransactions();
     }
 
@@ -128,7 +131,7 @@ class XrplContext {
         for (const item of this.getPendingTransactions()) {
             const txnInfo = await this.xrplApi.getTxnInfo(item.hash, {});
             if (txnInfo && txnInfo.validated) {
-                console.log(`Transaction validated with code ${txnInfo?.meta?.TransactionResult}.`);
+                log(`Transaction validated with code ${txnInfo?.meta?.TransactionResult}.`);
                 this.#markTransactionAsValidated(txnInfo.hash, txnInfo.ledger_index, txnInfo.meta.TransactionResult);
                 return;
             }
@@ -136,9 +139,23 @@ class XrplContext {
             const latestLedger = this.xrplApi.ledgerIndex;
 
             if (item.lastLedgerSequence < latestLedger) {
-                console.error(`The latest ledger sequence ${latestLedger} is greater than the transaction's LastLedgerSequence (${item.lastLedgerSequence}).\n` +
+                error(`The latest ledger sequence ${latestLedger} is greater than the transaction's LastLedgerSequence (${item.lastLedgerSequence}).\n` +
                     `Preliminary result: ${item}`);
                 this.#removePendingTransaction(item.hash);
+            }
+        }
+    }
+
+    /**
+     * Check signer validity and remove if not a signer.
+     */
+    #checkSignerValidity(): void {
+        if (this.isSigner()) {
+            const signer = this.multiSigner.getSigner();
+            if (signer) {
+                // Check wether this signer is in the signer list. Otherwise remove the signer.
+                if (!this.signerListInfo?.signerList.find(s => s.account === signer.account))
+                    this.multiSigner.removeSigner();
             }
         }
     }
@@ -270,6 +287,9 @@ class XrplContext {
             signatures = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
         }
 
+        // Filter only the signatures which are in the signer list.
+        signatures = signatures.filter(si => this.signerListInfo?.signerList.find(s => s.account === si.Signer.Account));
+
         // Throw error if there're no enough signatures to fulfil the quorum.
         const totalWeight = signatures.map(s => {
             return (this.signerListInfo?.signerList?.find(i => i.account === s.Signer.Account)?.weight || 0);
@@ -316,11 +336,11 @@ class XrplContext {
             });
 
             // In order to share a light weight content via NPL.
-            const customRes = <TransactionInfo>{
+            const customRes = res ? <TransactionInfo>{
                 hash: res.result.tx_json.hash,
                 lastLedgerSequence: res.result.tx_json.LastLedgerSequence,
                 resultCode: res.result.engine_result
-            };
+            } : null;
 
             txResults = (await this.voteContext.vote(txSubmitElectionName, [res ? { res: customRes } : { error: error }], txSubmitElector)).map(ob => ob.data);
         }
@@ -352,7 +372,7 @@ class XrplContext {
         // if (txResult.error)
         //     throw txResult.error;
 
-        console.log(`Transaction submitted with code ${txResult.res.resultCode}.`);
+        log(`Transaction submitted with code ${txResult.res.resultCode}.`);
 
         this.#addPendingTransaction(txResult.res);
 
@@ -522,7 +542,7 @@ class XrplContext {
      * @param [options={}] Multisigner options to override.
      * @returns New signer address.
      */
-    async replaceSignerList(oldPubKey: string, oldSignerAddress: string, newPubKey: string, options: MultiSignOptions = {}): Promise<string | null> {
+    async replaceSignerList(oldPubKey: string, oldSignerAddress: string, newPubKey: string, options: MultiSignOptions = {}): Promise<string> {
         const elector = new AllVoteElector(1, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `replaceSigner${this.voteContext.getUniqueNumber()}`;
 

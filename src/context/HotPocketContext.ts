@@ -2,6 +2,7 @@ import { Buffer } from 'buffer';
 import { ConnectionOptions, HotPocketOptions, Peer, UnlNode } from '../models';
 import { ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType } from '../models/cluster';
 import VoteContext from './VoteContext';
+import { log, error } from '../helpers/logger';
 const HotPocket = require('hotpocket-js-client');
 
 const TIMEOUT = 60000;
@@ -106,10 +107,10 @@ class HotPocketContext {
         const address = node.toString();
         return new Promise<boolean>(async (resolve, reject) => {
             await this.#connectAndHandle([node], () => {
-                console.log(`Hot Pocket live at wss://${address}`);
+                log(`Hot Pocket live at wss://${address}`);
             }, (data: any, error: any) => {
                 if (error) {
-                    console.error(error);
+                    error(error);
                     resolve(false);
                 }
                 else
@@ -143,7 +144,7 @@ class HotPocketContext {
                             }
                         }
                         catch (e) {
-                            console.error(e);
+                            error(e);
                         }
                     });
 

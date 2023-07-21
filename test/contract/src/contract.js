@@ -8,6 +8,8 @@ const fs = require('fs');
 // const masterSecret = "ssnUDXJicaoaQ67K1Fjw9m7NqwPNb";
 // const masterAddress = "rNZqGPtr4EqzQXua7Wnw8gphcSrmms11KC";
 // const masterSecret = "sniJWbbBKMXaDJMGXedPsdQn6e8Wy";
+// const masterAddress = "rURjJ56b1QCpLhLsgCDybprwHqoxWXEoWB";
+// const masterSecret = "sscek7fSNqzCG1vniQWbEATu8qA9N";
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
 const ip = "localhost";
@@ -20,7 +22,7 @@ const MAX_CLUSTER = 8;
 
 const nomadOptions = {
     targetNodeCount: 25,
-    targetLifeMoments: 2,
+    targetLifeMoments: 10,
     preferredHosts: [
         "rP4zJ6ZWoHYC8cj6GkWHyiUJT15xwzLCLm",
         "rwqWhVJZ1SgXBBpBNQ194sdDNBbUZTaTem",

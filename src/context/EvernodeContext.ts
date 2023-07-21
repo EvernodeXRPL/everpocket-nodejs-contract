@@ -9,6 +9,7 @@ import * as kp from 'ripple-keypairs';
 import { JSONHelpers } from "../utils";
 import { VoteElectorOptions } from "../models/vote";
 import HotPocketContext from "./HotPocketContext";
+import { error, log } from "../helpers/logger";
 
 const TIMEOUT = 10000;
 const ACQUIRE_ABANDON_LCL_THRESHOLD = 10;
@@ -146,17 +147,17 @@ class EvernodeContext {
             let remove = false;
             // Remove transaction if failed.
             if (validated.resultCode !== "tesSUCCESS") {
-                console.log(`Transaction failed for ${item.refId} with code: ${validated.resultCode}.`);
+                log(`Transaction failed for ${item.refId} with code: ${validated.resultCode}.`);
                 remove = true;
             }
             // Remove if no ledger index.
             else if (!validated.ledgerIndex) {
-                console.log(`No ledger index for the transaction ${item.refId}.`);
+                log(`No ledger index for the transaction ${item.refId}.`);
                 remove = true;
             }
             // Abandon waiting for this node if threshold reached.
             else if (item.acquireSentOnLcl < (this.hpContext.lclSeqNo - ACQUIRE_ABANDON_LCL_THRESHOLD)) {
-                console.log(`Maximum acquire wait threshold reached, Abandoning waiting for ${item.refId}.`);
+                log(`Maximum acquire wait threshold reached, Abandoning waiting for ${item.refId}.`);
                 remove = true;
             }
 
@@ -328,10 +329,10 @@ class EvernodeContext {
         if (sortCollection[0] === keyPair.publicKey) {
             fs.writeFile(`../${keyPair.publicKey}.txt`, keyPair.privateKey, (err) => {
                 if (err) {
-                    console.error(err);
+                    error(err);
                     return;
                 }
-                console.log("Wrote Key file.");
+                log("Wrote Key file.");
             });
         }
 

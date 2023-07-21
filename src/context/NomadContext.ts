@@ -1,9 +1,10 @@
+import { error, log } from "../helpers/logger";
 import { NomadOptions } from "../models/nomad";
 import ClusterContext from "./ClusterContext";
 import HotPocketContext from "./HotPocketContext";
 
 const IMMATURE_PRUNE_LCL_THRESHOLD = 10;
-const INACTIVE_PRUNE_LCL_THRESHOLD = 4;
+const INACTIVE_PRUNE_LCL_THRESHOLD = 60;
 const EXPIRE_PRUNE_TS_THRESHOLD = 900000; // 15 mins in ms.
 
 class NomadContext {
@@ -56,12 +57,12 @@ class NomadContext {
                     return;
             }
 
-            console.log('Growing the cluster.');
-            console.log(`Target count: ${this.options.targetNodeCount}, Existing count: ${totalCount}`);
+            log('Growing the cluster.');
+            log(`Target count: ${this.options.targetNodeCount}, Existing count: ${totalCount}`);
 
             await this.clusterContext.addNewClusterNode(this.options.targetLifeMoments, {
                 preferredHosts: this.options.preferredHosts, instanceCfg: this.options.instanceCfg
-            }).catch(console.error);
+            }).catch(error);
         }
     }
 
@@ -81,29 +82,29 @@ class NomadContext {
             // Prune unl nodes if inactive. Only consider the nodes which are added to Unl before this ledger.
             if (node.isUnl && ((node.addedToUnlOnLcl || 0) < curLcl) &&
                 (curLcl - (node.activeOnLcl || 0)) > INACTIVE_PRUNE_LCL_THRESHOLD) {
-                console.log(`Pruning the node ${node.pubkey} due to inactiveness.`);
-                console.log(`Last active lcl: ${(node.activeOnLcl || 0)}, Current lcl: ${curLcl}`);
+                log(`Pruning the node ${node.pubkey} due to inactiveness.`);
+                log(`Last active lcl: ${(node.activeOnLcl || 0)}, Current lcl: ${curLcl}`);
                 prune = true;
             }
             // Prune if not matured for long period.
             else if (!node.isUnl && !node.ackReceivedOnLcl &&
                 (curLcl - node.createdOnLcl) > IMMATURE_PRUNE_LCL_THRESHOLD) {
-                console.log(`Pruning the node ${node.pubkey} due to not getting matured.`);
-                console.log(`Created on lcl: ${node.createdOnLcl}, Current moment: ${curLcl}`);
+                log(`Pruning the node ${node.pubkey} due to not getting matured.`);
+                log(`Created on lcl: ${node.createdOnLcl}, Current moment: ${curLcl}`);
                 prune = true;
             }
             // Prune if close to expire except the nodes which has pending extends or the node which are created by contract.
             else if (node.targetLifeMoments <= node.lifeMoments && node.createdOnTimestamp &&
                 curTimestamp > (nodeExpiryTs - EXPIRE_PRUNE_TS_THRESHOLD)) {
-                console.log(`Pruning the node ${node.pubkey} due to expiring.`);
-                console.log(`Expiry ts: ${nodeExpiryTs}, Current ts: ${curTimestamp}`);
+                log(`Pruning the node ${node.pubkey} due to expiring.`);
+                log(`Expiry ts: ${nodeExpiryTs}, Current ts: ${curTimestamp}`);
                 prune = true;
                 // When removing nodes close to expire, Do not force remove them which might cause to fail pending acquires.
                 force = false;
             }
 
             if (prune) {
-                await this.clusterContext.removeNode(node.pubkey, force).catch(console.error);
+                await this.clusterContext.removeNode(node.pubkey, force).catch(error);
             }
         }
     }
