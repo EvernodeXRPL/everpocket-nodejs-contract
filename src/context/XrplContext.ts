@@ -354,7 +354,7 @@ class XrplContext {
         // Check whether majority aligned submission or not.
         const successfulSubmissions = txResults.filter(r => (r.res?.resultCode === "tesSUCCESS" || r.res?.resultCode === "tefPAST_SEQ" || r.res?.resultCode === "tefALREADY"));
         if (successfulSubmissions.length * 100 / unlNodeCount < VOTE_PERCENTAGE_THRESHOLD)
-            throw 'Could not consider as a valid transaction.';
+            throw 'Could not consider as a valid submission.';
 
         const sortedResults = txResults.sort((a, b) => {
             if ("res" in a && !("res" in b)) {

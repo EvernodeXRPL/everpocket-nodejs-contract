@@ -395,6 +395,14 @@ class ClusterContext {
                         ...(options.instanceCfg?.config?.contract?.consensus ? options.instanceCfg.config.contract.consensus : {}),
                         roundtime: hpconfig.consensus.roundtime
                     }
+                },
+                mesh: {
+                    ...(options.instanceCfg?.config?.mesh ? options.instanceCfg.config.mesh : {}),
+                    peer_discovery: {
+                        // Disabling Dynamic Peer Discovery.(In order to mitigate adding previously removed peers again in to the known peer list)
+                        enabled: false,
+                        interval: options.instanceCfg?.config?.mesh?.peer_discovery?.interval ? options.instanceCfg.config.mesh.peer_discovery.interval : 30000
+                    }
                 }
             }
         }
