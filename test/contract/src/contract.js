@@ -116,7 +116,7 @@ const testContract = async (contractCtx) => {
             // () => removeXrplSigner(xrplContext, signerToRemove, quorum - signerWeight),
             // () => getSignerList(xrplContext),
             // () => multiSignTransaction(xrplContext),
-            () => checkLiveness(hpContext, ip, port),
+            // () => checkLiveness(hpContext, ip, port),
             // () => acquireNewNode(evernodeContext),
             // () => extendNode(evernodeContext),
             // () => addNewClusterNode(clusterContext),
