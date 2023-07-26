@@ -11,7 +11,7 @@ import { error, log } from "../helpers/logger";
 import * as fs from 'fs';
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
-const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.test-0.1.0-ubt.20.04-njs.20";
+const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.20";
 const ALIVENESS_CHECK_THRESHOLD = 5;
 const MATURITY_LCL_THRESHOLD = 2;
 const MAX_SIGNER_REPLACE_ATTEMPTS = 5;
