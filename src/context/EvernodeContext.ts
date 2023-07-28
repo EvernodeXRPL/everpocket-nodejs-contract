@@ -9,6 +9,7 @@ import * as kp from 'ripple-keypairs';
 import { JSONHelpers } from "../utils";
 import { VoteElectorOptions } from "../models/vote";
 import HotPocketContext from "./HotPocketContext";
+import { error, log } from "../helpers/logger";
 
 const TIMEOUT = 10000;
 const ACQUIRE_ABANDON_LCL_THRESHOLD = 10;
@@ -87,24 +88,88 @@ class EvernodeContext {
     }
 
     /**
+     * Updates the detail file with inserts and deletes of
+     * pending acquires
+     * @param element Element to be added or removed
+     * @param mode Type of operation ("INSERT" or "DELETE")
+     */
+    #updatePendingAcquireInfo(element: PendingAcquire, mode: string = "INSERT"): void {
+        if (mode === "INSERT")
+            this.acquireData.pendingAcquires.push(element); // modify the array as needed
+        else {
+            // Find the index of the record to remove
+            const indexToRemove = this.acquireData.pendingAcquires.findIndex((record: { leaseOfferIdx: string; }) => record.leaseOfferIdx === element.leaseOfferIdx);
+
+            // Check if the record exists in the array, and remove it if found
+            if (indexToRemove !== -1) {
+                this.acquireData.pendingAcquires.splice(indexToRemove, 1);
+            }
+        }
+        this.updatedData = true;
+    }
+
+    /**
+     * Updates the detail file with inserts and deletes of
+     * successful acquires
+     * @param element Element to be added or removed
+     * @param mode Type of operation ("INSERT" or "DELETE")
+     */
+    #updateAcquiredNodeInfo(element: AcquiredNode, mode: string = "INSERT"): void {
+        if (mode === "INSERT")
+            this.acquireData.acquiredNodes.push(element); // modify the array as needed
+        else {
+            // Find the index of the record to remove
+            const indexToRemove = this.acquireData.acquiredNodes.findIndex((record: { name: string; }) => record.name === element.name);
+
+            // Check if the record exists in the array, and remove it if found
+            if (indexToRemove !== -1) {
+                this.acquireData.acquiredNodes.splice(indexToRemove, 1);
+            }
+        }
+        this.updatedData = true;
+    }
+
+    /**
      * Check whether there're any completed pending acquires.
      * @param [options={}] Vote options for payload sharing.
      */
     async #checkForCompletedAcquires(options: VoteElectorOptions = {}): Promise<void> {
         // Check for pending transactions and their completion.
         for (const item of this.getPendingAcquires()) {
+            // Check if transaction is validated. If not skip.
+            const validated = this.xrplContext.getValidatedTransaction(item.refId);
+            if (!validated)
+                continue;
+
             const privateKey = fs.existsSync(`../${item.messageKey}.txt`) ?
                 fs.readFileSync(`../${item.messageKey}.txt`, { encoding: 'utf8', flag: 'r' }) : null;
 
+            let remove = false;
+            // Remove transaction if failed.
+            if (validated.resultCode !== "tesSUCCESS") {
+                log(`Transaction failed for ${item.refId} with code: ${validated.resultCode}.`);
+                remove = true;
+            }
+            // Remove if no ledger index.
+            else if (!validated.ledgerIndex) {
+                log(`No ledger index for the transaction ${item.refId}.`);
+                remove = true;
+            }
             // Abandon waiting for this node if threshold reached.
-            if (item.acquireSentOnLcl < (this.hpContext.lclSeqNo - ACQUIRE_ABANDON_LCL_THRESHOLD)) {
-                console.log(`Maximum acquire wait threshold reached, Abandoning waiting for ${item.refId}.`)
-                await this.updatePendingAcquireInfo(item, "DELETE");
-                if (privateKey)
-                    fs.unlinkSync(`../${item.messageKey}.txt`);
+            else if (item.acquireSentOnLcl < (this.hpContext.lclSeqNo - ACQUIRE_ABANDON_LCL_THRESHOLD)) {
+                log(`Maximum acquire wait threshold reached, Abandoning waiting for ${item.refId}.`);
+                remove = true;
             }
 
-            const txList = await this.xrplContext.xrplAcc.getAccountTrx(item.acquireLedgerIdx);
+            if (remove) {
+                this.#updatePendingAcquireInfo(item, "DELETE");
+                if (privateKey)
+                    fs.unlinkSync(`../${item.messageKey}.txt`);
+                continue;
+            }
+
+            const txList = await this.xrplContext.getTransactions(validated.ledgerIndex!);
+
             for (let t of txList) {
                 t.tx.Memos = evernode.TransactionHelper.deserializeMemos(t.tx?.Memos);
                 t.tx.HookParameters = evernode.TransactionHelper.deserializeHookParams(t.tx?.HookParameters);
@@ -125,8 +190,8 @@ class EvernodeContext {
                     // Updated the acquires if there's a success response.
                     if (payload) {
                         if (payload !== 'acquire_error')
-                            await this.updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
-                        await this.updatePendingAcquireInfo(item, "DELETE");
+                            this.#updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
+                        this.#updatePendingAcquireInfo(item, "DELETE");
                         if (privateKey)
                             fs.unlinkSync(`../${item.messageKey}.txt`);
                     }
@@ -135,6 +200,7 @@ class EvernodeContext {
 
         }
     }
+
     /**
      * Acquires a node based on the provided options.
      * @param options Options related to a particular acquire operation.
@@ -148,23 +214,22 @@ class EvernodeContext {
 
         const messageKey = await this.decideMessageKey();
 
-        if(!leaseOffer || !messageKey)
+        if (!leaseOffer || !messageKey)
             throw "Could not decide aquire params.";
-            
+
         // Perform acquire txn on the selected host.
         const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
 
         const pendingAcquire = <PendingAcquire>{
             host: hostAddress,
             leaseOfferIdx: leaseOffer.index,
-            refId: res.id,
+            refId: res.hash,
             messageKey: messageKey,
-            acquireLedgerIdx: res.details.ledger_index,
             acquireSentOnLcl: this.hpContext.lclSeqNo
         };
 
         // Record as a acquire transaction.
-        await this.updatePendingAcquireInfo(pendingAcquire);
+        this.#updatePendingAcquireInfo(pendingAcquire);
 
         return pendingAcquire;
     }
@@ -208,12 +273,7 @@ class EvernodeContext {
         const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
-        let sortCollection = collection.sort((a, b) => {
-            if (a.index === b.index) {
-                return 0;
-            }
-            return a.index > b.index ? 1 : -1;
-        });
+        let sortCollection = collection.sort((a, b) => a.index.localeCompare(b.index));
 
         return sortCollection[0];
     }
@@ -264,20 +324,15 @@ class EvernodeContext {
         const voteRound = this.voteContext.vote(electionName, [keyPair.publicKey], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
         let collection = (await voteRound).map((v) => v.data);
 
-        let sortCollection = collection.sort((a, b) => {
-            if (a === b) {
-                return 0;
-            }
-            return a > b ? 1 : -1;
-        });
+        let sortCollection = collection.sort((a, b) => a.localeCompare(b));
 
         if (sortCollection[0] === keyPair.publicKey) {
             fs.writeFile(`../${keyPair.publicKey}.txt`, keyPair.privateKey, (err) => {
                 if (err) {
-                    console.error(err);
+                    error(err);
                     return;
                 }
-                console.log("Wrote Key file.");
+                log("Wrote Key file.");
             });
         }
 
@@ -381,48 +436,6 @@ class EvernodeContext {
      */
     public decodeLeaseTokenUri(uri: string): LeaseURIInfo {
         return evernode.UtilHelpers.decodeLeaseTokenUri(uri);
-    }
-
-    /**
-     * Updates the detail file with inserts and deletes of
-     * pending acquires
-     * @param element Element to be added or removed
-     * @param mode Type of operation ("INSERT" or "DELETE")
-     */
-    public async updatePendingAcquireInfo(element: PendingAcquire, mode: string = "INSERT"): Promise<void> {
-        if (mode === "INSERT")
-            this.acquireData.pendingAcquires.push(element); // modify the array as needed
-        else {
-            // Find the index of the record to remove
-            const indexToRemove = this.acquireData.pendingAcquires.findIndex((record: { leaseOfferIdx: string; }) => record.leaseOfferIdx === element.leaseOfferIdx);
-
-            // Check if the record exists in the array, and remove it if found
-            if (indexToRemove !== -1) {
-                this.acquireData.pendingAcquires.splice(indexToRemove, 1);
-            }
-        }
-        this.updatedData = true;
-    }
-
-    /**
-     * Updates the detail file with inserts and deletes of
-     * successful acquires
-     * @param element Element to be added or removed
-     * @param mode Type of operation ("INSERT" or "DELETE")
-     */
-    public async updateAcquiredNodeInfo(element: AcquiredNode, mode: string = "INSERT"): Promise<void> {
-        if (mode === "INSERT")
-            this.acquireData.acquiredNodes.push(element); // modify the array as needed
-        else {
-            // Find the index of the record to remove
-            const indexToRemove = this.acquireData.acquiredNodes.findIndex((record: { name: string; }) => record.name === element.name);
-
-            // Check if the record exists in the array, and remove it if found
-            if (indexToRemove !== -1) {
-                this.acquireData.acquiredNodes.splice(indexToRemove, 1);
-            }
-        }
-        this.updatedData = true;
     }
 }
 

@@ -1,17 +1,25 @@
-import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Signature } from '../models';
-import { MultiSignedBlobElector, MultiSigner } from '../multi-sign';
+import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Signature, TransactionData, TransactionInfo } from '../models';
+import { MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as xrplCodec from 'xrpl-binary-codec';
 import * as evernode from 'evernode-js-client';
+import * as crypto from 'crypto';
 import { VoteElectorOptions } from '../models/vote';
 import HotPocketContext from './HotPocketContext';
 import VoteContext from './VoteContext';
+import { JSONHelpers } from '../utils';
+import { error, log } from '../helpers/logger';
 
 const TIMEOUT = 10000;
+const TRANSACTION_VOTE_THRESHOLD = 0.5;
+const VOTE_PERCENTAGE_THRESHOLD = 80;
 
 class XrplContext {
+    private transactionDataFile: string = "transactions.json";
+    private transactionData: TransactionData = { pending: [], validated: [] };
     private signerListInfo: SignerListInfo | null = null;
-    public hpContext: any;
+    private updatedData: boolean = false;
+    public hpContext: HotPocketContext;
     public xrplApi: any;
     public xrplAcc: any;
     public multiSigner: MultiSigner;
@@ -20,9 +28,16 @@ class XrplContext {
     public constructor(hpContext: HotPocketContext, address: string, secret: string | null = null, options: XrplOptions = {}) {
         this.hpContext = hpContext;
         this.voteContext = hpContext.voteContext;
-        this.xrplApi = options.xrplApi || new evernode.XrplApi();
+        // Do not handle connection failures in XrplApi to avoid contract hanging.
+        this.xrplApi = options.xrplApi || new evernode.XrplApi(null, { autoReconnect : false ,isPermanentlyDisconnected: true });
         this.xrplAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
         this.multiSigner = new MultiSigner(this.xrplAcc);
+
+        const data = JSONHelpers.readFromFile<TransactionData>(this.transactionDataFile);
+        if (data)
+            this.transactionData = data;
+        else
+            JSONHelpers.writeToFile(this.transactionDataFile, this.transactionData);
     }
 
     /**
@@ -31,13 +46,143 @@ class XrplContext {
     public async init(): Promise<void> {
         await this.xrplApi.connect();
         await this.loadSignerList();
+        this.#checkSignerValidity();
+        await this.#checkForValidateTransactions();
     }
 
     /**
      * Deinitialize the xrpl context.
      */
     public async deinit(): Promise<void> {
+        this.#persistTransactionData();
         await this.xrplApi.disconnect();
+    }
+
+    /**
+     * Persist details of transactions.
+     */
+    #persistTransactionData(): void {
+        if (!this.updatedData)
+            return;
+
+        try {
+            JSONHelpers.writeToFile(this.transactionDataFile, this.transactionData);
+        } catch (error) {
+            throw `Error writing file ${this.transactionDataFile}: ${error}`;
+        }
+    }
+
+    /**
+     * Add transaction to the pending list.
+     * @param info Transaction info to be add as pending.
+     */
+    #addPendingTransaction(info: TransactionInfo): void {
+        const resultCode = info.resultCode;
+        if (resultCode !== "tesSUCCESS" && resultCode !== "tefPAST_SEQ" && resultCode !== "tefALREADY")
+            throw resultCode ? `Transaction failed with error ${resultCode}` : 'Transaction failed';
+
+        if (this.transactionData.pending.findIndex(t => t.hash === info.hash) >= 0)
+            return;
+
+        this.transactionData.pending.push(info);
+        this.updatedData = true;
+    }
+
+    /**
+     * Remove transaction from the pending list.
+     * @param hash Transaction hash to be removed.
+     */
+    #removePendingTransaction(hash: string): void {
+        const index = this.transactionData.pending.findIndex(t => t.hash === hash);
+        if (index === -1)
+            return;
+
+        this.transactionData.pending.splice(index, 1);
+        this.updatedData = true;
+    }
+
+    /**
+     * Mark a transaction as validated.
+     * @param hash Transaction hash to be validated.
+     * @param ledgerIndex Ledger index the transaction is validated.
+     * @param resultCode Transaction result code.
+     */
+    #markTransactionAsValidated(hash: string, ledgerIndex: number, resultCode: string): void {
+        const index = this.transactionData.pending.findIndex(t => t.hash === hash);
+
+        if (index === -1)
+            throw 'Invalid validated transaction.'
+
+        if (this.transactionData.validated.findIndex(t => t.hash === hash) == -1) {
+            let pending = this.transactionData.pending[index];
+            pending.ledgerIndex = ledgerIndex;
+            pending.resultCode = resultCode;
+            this.transactionData.validated.push(pending);
+        }
+
+        this.transactionData.pending.splice(index, 1);
+        this.updatedData = true;
+    }
+
+    /**
+     * Check whether there're any validated.
+     */
+    async #checkForValidateTransactions(): Promise<void> {
+        for (const item of this.getPendingTransactions()) {
+            const txnInfo = await this.xrplApi.getTxnInfo(item.hash, {});
+            if (txnInfo && txnInfo.validated) {
+                log(`Transaction validated with code ${txnInfo?.meta?.TransactionResult}.`);
+                this.#markTransactionAsValidated(txnInfo.hash, txnInfo.ledger_index, txnInfo.meta.TransactionResult);
+                return;
+            }
+
+            const latestLedger = this.xrplApi.ledgerIndex;
+
+            if (item.lastLedgerSequence < latestLedger) {
+                error(`The latest ledger sequence ${latestLedger} is greater than the transaction's LastLedgerSequence (${item.lastLedgerSequence}).\n` +
+                    `Preliminary result: ${item}`);
+                this.#removePendingTransaction(item.hash);
+            }
+        }
+    }
+
+    /**
+     * Check signer validity and remove if not a signer.
+     */
+    #checkSignerValidity(): void {
+        if (this.isSigner()) {
+            const signer = this.multiSigner.getSigner();
+            if (signer) {
+                // Check wether this signer is in the signer list. Otherwise remove the signer.
+                if (!this.signerListInfo?.signerList.find(s => s.account === signer.account))
+                    this.multiSigner.removeSigner();
+            }
+        }
+    }
+
+    /**
+     * Fetches details of submitted non validated transactions.
+     * @returns an array of transactions that are not validated.
+     */
+    public getPendingTransactions(): TransactionInfo[] {
+        return this.transactionData.pending;
+    }
+
+    /**
+     * Fetches details of submitted validated transactions.
+     * @returns an array of transactions that are validated.
+     */
+    public getValidatedTransactions(): TransactionInfo[] {
+        return this.transactionData.validated;
+    }
+
+    /**
+     * Get the transaction of the hash if validated.
+     * @param hash Transaction hash.
+     * @returns The transaction if validated.
+     */
+    public getValidatedTransaction(hash: string): TransactionInfo | null {
+        return (this.getValidatedTransactions().find(t => t.hash === hash) || null);
     }
 
     /**
@@ -57,7 +202,16 @@ class XrplContext {
      * @returns Current sequence number.
      */
     public async getSequence(): Promise<number> {
-        return await this.xrplAcc.getSequence()
+        return await this.xrplAcc.getSequence();
+    }
+
+    /**
+     * Get transaction list of the master account starting from a ledger.
+     * @param ledgerIndex Starting ledger index.
+     * @returns LIst of transactions
+     */
+    public async getTransactions(ledgerIndex: number): Promise<any[]> {
+        return await this.xrplAcc.getAccountTrx(ledgerIndex);
     }
 
     /**
@@ -81,7 +235,7 @@ class XrplContext {
         }], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT))).map(ob => ob.data);
 
         return <TransactionSubmissionInfo>{
-            sequence: infos.map(i => i.sequence).sort()[0],
+            sequence: infos.map(i => i.sequence).sort((a, b) => b - a)[0],
             maxLedgerSequence: infos.map(i => i.maxLedgerSequence).sort((a, b) => b - a)[0]
         };
     }
@@ -117,7 +271,7 @@ class XrplContext {
 
         transaction.Fee = `${Number(transaction.Fee) * (signerCount + 2)}`;
 
-        const elector = new MultiSignedBlobElector(signerCount, this.signerListInfo, options?.voteElectorOptions?.timeout || TIMEOUT);
+        const elector = new AllVoteElector(signerCount, options?.voteElectorOptions?.timeout || TIMEOUT);
         const electionName = `sign${this.voteContext.getUniqueNumber()}`;
         let signatures: Signature[];
 
@@ -133,6 +287,9 @@ class XrplContext {
             signatures = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
         }
 
+        // Filter only the signatures which are in the signer list.
+        signatures = signatures.filter(si => this.signerListInfo?.signerList.find(s => s.account === si.Signer.Account));
+
         // Throw error if there're no enough signatures to fulfil the quorum.
         const totalWeight = signatures.map(s => {
             return (this.signerListInfo?.signerList?.find(i => i.account === s.Signer.Account)?.weight || 0);
@@ -140,9 +297,86 @@ class XrplContext {
         if (totalWeight < this.signerListInfo.signerQuorum)
             throw `No enough signatures: Total weight: ${totalWeight}, Quorum: ${this.signerListInfo.signerQuorum}.`;
 
-        transaction.Signers = signatures.map(s => <Signature>{ Signer: s.Signer });
+        transaction.Signers = signatures.map(s => <Signature>{ Signer: s.Signer }).sort((a, b) => a.Signer.SigningPubKey.localeCompare(b.Signer.SigningPubKey));
 
-        return await this.xrplAcc.submitMultisigned(transaction);
+        const voteHash = crypto.createHash('sha256');
+        voteHash.update(JSON.stringify(transaction));
+        const voteDigest = voteHash.digest('hex');
+
+        const txVoteHashElector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.voteElectorOptions?.timeout || TIMEOUT);
+        const txVoteHashElectionName = `txVoteHash${this.voteContext.getUniqueNumber()}`;
+
+        let txVoteHashes = (await this.voteContext.vote(txVoteHashElectionName, [voteDigest], txVoteHashElector)).map(ob => ob.data);
+
+        let votes: any = {};
+
+        for (const txVoteHash of txVoteHashes) {
+            if (!votes[txVoteHash])
+                votes[txVoteHash] = 1;
+            else
+                votes[txVoteHash]++;
+        }
+
+        const sorted = Object.entries<number>(votes).sort((a, b) => b[1] - a[1]);
+        const totalVotes = sorted.map(n => n[1]).reduce((acc, curr) => acc + curr, 0);
+
+        const unlNodeCount = this.hpContext.getContractUnl().length;
+
+        // NOTE : Total Vote count should be considerable enough to make submission decision.
+        if (sorted.length && (unlNodeCount && (Math.ceil(totalVotes * 100 / unlNodeCount)) < VOTE_PERCENTAGE_THRESHOLD))
+            throw 'Could not decide a transaction to submit.';
+
+        const txSubmitElector = new AllVoteElector(unlNodeCount, options?.voteElectorOptions?.timeout || TIMEOUT);
+        const txSubmitElectionName = `txSubmit${this.voteContext.getUniqueNumber()}`;
+        let txResults;
+        if (sorted.length && sorted[0][1] > (unlNodeCount * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
+            let error;
+            const res = await this.xrplAcc.submitMultisigned(transaction).catch((e: any) => {
+                error = e;
+            });
+
+            // In order to share a light weight content via NPL.
+            const customRes = res ? <TransactionInfo>{
+                hash: res.result.tx_json.hash,
+                lastLedgerSequence: res.result.tx_json.LastLedgerSequence,
+                resultCode: res.result.engine_result
+            } : null;
+
+            txResults = (await this.voteContext.vote(txSubmitElectionName, [res ? { res: customRes } : { error: error }], txSubmitElector)).map(ob => ob.data);
+        }
+        else {
+            txResults = (await this.voteContext.subscribe(txSubmitElectionName, txSubmitElector)).map(ob => ob.data);
+        }
+
+        if (!txResults || !txResults.length)
+            throw 'Could not consider as a valid transaction.';
+
+        // Check whether majority aligned submission or not.
+        const successfulSubmissions = txResults.filter(r => (r.res?.resultCode === "tesSUCCESS" || r.res?.resultCode === "tefPAST_SEQ" || r.res?.resultCode === "tefALREADY"));
+        if (successfulSubmissions.length * 100 / unlNodeCount < VOTE_PERCENTAGE_THRESHOLD)
+            throw 'Could not consider as a valid submission.';
+
+        const sortedResults = txResults.sort((a, b) => {
+            if ("res" in a && !("res" in b)) {
+                return -1;
+            } else if (!("res" in a) && "res" in b) {
+                return 1;
+            } else {
+                return 0;
+            }
+        });
+
+        const txResult = sortedResults.find(r => r.res?.resultCode === "tesSUCCESS") || sortedResults[0];
+
+        // NOTE : Commented as it will not hit with above throwing condition.
+        // if (txResult.error)
+        //     throw txResult.error;
+
+        log(`Transaction submitted with code ${txResult.res.resultCode}.`);
+
+        this.#addPendingTransaction(txResult.res);
+
+        return txResult.res;
     }
 
     /**
@@ -376,7 +610,6 @@ class XrplContext {
     public isSigner(): boolean {
         return this.multiSigner.isSignerNode();
     }
-
 }
 
 export default XrplContext;

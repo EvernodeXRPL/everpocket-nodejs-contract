@@ -21,7 +21,19 @@ export interface Signature {
     TxnSignature: string;
     Account: string;
   }
-} 
+}
+
+export interface TransactionInfo {
+  hash: string;
+  resultCode: string;
+  lastLedgerSequence: number;
+  ledgerIndex?: number;
+}
+
+export interface TransactionData {
+  pending: TransactionInfo[];
+  validated: TransactionInfo[];
+}
 
 export interface TransactionSubmissionInfo {
   sequence: number;

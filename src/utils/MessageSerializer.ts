@@ -1,5 +1,6 @@
 import { Buffer } from 'buffer';
 import * as bson from 'bson';
+import { error } from '../helpers/logger';
 
 type Validator = (obj: any) => boolean;
 
@@ -72,7 +73,7 @@ class MessageSerializer {
                 return obj;
         }
         catch {
-            console.error('Invalid message format')
+            error('Invalid message format')
         }
 
         return null;
@@ -89,7 +90,7 @@ class MessageSerializer {
                 return this.serializer.serialize(data);
         }
         catch {
-            console.error('Invalid message format')
+            error('Invalid message format')
         }
 
         return null;

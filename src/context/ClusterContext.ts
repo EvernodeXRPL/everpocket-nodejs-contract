@@ -7,11 +7,14 @@ import { ClusterManager } from "../cluster";
 import { AllVoteElector } from "../vote/vote-electors";
 import { VoteElectorOptions } from "../models/vote";
 import HotPocketContext from "./HotPocketContext";
+import { error, log } from "../helpers/logger";
+import * as fs from 'fs';
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
-const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16";
+const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.20";
 const ALIVENESS_CHECK_THRESHOLD = 5;
 const MATURITY_LCL_THRESHOLD = 2;
+const MAX_SIGNER_REPLACE_ATTEMPTS = 5;
 const TIMEOUT = 10000;
 
 class ClusterContext {
@@ -80,8 +83,29 @@ class ClusterContext {
                 signerAddress: signer ? signer.account : null
             }
             const nodes: ClusterNode[] = (await this.voteContext.vote(electionName, [node], elector)).map(ob => ob.data);
+
+            const unlCount = this.hpContext.getContractUnl().length;
+            if (nodes.length < unlCount)
+                throw `Could not collect UNL node info. Unl node count ${unlCount}, Received ${nodes.length}.`
+
             this.clusterManager.initializeCluster(nodes);
-            console.log('Initialized the cluster data with node info.');
+            log('Initialized the cluster data with node info.');
+        }
+
+        // Helping to make connections
+        // This flag file is written at the first execution of the contract.
+        const isDefinedPeers = fs.existsSync('../flag_init_peers');
+        if (!isDefinedPeers || this.hpContext.lclSeqNo % 4 === 1) {
+            console.log("Peer list Updating..");
+            const detailedClusterNodes = this.clusterManager.getNodes();
+            const knownPeers = detailedClusterNodes.filter(n => n.isUnl && n.pubkey !== this.hpContext.publicKey).map(kp => { return `${kp.ip}:${kp.peerPort}` });
+            if (knownPeers) {
+                await this.hpContext.updatePeers(knownPeers);
+                console.log(`Peer list was updated with ${knownPeers.length} peers.`);
+            }
+
+            if (!isDefinedPeers)
+                fs.writeFileSync('../flag_init_peers', '');
         }
     }
 
@@ -99,7 +123,7 @@ class ClusterContext {
                     this.clusterManager.markAsActive(u.publicKey, this.hpContext.lclSeqNo);
                 }
                 catch (e) {
-                    console.error(e);
+                    error(e);
                 }
             }
         }
@@ -120,7 +144,7 @@ class ClusterContext {
                     if (node.aliveCheckCount > ALIVENESS_CHECK_THRESHOLD) {
                         this.clusterManager.removePending(node.refId);
 
-                        console.log(`Pending node ${node.refId} is removed since it's not alive.`);
+                        log(`Pending node ${node.refId} is removed since it's not alive.`);
                         continue;
                     }
 
@@ -146,18 +170,18 @@ class ClusterContext {
                             targetLifeMoments: node.targetLifeMoments
                         });
 
-                        console.log(`Added node ${info.pubkey} to the cluster as nonUnl.`);
+                        log(`Added node ${info.pubkey} to the cluster as nonUnl.`);
                     }
                 }
                 catch (e) {
-                    console.log(e);
+                    log(e);
                 }
 
             }
             // If the pending node is not in the pending acquire, this acquire should be failed.
             else if (!info && !this.evernodeContext.getIfPending(node.refId)) {
                 this.clusterManager.removePending(node.refId);
-                console.log(`Pending node ${node.refId} is removed due to unavailability.`);
+                log(`Pending node ${node.refId} is removed due to unavailability.`);
             }
         }
     }
@@ -172,12 +196,12 @@ class ClusterContext {
         for (const pendingExtend of pendingExtends) {
             const extension = pendingExtend.targetLifeMoments - pendingExtend.lifeMoments;
             try {
-                console.log(`Extending node ${pendingExtend.pubkey} by ${extension}.`);
+                log(`Extending node ${pendingExtend.pubkey} by ${extension}.`);
                 const res = await this.evernodeContext.extendSubmit(pendingExtend.host, extension, pendingExtend.name);
                 if (res)
                     this.clusterManager.updateLifeMoments(pendingExtend.pubkey, pendingExtend.lifeMoments + extension);
             } catch (e) {
-                console.error(e)
+                error(e)
             }
         }
     }
@@ -195,10 +219,10 @@ class ClusterContext {
         if (pendingAcknowledged && pendingAcknowledged.length > 0) {
             const node = pendingAcknowledged[0];
             try {
-                console.log(`Adding node ${node.pubkey} as a Unl node.`);
+                log(`Adding node ${node.pubkey} as a Unl node.`);
                 await this.addToUnl(node.pubkey);
             } catch (e) {
-                console.error(e)
+                error(e)
             }
         }
     }
@@ -211,8 +235,8 @@ class ClusterContext {
 
         // If this node is not in UNL acknowledge others to add to UNL.
         if (selfNode && !selfNode.isUnl && !selfNode.ackReceivedOnLcl) {
-            await this.#acknowledgeMaturity().catch(console.error);
-            console.log(`Maturity acknowledgement sent.`);
+            await this.#acknowledgeMaturity().catch(error);
+            log(`Maturity acknowledgement sent.`);
         }
     }
 
@@ -316,12 +340,12 @@ class ClusterContext {
                             if (node) {
                                 this.clusterManager.markAsMatured(message.data, this.hpContext.lclSeqNo)
                                 response.status = ClusterMessageResponseStatus.OK;
-                                console.log(`Maturity acknowledgement received from node ${message.data}.`);
+                                log(`Maturity acknowledgement received from node ${message.data}.`);
                             }
                         }
                     }
                     catch (e) {
-                        console.error(e);
+                        error(e);
                     }
                     finally {
                         await user.send(JSON.stringify(response));
@@ -340,7 +364,7 @@ class ClusterContext {
                         response.data = this.clusterManager.getNodes();
                     }
                     catch (e) {
-                        console.error(e);
+                        error(e);
                     }
                     finally {
                         await user.send(JSON.stringify(response));
@@ -354,7 +378,7 @@ class ClusterContext {
             }
         }
         catch (e) {
-            console.error(e);
+            error(e);
         }
 
         return response;
@@ -388,6 +412,15 @@ class ClusterContext {
                         ...(options.instanceCfg?.config?.contract?.consensus ? options.instanceCfg.config.contract.consensus : {}),
                         roundtime: hpconfig.consensus.roundtime
                     }
+                },
+                mesh: {
+                    ...(options.instanceCfg?.config?.mesh ? options.instanceCfg.config.mesh : {}),
+                    peer_discovery: {
+                        // Disabling Dynamic Peer Discovery.(In order to mitigate adding previously removed peers again in to the known peer list)
+                        enabled: false,
+                        interval: options.instanceCfg?.config?.mesh?.peer_discovery?.interval ? options.instanceCfg.config.mesh.peer_discovery.interval : 30000
+                    },
+                    msg_forwarding: false
                 }
             }
         }
@@ -437,15 +470,27 @@ class ClusterContext {
         const node = this.clusterManager.getNode(pubkey);
 
         if (node?.signerAddress) {
-            // Sorting logic to determine new pubkey - start
-            const clusterNodes = this.getClusterNodes();
-            const nonQuorumNodes = clusterNodes.filter(n => !n.signerAddress).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
+            if ((node?.signerReplaceFailedAttempts || 0) < MAX_SIGNER_REPLACE_ATTEMPTS) {
+                // Sorting logic to determine new pubkey - start
+                const clusterNodes = this.getClusterNodes();
+                const nonQuorumNodes = clusterNodes.filter(n => !n.signerAddress).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
 
-            let newSignerPubkey = nonQuorumNodes[0]?.pubkey;
+                let newSignerPubkey = nonQuorumNodes[0]?.pubkey;
 
-            if (newSignerPubkey) {
-                const newAddress = await this.evernodeContext.xrplContext.replaceSignerList(pubkey, node.signerAddress, newSignerPubkey);
-                this.clusterManager.markAsQuorum(newSignerPubkey, newAddress);
+                if (newSignerPubkey) {
+                    log(`Replacing the signer ${pubkey} with ${newSignerPubkey}...`);
+                    try {
+                        const newAddress = await this.evernodeContext.xrplContext.replaceSignerList(pubkey, node.signerAddress, newSignerPubkey);
+                        this.clusterManager.markAsQuorum(newSignerPubkey, newAddress);
+                    }
+                    catch (e) {
+                        this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
+                        throw e;
+                    }
+                }
+            }
+            else {
+                error(`${MAX_SIGNER_REPLACE_ATTEMPTS} attempts on signer replacement failed, Skipping the signer replacement.`);
             }
         }
 
