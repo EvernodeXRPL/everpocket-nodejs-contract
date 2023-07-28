@@ -2,14 +2,9 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rsmLXFmK3JXBhrgkSdKwZajw5aZGytwSYM";
-const masterSecret = "ssfa1M58u9MS6ydeiVfLMm15fDGym";
-// const masterAddress = "rEPcjCRnb92LLBpszboyn9Qf9uvTk3nNET";
-// const masterSecret = "ssnUDXJicaoaQ67K1Fjw9m7NqwPNb";
-// const masterAddress = "rNZqGPtr4EqzQXua7Wnw8gphcSrmms11KC";
-// const masterSecret = "sniJWbbBKMXaDJMGXedPsdQn6e8Wy";
-// const masterAddress = "rURjJ56b1QCpLhLsgCDybprwHqoxWXEoWB";
-// const masterSecret = "sscek7fSNqzCG1vniQWbEATu8qA9N";
+const masterAddress = "r3HfHxf6LeY8y1SGWHoKRRrUGdxruJyXEL";
+const masterSecret = "sniK4psjdEXiogzMjQZonjVvZwmSP";
+
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
 const ip = "localhost";
@@ -296,39 +291,6 @@ const runNomadContract = async (nomadContext) => {
 
     console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
     console.log("Unl: ", nomadContext.clusterContext.hpContext.getContractUnl().map(n => n.publicKey));
-
-    //////////////////// Start of test code for the streamer ////////////////////
-
-    if (nomadContext.hpContext.lclSeqNo % 5 === 0) {
-        try {
-            const ws = require('ws');
-
-            const port = 8080;
-            const ip = '45.76.178.184';
-            const address = `ws://${ip}:${port}`;
-            const message = {
-                contract_id: nomadContext.hpContext.contractId,
-                cluster: nomadContext.clusterContext.getClusterNodes()
-            };
-
-            const connection = new ws(address)
-
-            connection.onopen = () => {
-                connection.send(JSON.stringify(message));
-                connection.close();
-            }
-
-            connection.onerror = (error) => {
-                connection.close();
-                throw error;
-            }
-        }
-        catch (e) {
-            console.error('Stream web socket error: ', e);
-        }
-    }
-
-    ///////////////////// End of test code for the streamer /////////////////////
 
     await nomadContext.init();
 }
