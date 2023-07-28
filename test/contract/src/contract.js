@@ -2,8 +2,8 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-// const masterAddress = "rsmLXFmK3JXBhrgkSdKwZajw5aZGytwSYM";
-// const masterSecret = "ssfa1M58u9MS6ydeiVfLMm15fDGym";
+const masterAddress = "rsmLXFmK3JXBhrgkSdKwZajw5aZGytwSYM";
+const masterSecret = "ssfa1M58u9MS6ydeiVfLMm15fDGym";
 // const masterAddress = "rEPcjCRnb92LLBpszboyn9Qf9uvTk3nNET";
 // const masterSecret = "ssnUDXJicaoaQ67K1Fjw9m7NqwPNb";
 // const masterAddress = "rNZqGPtr4EqzQXua7Wnw8gphcSrmms11KC";
@@ -82,10 +82,10 @@ const nomadOptions = {
 
 const testContract = async (contractCtx) => {
     let nonSigners = [];
-    // if (contractCtx.unl.list().length > 3)
-    //     nonSigners = (contractCtx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
-    // if (!nonSigners.length || nonSigners.length === contractCtx.unl.list().length)
-    //     nonSigners = contractCtx.unl.list().slice(0, 1).map(n => n.publicKey);
+    if (contractCtx.unl.list().length > 3)
+        nonSigners = (contractCtx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
+    if (!nonSigners.length || nonSigners.length === contractCtx.unl.list().length)
+        nonSigners = contractCtx.unl.list().slice(0, 1).map(n => n.publicKey);
 
     const signerToAdd = nonSigners.length ? nonSigners[0] : null;
     const signerCount = contractCtx.unl.list().length - nonSigners.length;
@@ -102,13 +102,13 @@ const testContract = async (contractCtx) => {
         });
 
         ///////// TODO: This part is temporary for preparing multisig /////////
-        // if (!fs.existsSync('multisig')) {
-        //     const isSigner = !nonSigners.includes(hpContext.publicKey);
+        if (!fs.existsSync('multisig')) {
+            const isSigner = !nonSigners.includes(hpContext.publicKey);
 
-        //     await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
+            await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
 
-        //     fs.writeFileSync('multisig', '');
-        // }
+            fs.writeFileSync('multisig', '');
+        }
         ///////////////////////////////////////////////////////////////////////
     }
 
@@ -144,7 +144,7 @@ const testContract = async (contractCtx) => {
             // () => extendNode(evernodeContext),
             // () => addNewClusterNode(clusterContext),
             // () => removeNode(clusterContext),
-            () => runNomadContract(nomadContext)
+            // () => runNomadContract(nomadContext)
         ];
 
         try {
@@ -184,7 +184,7 @@ const testVote = async (voteContext) => {
     console.log('Second round votes', secondList);
     fs.appendFileSync('second.txt', secondList?.length ? secondList.sort()[0].toString() : '');
     const thirdList = (await r3).map(v => v.data);
-    console.log('Second round votes', thirdList);
+    console.log('Third round votes', thirdList);
     fs.appendFileSync('thir.txt', thirdList?.length ? JSON.stringify(thirdList.sort()) : '');
 }
 

@@ -29,7 +29,7 @@ class XrplContext {
         this.hpContext = hpContext;
         this.voteContext = hpContext.voteContext;
         // Do not handle connection failures in XrplApi to avoid contract hanging.
-        this.xrplApi = options.xrplApi || new evernode.XrplApi(null, { handleConnectionFailures: false });
+        this.xrplApi = options.xrplApi || new evernode.XrplApi(null, { autoReconnect : false ,isPermanentlyDisconnected: true });
         this.xrplAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
         this.multiSigner = new MultiSigner(this.xrplAcc);
 
