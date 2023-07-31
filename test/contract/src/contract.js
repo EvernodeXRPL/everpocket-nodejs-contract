@@ -134,7 +134,7 @@ const testContract = async (contractCtx) => {
             // () => removeXrplSigner(xrplContext, signerToRemove, quorum - signerWeight),
             // () => getSignerList(xrplContext),
             // () => multiSignTransaction(xrplContext),
-            // () => checkLiveness(utilityContext, ip, port),
+            // () => checkLiveness(hpContext, ip, port),
             // () => acquireNewNode(evernodeContext),
             // () => extendNode(evernodeContext),
             // () => addNewClusterNode(clusterContext),
@@ -336,8 +336,10 @@ const multiSignTransaction = async (xrplContext) => {
 }
 
 // Checking Hot Pocket liveness.
-const checkLiveness = async (utilityContext, ip, port) => {
-    const checkLiveness = await utilityContext.checkLiveness(ip, port);
+const checkLiveness = async (hpContext, ip, port) => {
+
+    const peer = new evp.Peer(ip, port);
+    const checkLiveness = await hpContext.checkLiveness(peer);
 
     console.log(`Hotpocket liveness ${checkLiveness}`);
 }
