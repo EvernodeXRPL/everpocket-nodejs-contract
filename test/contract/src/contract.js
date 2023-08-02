@@ -292,6 +292,40 @@ const runNomadContract = async (nomadContext) => {
     console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
     console.log("Unl: ", nomadContext.clusterContext.hpContext.getContractUnl().map(n => n.publicKey));
 
+    //////////////////// Start of test code for the streamer ////////////////////
+
+    const data = fs.existsSync("streamer.config") && fs.readFileSync("streamer.config", 'utf8');
+    const streamerCfg = data ? JSON.parse(data) : {};
+    const isValidStreamer = streamerCfg?.ip?.length > 0 && streamerCfg?.port > 0;
+
+    if (isValidStreamer && nomadContext.hpContext.lclSeqNo % 5 === 0) {
+        try {
+            const ws = require('ws');
+
+            const address = `ws://${streamerCfg.ip}:${streamerCfg.port}`;
+            const message = {
+                contract_id: nomadContext.hpContext.contractId,
+                cluster: nomadContext.clusterContext.getClusterNodes()
+            };
+
+            const connection = new ws(address)
+
+            connection.onopen = () => {
+                connection.send(JSON.stringify(message));
+                connection.close();
+            }
+
+            connection.onerror = (error) => {
+                connection.close();
+                throw error;
+            }
+        }
+        catch (e) {
+            console.error('Stream web socket error: ', e);
+        }
+    }
+
+    ///////////////////// End of test code for the streamer /////////////////////
     await nomadContext.init();
 }
 
