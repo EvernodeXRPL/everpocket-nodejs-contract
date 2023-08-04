@@ -292,7 +292,7 @@ const runNomadContract = async (nomadContext) => {
     console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
     console.log("Unl: ", nomadContext.clusterContext.hpContext.getContractUnl().map(n => n.publicKey));
 
-    //////////////////// Start of test code for the streamer ////////////////////
+    // ////////////////// Start of the code for cluster info streaming ////////////////////
 
     const data = fs.existsSync("streamer.config") && fs.readFileSync("streamer.config", 'utf8');
     const streamerCfg = data ? JSON.parse(data) : {};
@@ -325,7 +325,7 @@ const runNomadContract = async (nomadContext) => {
         }
     }
 
-    ///////////////////// End of test code for the streamer /////////////////////
+    ///////////////////// End of the code for cluster info streaming /////////////////////
     await nomadContext.init();
 }
 
