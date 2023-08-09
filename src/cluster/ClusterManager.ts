@@ -159,15 +159,15 @@ class ClusterManager {
     }
 
     /**
-     * Update the life moments of the node.
+     * Increase life moments of the node.
      * @param pubkey Public key of the node.
-     * @param lifeMoments Life moments value.
+     * @param increment Life moments value to incement.
      */
-    public updateLifeMoments(pubkey: string, lifeMoments: number): void {
+    public increaseLifeMoments(pubkey: string, increment: number): void {
         const index = this.clusterData.nodes.findIndex(n => n.pubkey === pubkey);
 
         if (index >= 0) {
-            this.clusterData.nodes[index].lifeMoments = lifeMoments;
+            this.clusterData.nodes[index].lifeMoments += increment;
             this.updated = true;
         }
     }

@@ -46,8 +46,9 @@ class NomadContext {
     public async grow(): Promise<void> {
         // Acquire one by one to avoid contract hanging.
         const totalCount = this.clusterContext.totalCount();
+        const queueCount = this.clusterContext.addNodeQueueCount();
         // If the pending nodes + cluster node count is less than target node count we need to add missing nodes.
-        if (this.options.targetNodeCount > totalCount) {
+        if (this.options.targetNodeCount > (totalCount + queueCount)) {
             if (!this.options.parallelGrow) {
                 // Skip growing if there are node which are not yet added to Unl (Still syncing) or pending.
                 // This will grow the cluster one by one.

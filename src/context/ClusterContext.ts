@@ -2,13 +2,14 @@ import { AcquireOptions } from "../models/evernode";
 import { Peer, User } from "../models";
 import { Buffer } from 'buffer';
 import { EvernodeContext, VoteContext } from "../context";
-import { ClusterOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
+import { ClusterOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode, OperationData, OperationType, AddNodeOperation, ExtendNodeOperation, RemoveNodeOperation } from "../models/cluster";
 import { ClusterManager } from "../cluster";
 import { AllVoteElector } from "../vote/vote-electors";
 import { VoteElectorOptions } from "../models/vote";
 import HotPocketContext from "./HotPocketContext";
-import { error, log } from "../helpers/logger";
+import { error, info, log } from "../helpers/logger";
 import * as fs from 'fs';
+import { JSONHelpers } from "../utils";
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
 const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.test-0.1.1-ubt.20.04-njs.20";
@@ -18,6 +19,9 @@ const MAX_SIGNER_REPLACE_ATTEMPTS = 5;
 const TIMEOUT = 10000;
 
 class ClusterContext {
+    private operationDataFile: string = "operations.json";
+    private operationData: OperationData = { operations: [] };
+    private updatedData: boolean = false;
     private clusterManager: ClusterManager;
     private userMessageProcessing: boolean;
     private maturityLclThreshold: number;
@@ -33,6 +37,12 @@ class ClusterContext {
         this.clusterManager = new ClusterManager();
         this.maturityLclThreshold = options.maturityLclThreshold || MATURITY_LCL_THRESHOLD;
         this.userMessageProcessing = false;
+
+        const data = JSONHelpers.readFromFile<OperationData>(this.operationDataFile);
+        if (data)
+            this.operationData = data;
+        else
+            JSONHelpers.writeToFile(this.operationDataFile, this.operationData);
     }
 
     /**
@@ -51,6 +61,7 @@ class ClusterContext {
             await this.#checkForMatured();
             await this.#checkForAcknowledged();
             await this.#checkForExtends();
+            await this.#processOperations();
             this.initialized = true;
         } catch (e) {
             await this.deinit();
@@ -63,8 +74,142 @@ class ClusterContext {
      */
     public async deinit(): Promise<void> {
         this.clusterManager.persist();
+        this.#persistOperationData();
         await this.evernodeContext.deinit();
         this.initialized = false;
+    }
+
+    /**
+     * Persist details of operations.
+     */
+    #persistOperationData(): void {
+        if (!this.updatedData)
+            return;
+
+        try {
+            JSONHelpers.writeToFile(this.operationDataFile, this.operationData);
+        } catch (error) {
+            throw `Error writing file ${this.operationDataFile}: ${error}`;
+        }
+    }
+
+    /**
+     * Get the queued add node operations.
+     * @returns Total number of cluster nodes.
+     */
+    public addNodeQueueCount(): number {
+        return this.operationData.operations.filter(o => o.type === OperationType.ADD_NODE).length;
+    }
+
+    /**
+     * Queue an operation in the queue.
+     */
+    #queueOperation(type: OperationType, data: AddNodeOperation | ExtendNodeOperation | RemoveNodeOperation) {
+        this.operationData.operations.push({
+            type: type,
+            data: data
+        });
+        this.updatedData = true;
+    }
+
+    /**
+     * Process operations one by one at each execution.
+     */
+    async #processOperations() {
+        if (this.operationData.operations.length === 0)
+            return;
+
+        info(`Operations processor started.`);
+
+        const operation = this.operationData.operations.splice(0, 1)[0];
+        this.updatedData = true;
+
+        if (operation.type === OperationType.ADD_NODE) {
+            const data = operation.data as AddNodeOperation;
+
+            log(`Acquiring a new node...`);
+            let acquire = (await this.evernodeContext.acquireNode(data.acquireOptions)) as PendingNode;
+            acquire.targetLifeMoments = data.lifeMoments;
+            acquire.aliveCheckCount = 0;
+
+            this.clusterManager.addPending(acquire);
+        }
+        else if (operation.type === OperationType.EXTEND_NODE) {
+            const data = operation.data as ExtendNodeOperation;
+            const clusterNodes = this.getClusterNodes();
+            const pendingExtend = clusterNodes.find(n => n.pubkey === data.nodePubkey);
+
+            if (pendingExtend) {
+                try {
+                    log(`Extending node ${pendingExtend?.pubkey} by ${data.moments}...`);
+                    const res = await this.evernodeContext.extendSubmit(pendingExtend.host, data.moments, pendingExtend.name);
+                    if (res)
+                        this.clusterManager.increaseLifeMoments(pendingExtend.pubkey, data.moments);
+                } catch (e) {
+                    error(e)
+                }
+            }
+        }
+        else if (operation.type === OperationType.REMOVE_NODE) {
+            const data = operation.data as RemoveNodeOperation;
+
+            // If there ares pending acquires, There could be issues while removing the node.
+            if (!data.force && this.getPendingNodes().length > 0)
+                throw 'Nodes cannot be removed, There are pending acquires.'
+
+            const pubkey = data.nodePubkey;
+            const node = this.clusterManager.getNode(pubkey);
+
+            log(`Removing the node ${pubkey}...`);
+            
+            if (node?.signerAddress) {
+                if ((node?.signerReplaceFailedAttempts || 0) < MAX_SIGNER_REPLACE_ATTEMPTS) {
+                    // Sorting logic to determine new pubkey - start
+                    const clusterNodes = this.getClusterNodes();
+                    const nonQuorumNodes = clusterNodes.filter(n => !n.signerAddress).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
+
+                    let newSignerPubkey = nonQuorumNodes[0]?.pubkey;
+
+                    if (newSignerPubkey) {
+                        log(`Replacing the signer ${pubkey} with ${newSignerPubkey}...`);
+                        try {
+                            const newAddress = await this.evernodeContext.xrplContext.replaceSignerList(pubkey, node.signerAddress, newSignerPubkey);
+                            this.clusterManager.markAsQuorum(newSignerPubkey, newAddress);
+                        }
+                        catch (e) {
+                            this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
+                            throw e;
+                        }
+                    } else {
+                        this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
+                        throw `No NON-Quorum node was found to replace ${pubkey} signer node.`;
+                    }
+                }
+                else {
+                    error(`${MAX_SIGNER_REPLACE_ATTEMPTS} attempts on signer replacement failed, Skipping the signer replacement.`);
+                }
+            }
+
+            // Update patch config if node exists in UNL.
+            let config = await this.hpContext.getContractConfig();
+            const idx = config.unl.findIndex((p: string) => p === pubkey);
+            if (idx > -1) {
+                config.unl.splice(idx, 1);
+                await this.hpContext.updateContractConfig(config);
+            }
+
+            // Update peer list.
+            if (node) {
+                if (node?.ip && node?.peerPort) {
+                    let peer = `${node?.ip}:${node?.peerPort}`
+                    await this.hpContext.updatePeers(null, [peer]);
+                }
+
+                this.clusterManager.removeNode(pubkey);
+            }
+        }
+
+        info(`Operations processor ended.`);
     }
 
     /**
@@ -191,18 +336,13 @@ class ClusterContext {
      */
     async #checkForExtends(): Promise<void> {
         const clusterNodes = this.getClusterNodes();
-        const pendingExtends = clusterNodes.filter(n => n.targetLifeMoments > n.lifeMoments);
+        const pendingExtend = clusterNodes.find(n => n.targetLifeMoments > n.lifeMoments);
 
-        for (const pendingExtend of pendingExtends) {
-            const extension = pendingExtend.targetLifeMoments - pendingExtend.lifeMoments;
-            try {
-                log(`Extending node ${pendingExtend.pubkey} by ${extension}.`);
-                const res = await this.evernodeContext.extendSubmit(pendingExtend.host, extension, pendingExtend.name);
-                if (res)
-                    this.clusterManager.updateLifeMoments(pendingExtend.pubkey, pendingExtend.lifeMoments + extension);
-            } catch (e) {
-                error(e)
-            }
+        if (pendingExtend) {
+            this.#queueOperation(OperationType.EXTEND_NODE, <ExtendNodeOperation>{
+                nodePubkey: pendingExtend.pubkey,
+                moments: pendingExtend.targetLifeMoments - pendingExtend.lifeMoments
+            });
         }
     }
 
@@ -425,11 +565,10 @@ class ClusterContext {
             }
         }
 
-        let acquire = (await this.evernodeContext.acquireNode(options)) as PendingNode;
-        acquire.targetLifeMoments = lifeMoments;
-        acquire.aliveCheckCount = 0;
-
-        this.clusterManager.addPending(acquire);
+        this.#queueOperation(OperationType.ADD_NODE, <AddNodeOperation>{
+            acquireOptions: options,
+            lifeMoments: lifeMoments
+        });
     }
 
     /**
@@ -463,57 +602,10 @@ class ClusterContext {
      * @param [force=false] Force remove. (This might cause to fail some pending operations).
      */
     public async removeNode(pubkey: string, force: boolean = false): Promise<void> {
-        // If there ares pending acquires, There could be issues while removing the node.
-        if (!force && this.getPendingNodes().length > 0)
-            throw 'Nodes cannot be removed, There are pending acquires.'
-
-        const node = this.clusterManager.getNode(pubkey);
-
-        if (node?.signerAddress) {
-            if ((node?.signerReplaceFailedAttempts || 0) < MAX_SIGNER_REPLACE_ATTEMPTS) {
-                // Sorting logic to determine new pubkey - start
-                const clusterNodes = this.getClusterNodes();
-                const nonQuorumNodes = clusterNodes.filter(n => !n.signerAddress).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
-
-                let newSignerPubkey = nonQuorumNodes[0]?.pubkey;
-
-                if (newSignerPubkey) {
-                    log(`Replacing the signer ${pubkey} with ${newSignerPubkey}...`);
-                    try {
-                        const newAddress = await this.evernodeContext.xrplContext.replaceSignerList(pubkey, node.signerAddress, newSignerPubkey);
-                        this.clusterManager.markAsQuorum(newSignerPubkey, newAddress);
-                    }
-                    catch (e) {
-                        this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
-                        throw e;
-                    }
-                } else {
-                    this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
-                    throw `No NON-Quorum node was found to replace ${pubkey} signer node.`;
-                }
-            }
-            else {
-                error(`${MAX_SIGNER_REPLACE_ATTEMPTS} attempts on signer replacement failed, Skipping the signer replacement.`);
-            }
-        }
-
-        // Update patch config if node exists in UNL.
-        let config = await this.hpContext.getContractConfig();
-        const index = config.unl.findIndex((p: string) => p === pubkey);
-        if (index > -1) {
-            config.unl.splice(index, 1);
-            await this.hpContext.updateContractConfig(config);
-        }
-
-        // Update peer list.
-        if (node) {
-            if (node?.ip && node?.peerPort) {
-                let peer = `${node?.ip}:${node?.peerPort}`
-                await this.hpContext.updatePeers(null, [peer]);
-            }
-
-            this.clusterManager.removeNode(pubkey);
-        }
+        this.#queueOperation(OperationType.REMOVE_NODE, <RemoveNodeOperation>{
+            nodePubkey: pubkey,
+            force: force
+        })
     }
 }
 
