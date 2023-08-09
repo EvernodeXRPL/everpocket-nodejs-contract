@@ -1,4 +1,4 @@
-import { AcquiredNode, PendingAcquire } from "../evernode";
+import { AcquireOptions, AcquiredNode, PendingAcquire } from "../evernode";
 
 export interface ClusterOptions {
   maturityLclThreshold?: number;
@@ -39,6 +39,30 @@ export interface ClusterMessageResponse {
   data?: any;
 }
 
+export interface AddNodeOperation {
+  acquireOptions: AcquireOptions;
+  lifeMoments: number;
+}
+
+export interface ExtendNodeOperation {
+  nodePubkey: string;
+  moments: number;
+}
+
+export interface RemoveNodeOperation {
+  nodePubkey: string;
+  force: boolean;
+}
+
+export interface Operation {
+  type: OperationType,
+  data: AddNodeOperation | ExtendNodeOperation | RemoveNodeOperation
+}
+
+export interface OperationData {
+  operations: Operation[]
+}
+
 export enum ClusterMessageType {
   MATURED = "maturity_ack",
   CLUSTER_NODES = "cluster_nodes",
@@ -49,4 +73,10 @@ export enum ClusterMessageResponseStatus {
   OK = "ok",
   FAIL = "fail",
   UNHANDLED = "unhandled"
+}
+
+export enum OperationType {
+  ADD_NODE = "add_node",
+  EXTEND_NODE = "extend_node",
+  REMOVE_NODE = "remove_node"
 }
