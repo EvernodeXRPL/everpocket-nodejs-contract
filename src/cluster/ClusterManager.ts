@@ -18,8 +18,8 @@ class ClusterManager {
      * Persist details of cluster.
      */
     public persist(): void {
-        if (!this.updated)
-            return;
+        // if (!this.updated)
+        //     return;
 
         try {
             JSONHelpers.writeToFile(this.clusterDataFile, this.clusterData);

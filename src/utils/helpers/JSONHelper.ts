@@ -1,4 +1,6 @@
 import * as fs from 'fs';
+import { log } from '../../helpers/logger';
+
 
 class JSONHelpers {
     /**
@@ -41,6 +43,14 @@ class JSONHelpers {
      * @param obj Json object to be written.
      */
     public static writeToFile(filePath: string, obj: any) {
+        // eslint-disable-next-line no-undef
+        const currdir = process.cwd();
+        log(`Current working directory: ${currdir}`);
+        if (fs.existsSync("/contract/contract_fs/mnt/")) {
+            log('Directory exists!')
+        } else {
+            log('Directory not found.')
+        }
         const stringified = JSON.stringify(obj, null, 4); // convert the updated data back to JSON string
         fs.writeFileSync(filePath, stringified);
     }

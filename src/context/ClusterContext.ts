@@ -11,7 +11,7 @@ import { error, log } from "../helpers/logger";
 import * as fs from 'fs';
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
-const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.20";
+const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.test-0.1.1-ubt.20.04-njs.20";
 const ALIVENESS_CHECK_THRESHOLD = 5;
 const MATURITY_LCL_THRESHOLD = 2;
 const MAX_SIGNER_REPLACE_ATTEMPTS = 5;
@@ -96,12 +96,12 @@ class ClusterContext {
         // This flag file is written at the first execution of the contract.
         const isDefinedPeers = fs.existsSync('../flag_init_peers');
         if (!isDefinedPeers || this.hpContext.lclSeqNo % 4 === 1) {
-            console.log("Peer list Updating..");
+            log("Peer list Updating..");
             const detailedClusterNodes = this.clusterManager.getNodes();
             const knownPeers = detailedClusterNodes.filter(n => n.isUnl && n.pubkey !== this.hpContext.publicKey).map(kp => { return `${kp.ip}:${kp.peerPort}` });
             if (knownPeers) {
                 await this.hpContext.updatePeers(knownPeers);
-                console.log(`Peer list was updated with ${knownPeers.length} peers.`);
+                log(`Peer list was updated with ${knownPeers.length} peers.`);
             }
 
             if (!isDefinedPeers)
@@ -417,10 +417,10 @@ class ClusterContext {
                     ...(options.instanceCfg?.config?.mesh ? options.instanceCfg.config.mesh : {}),
                     peer_discovery: {
                         // Disabling Dynamic Peer Discovery.(In order to mitigate adding previously removed peers again in to the known peer list)
-                        enabled: false,
+                        enabled: true,
                         interval: options.instanceCfg?.config?.mesh?.peer_discovery?.interval ? options.instanceCfg.config.mesh.peer_discovery.interval : 30000
                     },
-                    msg_forwarding: false
+                    msg_forwarding: true
                 }
             }
         }

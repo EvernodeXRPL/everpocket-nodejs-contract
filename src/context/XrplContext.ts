@@ -12,7 +12,7 @@ import { error, log } from '../helpers/logger';
 
 const TIMEOUT = 10000;
 const TRANSACTION_VOTE_THRESHOLD = 0.5;
-const VOTE_PERCENTAGE_THRESHOLD = 80;
+const VOTE_PERCENTAGE_THRESHOLD = 60;
 
 class XrplContext {
     private transactionDataFile: string = "transactions.json";
@@ -44,8 +44,13 @@ class XrplContext {
      * Initialize the xrpl context.
      */
     public async init(): Promise<void> {
+        log("Connecting to XRPL API...");
         await this.xrplApi.connect();
+        log("Connected to XRPL API...");
+
+        log("Loading to Signers...");
         await this.loadSignerList();
+        log("Loaded to Signers...");
         this.#checkSignerValidity();
         await this.#checkForValidateTransactions();
     }
@@ -62,8 +67,8 @@ class XrplContext {
      * Persist details of transactions.
      */
     #persistTransactionData(): void {
-        if (!this.updatedData)
-            return;
+        // if (!this.updatedData)
+        //     return;
 
         try {
             JSONHelpers.writeToFile(this.transactionDataFile, this.transactionData);

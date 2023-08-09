@@ -1,9 +1,11 @@
 const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
+const log = require('why-is-node-running');
 
-const masterAddress = "r3HfHxf6LeY8y1SGWHoKRRrUGdxruJyXEL";
-const masterSecret = "sniK4psjdEXiogzMjQZonjVvZwmSP";
+const masterAddress = "rs7beBkd3khAj7P2BnJ8ZnvxfK2KKYXE6d"
+
+// const masterAddress = "rEUtdNEcbqNmngxQSR7kmw9LA8HUjndR12"
 
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
@@ -16,55 +18,11 @@ const MAX_ACQUIRES = 5;
 const MAX_CLUSTER = 8;
 
 const nomadOptions = {
-    targetNodeCount: 25,
+    targetNodeCount: 20,
     targetLifeMoments: 10,
     preferredHosts: [
-        "rP4zJ6ZWoHYC8cj6GkWHyiUJT15xwzLCLm",
-        "rwqWhVJZ1SgXBBpBNQ194sdDNBbUZTaTem",
-        "rLkSafYKvf5vBfFyQMVB6touhUnS6j5HR9",
-        "rKUq1MnzfqnZAUArkE2ttL1n4UavwUzGrn",
-        "rahTwEZefDFtShmgjsArNzxTCT8Zj8HXKN",
-        "rw4fF5LDQsonyoYiEYrgPgTC2asnCQQZ6g",
-        "rrssGm5h8aWncB3CGMuQ2WGfexubbeCTLV",
-        "rEmGJ3uu7DSrNfM5JSZnFtMjYhLbSmVJ3A",
-        "rfBQaUjF9UZWjdJ33hGDeas1hEXK7DmfCV",
-        "r4dVikgRzdVuZcFfMWJWiUo8iJxmYGDmiS",
-        "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
-        "rKqDVS5fYEWDNivosnFiri1bXfqt2ebj7q",
-        "rErmdQZLmAauqjY7ig8KeLAGhfxeVAHHnA",
-        "rnG2Q9cqrmCvWNZvMG4JHzG96deqEg5HDx",
-        "rB2SBLDLBUwaUV2QegZxoztpkJLgh1Kvcx",
-        "r4LF5L5tq7JdsAUY5YUXjAU1J6xZtm47HP",
         "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
-        "rGnsENqQKqPNQKWMSNxbZcMuubjJaaBpf5",
-        "rMaHq7P7ibkbeiykRGyTsdyFEDBRGrLdx6",
-        "rHJqCseZFzCveSTdtJuDNpD4ARoMy41E1C",
-        "rMu8RLEKTtyWuhko1F5dVZoUAiVpRpi5GB",
-        "rhsBuUnoV1yGSpSVYgzFMFeTcFLvg8ZQnh",
-        "rhYqbRQpSy7RtQtXjfurprdB4Gj8PAJW2X",
-        "rfZFCjpFD1zhJP3DsSWy9NVUCmm9Kkhg4w",
-        "raRpwPCbMGfTgEDnHD7nQCUYbXwkNYKThA",
-        "rD6Lgdxzq3dr42JD4F1bwF86BaCwAaeQWu",
-        "rfuvNytxfavNgN57WqGfQR3duhUAsy8PEY",
-        "rHf3nHTdrMRKwP8hVXifsZAGQxhixmrvgu",
-        "r3VUJWNCHxq5yV1fcfXPaJ3ozcL2SSy88F",
-        "rDMiTtcVEnSvoeS8uh71fS2vdpQpP33gCN",
-        "rDt8RqBshBPGRgeWdjpBRzoMYxmLwZKCKo",
-        "rEtBQShEjRXGPVC9AsmySJSaVtSsVZcR6p",
-        "rsuXd4vQpzyktVhxNMEZdgKLLmA1j4VJQi",
-        "rNcXiJ89mQ8ZEx6Wfwq9eMd9mXXn5JSSKs",
-        "r4HrG4pxwdbfdqDQkaVKHeCVjLmNfKsyTE",
-        "rQLYPp4iGPraESkvkw6Ta5kacgigAabYQQ",
-        "rstzrHRW8RMo6Gmvme7DAnbAnZP8VesbA2",
-        "rKrSVLgaKQANTSEv1bY4cT4PVThCzFXpX6",
-        "r3Y9u4azTbcT95Ja7CDJzUHXV7N3sCSKP1",
-        "rhKW2ihYKtd71yeuZK7f2KPXBXJ6byVdVo",
-        "rKqvyMy6T4Uuefutu242yVKrtqRRwLxm7a",
-        "rH1NTQ73pksxX7Z8rEN6XrcibgEd34uJXo",
-        "rMCwzwHRLr8CtHW4RkSXSyTT79Srhn3fYn",
-        "rDVBMoZ6QcMS12Ty3aBNwrNPPfvHHdvkde",
-        "rL8TFrxk2tAAeRdf2z8AwoNeEdkEhvybk5",
-        "rKuuh8E2HR4wxxKDu8whZZw7icgSHxq8aE"
+        "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N"
     ],
     instanceCfg: {
         config: {
@@ -76,11 +34,21 @@ const nomadOptions = {
 }
 
 const testContract = async (contractCtx) => {
+
+    const currwd = process.cwd();
+    info("Start: State Files-------------------------------")
+    info("Current WD: ", currwd);
+    fs.readdirSync(currwd).forEach(file => {
+        info("File: ", file);
+    });
+    info("End : State Files-------------------------------")
+
+
     let nonSigners = [];
-    if (contractCtx.unl.list().length > 3)
-        nonSigners = (contractCtx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
-    if (!nonSigners.length || nonSigners.length === contractCtx.unl.list().length)
-        nonSigners = contractCtx.unl.list().slice(0, 1).map(n => n.publicKey);
+    // if (contractCtx.unl.list().length > 3)
+    //     nonSigners = (contractCtx.unl.list().filter(n => n.publicKey.charCodeAt(9) % 2 === 0)).map(n => n.publicKey);
+    // if (!nonSigners.length || nonSigners.length === contractCtx.unl.list().length)
+    //     nonSigners = contractCtx.unl.list().slice(0, 1).map(n => n.publicKey);
 
     const signerToAdd = nonSigners.length ? nonSigners[0] : null;
     const signerCount = contractCtx.unl.list().length - nonSigners.length;
@@ -97,13 +65,13 @@ const testContract = async (contractCtx) => {
         });
 
         ///////// TODO: This part is temporary for preparing multisig /////////
-        if (!fs.existsSync('multisig')) {
-            const isSigner = !nonSigners.includes(hpContext.publicKey);
+        // if (!fs.existsSync('multisig')) {
+        //     const isSigner = !nonSigners.includes(hpContext.publicKey);
 
-            await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
+        //     await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
 
-            fs.writeFileSync('multisig', '');
-        }
+        //     fs.writeFileSync('multisig', '');
+        // }
         ///////////////////////////////////////////////////////////////////////
     }
 
@@ -118,7 +86,7 @@ const testContract = async (contractCtx) => {
         userHandlers.push(new Promise(async (resolve) => {
             for (const input of user.inputs) {
                 const buf = await contractCtx.users.read(input);
-                console.log("Received user input", buf.toString());
+                info("Received user input", buf.toString());
                 await clusterContext.feedUserMessage(user, buf);
             }
             resolve();
@@ -139,7 +107,7 @@ const testContract = async (contractCtx) => {
             // () => extendNode(evernodeContext),
             // () => addNewClusterNode(clusterContext),
             // () => removeNode(clusterContext),
-            // () => runNomadContract(nomadContext)
+            () => runNomadContract(nomadContext)
         ];
 
         try {
@@ -152,12 +120,30 @@ const testContract = async (contractCtx) => {
         }
         finally {
             // Deinitialize at the end of the execution.
+            info("DEINIT-XRPL-CONTEXT");
             await xrplContext.deinit();
+            info("DEINIT-EVERNODE-CONTEXT");
             await evernodeContext.deinit();
+            info("DEINIT-CLSUTER-CONTEXT");
             await clusterContext.deinit();
+            info("DEINIT-NOMAD-CONTEXT");
             await nomadContext.deinit();
+            info("DEINITS-COMPLETED");
         }
     }
+
+    log();
+}
+
+const getDate = () => {
+    return new Date().toISOString().
+        replace(/T/, ' ').       // Replace T with a space.
+        replace(/\..+/, '').     // Delete the dot and everything after.
+        replace(/-/g, '');     // Delete the dashes.
+}
+
+const info = (...args) => {
+    console.log(`${getDate()}:`, ...args);
 }
 
 // Voting examples.
@@ -214,7 +200,7 @@ const acquireNewNode = async (evernodeContext) => {
         instanceCfg: {
             ownerPubkey: "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9834bafb",
             contractId: "dc411912-bcdd-4f73-af43-32ec45844b9a",
-            image: "evernodedev/sashimono:hp.latest-ubt.20.04-njs.16",
+            image: "evernodedev/sashimono:hp.test-0.1.1-ubt.20.04-njs.20",
             config: {}
         }
     }
@@ -282,15 +268,16 @@ const removeNode = async (clusterContext) => {
 }
 
 const runNomadContract = async (nomadContext) => {
+    info("Entered Nomad Contract...");
     await nomadContext.clusterContext.init();
 
     const pendingNodes = nomadContext.clusterContext.getPendingNodes();
     const clusterNodes = nomadContext.clusterContext.getClusterNodes();
 
-    console.log(`There are ${pendingNodes.length} pending nodes and ${clusterNodes.length} cluster nodes.`);
+    info(`There are ${pendingNodes.length} pending nodes and ${clusterNodes.length} cluster nodes.`);
 
-    console.log("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
-    console.log("Unl: ", nomadContext.clusterContext.hpContext.getContractUnl().map(n => n.publicKey));
+    info("Cluster nodes: ", clusterNodes.map(c => c.pubkey));
+    info("Unl: ", nomadContext.clusterContext.hpContext.getContractUnl().map(n => n.publicKey));
 
     // ////////////////// Start of the code for cluster info streaming ////////////////////
 
@@ -321,12 +308,13 @@ const runNomadContract = async (nomadContext) => {
             }
         }
         catch (e) {
-            console.error('Stream web socket error: ', e);
+            console.error(`${getDate()}:`,'Stream web socket error: ', e);
         }
     }
 
     ///////////////////// End of the code for cluster info streaming /////////////////////
     await nomadContext.init();
+    info("Exited Nomad Contract...");
 }
 
 const renewSignerList = async (xrplContext) => {

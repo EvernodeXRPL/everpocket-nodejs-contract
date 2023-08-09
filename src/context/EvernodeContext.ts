@@ -52,7 +52,9 @@ class EvernodeContext {
 
         try {
             this.registryClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
+            log("Connecting to Registry")
             await this.registryClient.connect();
+            log("Connected to Registry")
 
             await this.#checkForCompletedAcquires();
             this.initialized = true;
@@ -77,8 +79,8 @@ class EvernodeContext {
      * Persist details of acquires.
      */
     #persistAcquireData(): void {
-        if (!this.updatedData)
-            return;
+        // if (!this.updatedData)
+        //     return;
 
         try {
             JSONHelpers.writeToFile(this.acquireDataFile, this.acquireData);
@@ -327,13 +329,8 @@ class EvernodeContext {
         let sortCollection = collection.sort((a, b) => a.localeCompare(b));
 
         if (sortCollection[0] === keyPair.publicKey) {
-            fs.writeFile(`../${keyPair.publicKey}.txt`, keyPair.privateKey, (err) => {
-                if (err) {
-                    error(err);
-                    return;
-                }
-                log("Wrote Key file.");
-            });
+            fs.writeFileSync(`../${keyPair.publicKey}.txt`, keyPair.privateKey);
+            log("Wrote Key file.");
         }
 
         return collection[0];
