@@ -161,12 +161,12 @@ class ClusterContext {
             const node = this.clusterManager.getNode(pubkey);
 
             log(`Removing the node ${pubkey}...`);
-            
+
             if (node?.signerAddress) {
                 if ((node?.signerReplaceFailedAttempts || 0) < MAX_SIGNER_REPLACE_ATTEMPTS) {
                     // Sorting logic to determine new pubkey - start
-                    const clusterNodes = this.getClusterNodes();
-                    const nonQuorumNodes = clusterNodes.filter(n => !n.signerAddress).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
+                    const clusterUnlNodes = this.getClusterUnlNodes();
+                    const nonQuorumNodes = clusterUnlNodes.filter(n => !n.signerAddress).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
 
                     let newSignerPubkey = nonQuorumNodes[0]?.pubkey;
 
