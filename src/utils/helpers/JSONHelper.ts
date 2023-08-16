@@ -47,9 +47,9 @@ class JSONHelpers {
         const currdir = process.cwd();
         log(`Current working directory: ${currdir}`);
         if (fs.existsSync("/contract/contract_fs/mnt/")) {
-            log('Directory exists!')
+            log('Mount exists!')
         } else {
-            log('Directory not found.')
+            log('Mount not found.')
         }
         const stringified = JSON.stringify(obj, null, 4); // convert the updated data back to JSON string
         fs.writeFileSync(filePath, stringified);

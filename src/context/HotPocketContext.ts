@@ -85,7 +85,7 @@ class HotPocketContext {
                     await handleSuccess(data);
                 }
                 catch (e) {
-                    log("Handle Failure in performing action", e)
+                    error("Handle Failure in performing action", e)
                     await handleFailure(e);
                 }
             }
@@ -94,7 +94,7 @@ class HotPocketContext {
             }
         }
         catch (e) {
-            log("Handle Failure in Connecting", e)
+            error("Handle Failure in Connecting", e)
             await handleFailure(e);
         }
         return;
@@ -110,9 +110,9 @@ class HotPocketContext {
         return new Promise<boolean>(async (resolve, reject) => {
             await this.#connectAndHandle([node], () => {
                 log(`Hot Pocket live at wss://${address}`);
-            }, (data: any, error: any) => {
-                if (error) {
-                    error(error);
+            }, (data: any, err: any) => {
+                if (err) {
+                    error(err);
                     resolve(false);
                 }
                 else
@@ -200,7 +200,7 @@ class HotPocketContext {
      * @param toAdd Peer list to add.
      * @param [toRemove=[]] Peer list to remove.
      */
-    public async updatePeers(toAdd: string[] | null, toRemove: string[] | null = null): Promise<void> {
+    public async updatePeers(toAdd: string[] | null, toRemove: string[] | string | null = null): Promise<void> {
         await this.contractContext.updatePeers(toAdd, toRemove);
     }
 }

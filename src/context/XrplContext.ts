@@ -29,7 +29,7 @@ class XrplContext {
         this.hpContext = hpContext;
         this.voteContext = hpContext.voteContext;
         // autoReconnect: false - Do not handle connection failures in XrplApi to avoid contract hanging.
-        this.xrplApi = options.xrplApi || new evernode.XrplApi(null, { autoReconnect : false });
+        this.xrplApi = options.xrplApi || new evernode.XrplApi(null, { autoReconnect: false });
         this.xrplAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
         this.multiSigner = new MultiSigner(this.xrplAcc);
 
@@ -67,8 +67,8 @@ class XrplContext {
      * Persist details of transactions.
      */
     #persistTransactionData(): void {
-        // if (!this.updatedData)
-        //     return;
+        if (!this.updatedData)
+            return;
 
         try {
             JSONHelpers.writeToFile(this.transactionDataFile, this.transactionData);
@@ -136,7 +136,7 @@ class XrplContext {
         for (const item of this.getPendingTransactions()) {
             const txnInfo = await this.xrplApi.getTxnInfo(item.hash, {});
             if (txnInfo && txnInfo.validated) {
-                log(`Transaction validated with code ${txnInfo?.meta?.TransactionResult}.`);
+                log(`${txnInfo?.TransactionType} | Transaction validated with code ${txnInfo?.meta?.TransactionResult}.`);
                 this.#markTransactionAsValidated(txnInfo.hash, txnInfo.ledger_index, txnInfo.meta.TransactionResult);
                 return;
             }
@@ -263,7 +263,7 @@ class XrplContext {
     public async multiSignAndSubmitTransaction(transaction: any, options: MultiSignOptions = {}): Promise<any> {
         const txSubmitInfo = await this.getTransactionSubmissionInfo(options?.voteElectorOptions);
         if (!txSubmitInfo)
-            throw 'Could not get transaction submission info';
+            throw `${transaction.TransactionType} | Could not get transaction submission info`;
 
         transaction = { ...transaction, ...options.txOptions };
         transaction.Sequence = txSubmitInfo.sequence;
@@ -272,7 +272,7 @@ class XrplContext {
         const signerCount = this.signerListInfo?.signerList.length;
 
         if (!this.signerListInfo || !signerCount)
-            throw 'Could not get signer list';
+            throw `${transaction.TransactionType} | Could not get signer list`;
 
         transaction.Fee = `${Number(transaction.Fee) * (signerCount + 2)}`;
 
@@ -286,10 +286,16 @@ class XrplContext {
             const signed = await this.multiSigner.sign(transaction);
             const decodedTx = JSON.parse(JSON.stringify(xrplCodec.decode(signed)));
             const signature: Signature = decodedTx.Signers[0];
-            signatures = (await this.voteContext.vote(electionName, [signature], elector)).map(ob => ob.data);
+            const pollResults = (await this.voteContext.vote(electionName, [signature], elector)).map(ob => { return { pubkey: ob.sender.publicKey, data: ob.data } });
+            signatures = pollResults.map(ob => ob.data);
+            log(`${transaction.TransactionType} | Sent signatures: `, JSON.stringify(pollResults, null, 1));
+            log(`${transaction.TransactionType} | Sent signature-count: `, pollResults.length);
         }
         else {
-            signatures = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
+            const pollResults = (await this.voteContext.subscribe(electionName, elector)).map(ob => { return { pubkey: ob.sender.publicKey, data: ob.data } });
+            signatures = pollResults.map(ob => ob.data);
+            log(`${transaction.TransactionType} | Subscribed signatures: `, JSON.stringify(pollResults, null, 1));
+            log(`${transaction.TransactionType} | Subscribed signature-count: `, pollResults.length);
         }
 
         // Filter only the signatures which are in the signer list.
@@ -300,7 +306,7 @@ class XrplContext {
             return (this.signerListInfo?.signerList?.find(i => i.account === s.Signer.Account)?.weight || 0);
         }).reduce((a, b) => a + b, 0);
         if (totalWeight < this.signerListInfo.signerQuorum)
-            throw `No enough signatures: Total weight: ${totalWeight}, Quorum: ${this.signerListInfo.signerQuorum}.`;
+            throw `${transaction.TransactionType} | No enough signatures: Total weight: ${totalWeight}, Quorum: ${this.signerListInfo.signerQuorum}.`;
 
         transaction.Signers = signatures.map(s => <Signature>{ Signer: s.Signer }).sort((a, b) => a.Signer.SigningPubKey.localeCompare(b.Signer.SigningPubKey));
 
@@ -310,8 +316,9 @@ class XrplContext {
 
         const txVoteHashElector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.voteElectorOptions?.timeout || TIMEOUT);
         const txVoteHashElectionName = `txVoteHash${this.voteContext.getUniqueNumber()}`;
-
-        let txVoteHashes = (await this.voteContext.vote(txVoteHashElectionName, [voteDigest], txVoteHashElector)).map(ob => ob.data);
+        let txnPollResults = (await this.voteContext.vote(txVoteHashElectionName, [voteDigest], txVoteHashElector)).map(o => { return { pubkey: o.sender.publicKey, data: o.data } })
+        let txVoteHashes = txnPollResults.map(ob => ob.data);
+        log(`${transaction.TransactionType} | Txn contents`, JSON.stringify(txnPollResults, null, 1))
 
         let votes: any = {};
 
@@ -326,19 +333,25 @@ class XrplContext {
         const totalVotes = sorted.map(n => n[1]).reduce((acc, curr) => acc + curr, 0);
 
         const unlNodeCount = this.hpContext.getContractUnl().length;
+        log(`${transaction.TransactionType} | Sorted-votes:`, sorted);
+        log(`${transaction.TransactionType} | Txn-votes`, totalVotes);
 
         // NOTE : Total Vote count should be considerable enough to make submission decision.
         if (sorted.length && (unlNodeCount && (Math.ceil(totalVotes * 100 / unlNodeCount)) < VOTE_PERCENTAGE_THRESHOLD))
-            throw 'Could not decide a transaction to submit.';
+            throw `${transaction.TransactionType} | Could not decide a transaction to submit.`;
 
         const txSubmitElector = new AllVoteElector(unlNodeCount, options?.voteElectorOptions?.timeout || TIMEOUT);
         const txSubmitElectionName = `txSubmit${this.voteContext.getUniqueNumber()}`;
         let txResults;
+        let voteResults;
         if (sorted.length && sorted[0][1] > (unlNodeCount * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
             let error;
+            let start = Date.now();
             const res = await this.xrplAcc.submitMultisigned(transaction).catch((e: any) => {
                 error = e;
             });
+            let timeTaken = Date.now() - start;
+            log(`${transaction.TransactionType} | Response time (${this.hpContext.publicKey}): ${timeTaken} ms`);
 
             // In order to share a light weight content via NPL.
             const customRes = res ? <TransactionInfo>{
@@ -347,19 +360,27 @@ class XrplContext {
                 resultCode: res.result.engine_result
             } : null;
 
-            txResults = (await this.voteContext.vote(txSubmitElectionName, [res ? { res: customRes } : { error: error }], txSubmitElector)).map(ob => ob.data);
+            voteResults = (await this.voteContext.vote(txSubmitElectionName, [res ? { res: customRes } : { error: error }], txSubmitElector)).map(o => { return { pubkey: o.sender.publicKey, data: o.data } });
+
+            txResults = voteResults.map(ob => ob.data);
+            log(`${transaction.TransactionType} | Submitted txns:`, JSON.stringify(voteResults, null, 1));
+            log(`${transaction.TransactionType} | Submitted txns-count:`, voteResults.length);
         }
         else {
-            txResults = (await this.voteContext.subscribe(txSubmitElectionName, txSubmitElector)).map(ob => ob.data);
+            voteResults = (await this.voteContext.subscribe(txSubmitElectionName, txSubmitElector)).map(o => { return { pubkey: o.sender.publicKey, data: o.data } });
+
+            txResults = voteResults.map(ob => ob.data);
+            log(`${transaction.TransactionType} | Subscribed Submitted txns:`, JSON.stringify(voteResults, null, 1));
+            log(`${transaction.TransactionType} | Subscribed Submitted txns-count:`, voteResults.length);
         }
 
         if (!txResults || !txResults.length)
-            throw 'Could not consider as a valid transaction.';
+            throw `${transaction.TransactionType} | Could not consider as a valid transaction.`;
 
         // Check whether majority aligned submission or not.
         const successfulSubmissions = txResults.filter(r => (r.res?.resultCode === "tesSUCCESS" || r.res?.resultCode === "tefPAST_SEQ" || r.res?.resultCode === "tefALREADY"));
-        if (successfulSubmissions.length * 100 / unlNodeCount < VOTE_PERCENTAGE_THRESHOLD)
-            throw 'Could not consider as a valid submission.';
+        if (successfulSubmissions.length === 0)
+            throw `${transaction.TransactionType} | Could not consider as a valid submission.`;
 
         const sortedResults = txResults.sort((a, b) => {
             if ("res" in a && !("res" in b)) {
@@ -377,7 +398,7 @@ class XrplContext {
         // if (txResult.error)
         //     throw txResult.error;
 
-        log(`Transaction submitted with code ${txResult.res.resultCode}.`);
+        log(`${transaction.TransactionType} | Transaction submitted with code ${txResult.res.resultCode}.`);
 
         this.#addPendingTransaction(txResult.res);
 
@@ -570,14 +591,19 @@ class XrplContext {
         // Otherwise just collect the signer.
         if (newPubKey === this.hpContext.publicKey) {
             newSigner = this.multiSigner.generateSigner();
-            signer = (await this.voteContext.vote(electionName, [<Signer>{
+            const createdSigners = (await this.voteContext.vote(electionName, [<Signer>{
                 account: newSigner.account,
                 weight: signerListInfo.signerList[oldSignerIndex].weight
-            }], elector)).map(ob => ob.data)[0];
+            }], elector)).map(o => { return { pubkey: o.sender.publicKey, data: o.data } });
 
+            signer = (createdSigners).map(ob => ob.data)[0];
+            log("Created Signer: ", JSON.stringify(createdSigners, null, 1));
         }
         else {
-            signer = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+            log("Expecting signer from: ", newPubKey);
+            const subscriptions = (await this.voteContext.subscribe(electionName, elector)).map(o => { return { pubkey: o.sender.publicKey, data: o.data } });
+            signer = (subscriptions).map(ob => ob.data)[0];
+            log("Subscribed Signer: ", JSON.stringify(subscriptions, null, 1));
         }
 
         if (!signer)

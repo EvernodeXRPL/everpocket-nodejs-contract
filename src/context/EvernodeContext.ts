@@ -79,8 +79,8 @@ class EvernodeContext {
      * Persist details of acquires.
      */
     #persistAcquireData(): void {
-        // if (!this.updatedData)
-        //     return;
+        if (!this.updatedData)
+            return;
 
         try {
             JSONHelpers.writeToFile(this.acquireDataFile, this.acquireData);
