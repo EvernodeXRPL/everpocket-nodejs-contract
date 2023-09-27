@@ -44,13 +44,6 @@ class JSONHelpers {
      */
     public static writeToFile(filePath: string, obj: any) {
         // eslint-disable-next-line no-undef
-        const currdir = process.cwd();
-        log(`Current working directory: ${currdir}`);
-        if (fs.existsSync("/contract/contract_fs/mnt/")) {
-            log('Mount exists!')
-        } else {
-            log('Mount not found.')
-        }
         const stringified = JSON.stringify(obj, null, 4); // convert the updated data back to JSON string
         fs.writeFileSync(filePath, stringified);
     }

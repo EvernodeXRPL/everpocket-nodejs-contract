@@ -1,9 +1,9 @@
 const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
-const log = require('why-is-node-running');
 
-const masterAddress = "raQsjBBEZe37NHnrT17bgGPsvPteaPoP67"
+const masterAddress = "r3HfHxf6LeY8y1SGWHoKRRrUGdxruJyXEL";
+// const masterSecret = "sniK4psjdEXiogzMjQZonjVvZwmSP";
 
 
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
@@ -17,55 +17,10 @@ const MAX_ACQUIRES = 5;
 const MAX_CLUSTER = 8;
 
 const nomadOptions = {
-    targetNodeCount: 20,
-    targetLifeMoments: 10,
+    targetNodeCount: 15,
+    targetLifeMoments: 2,
     preferredHosts: [
-        "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
-        "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
-        "rP4zJ6ZWoHYC8cj6GkWHyiUJT15xwzLCLm",
-        "rwqWhVJZ1SgXBBpBNQ194sdDNBbUZTaTem",
-        "rLkSafYKvf5vBfFyQMVB6touhUnS6j5HR9",
-        "rKUq1MnzfqnZAUArkE2ttL1n4UavwUzGrn",
-        "rahTwEZefDFtShmgjsArNzxTCT8Zj8HXKN",
-        "rw4fF5LDQsonyoYiEYrgPgTC2asnCQQZ6g",
-        "rrssGm5h8aWncB3CGMuQ2WGfexubbeCTLV",
-        "rEmGJ3uu7DSrNfM5JSZnFtMjYhLbSmVJ3A",
-        "rfBQaUjF9UZWjdJ33hGDeas1hEXK7DmfCV",
-        "r4dVikgRzdVuZcFfMWJWiUo8iJxmYGDmiS",
-        "rKqDVS5fYEWDNivosnFiri1bXfqt2ebj7q",
-        "rErmdQZLmAauqjY7ig8KeLAGhfxeVAHHnA",
-        "rnG2Q9cqrmCvWNZvMG4JHzG96deqEg5HDx",
-        "rB2SBLDLBUwaUV2QegZxoztpkJLgh1Kvcx",
-        "r4LF5L5tq7JdsAUY5YUXjAU1J6xZtm47HP",
-        "rGnsENqQKqPNQKWMSNxbZcMuubjJaaBpf5",
-        "rMaHq7P7ibkbeiykRGyTsdyFEDBRGrLdx6",
-        "rHJqCseZFzCveSTdtJuDNpD4ARoMy41E1C",
-        "rMu8RLEKTtyWuhko1F5dVZoUAiVpRpi5GB",
-        "rhsBuUnoV1yGSpSVYgzFMFeTcFLvg8ZQnh",
-        "rhYqbRQpSy7RtQtXjfurprdB4Gj8PAJW2X",
-        "rfZFCjpFD1zhJP3DsSWy9NVUCmm9Kkhg4w",
-        "raRpwPCbMGfTgEDnHD7nQCUYbXwkNYKThA",
-        "rD6Lgdxzq3dr42JD4F1bwF86BaCwAaeQWu",
-        "rfuvNytxfavNgN57WqGfQR3duhUAsy8PEY",
-        "rHf3nHTdrMRKwP8hVXifsZAGQxhixmrvgu",
-        "r3VUJWNCHxq5yV1fcfXPaJ3ozcL2SSy88F",
-        "rDMiTtcVEnSvoeS8uh71fS2vdpQpP33gCN",
-        "rDt8RqBshBPGRgeWdjpBRzoMYxmLwZKCKo",
-        "rEtBQShEjRXGPVC9AsmySJSaVtSsVZcR6p",
-        "rsuXd4vQpzyktVhxNMEZdgKLLmA1j4VJQi",
-        "rNcXiJ89mQ8ZEx6Wfwq9eMd9mXXn5JSSKs",
-        "r4HrG4pxwdbfdqDQkaVKHeCVjLmNfKsyTE",
-        "rQLYPp4iGPraESkvkw6Ta5kacgigAabYQQ",
-        "rstzrHRW8RMo6Gmvme7DAnbAnZP8VesbA2",
-        "rKrSVLgaKQANTSEv1bY4cT4PVThCzFXpX6",
-        "r3Y9u4azTbcT95Ja7CDJzUHXV7N3sCSKP1",
-        "rhKW2ihYKtd71yeuZK7f2KPXBXJ6byVdVo",
-        "rKqvyMy6T4Uuefutu242yVKrtqRRwLxm7a",
-        "rH1NTQ73pksxX7Z8rEN6XrcibgEd34uJXo",
-        "rMCwzwHRLr8CtHW4RkSXSyTT79Srhn3fYn",
-        "rDVBMoZ6QcMS12Ty3aBNwrNPPfvHHdvkde",
-        "rL8TFrxk2tAAeRdf2z8AwoNeEdkEhvybk5",
-        "rKuuh8E2HR4wxxKDu8whZZw7icgSHxq8aE"
+        "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww"
     ],
     instanceCfg: {
         config: {
@@ -77,9 +32,6 @@ const nomadOptions = {
 }
 
 const testContract = async (contractCtx) => {
-
-    const currwd = process.cwd();
-    info("Current WD: ", currwd);
 
     let nonSigners = [];
     // if (contractCtx.unl.list().length > 3)
@@ -157,20 +109,12 @@ const testContract = async (contractCtx) => {
         }
         finally {
             // Deinitialize at the end of the execution.
-            info("DEINIT-XRPL-CONTEXT");
             await xrplContext.deinit();
-            info("DEINIT-EVERNODE-CONTEXT");
             await evernodeContext.deinit();
-            info("DEINIT-CLSUTER-CONTEXT");
             await clusterContext.deinit();
-            info("DEINIT-NOMAD-CONTEXT");
             await nomadContext.deinit();
-            info("DEINITS-COMPLETED");
         }
     }
-    console.log(`${getDate()}:`, 'BEGIN NODE LOGS ------------------------------------------------');
-    log();
-    console.log(`${getDate()}:`, 'END NODE LOGS -------------------------------------------------');
 }
 
 const getDate = () => {
@@ -238,7 +182,7 @@ const acquireNewNode = async (evernodeContext) => {
         instanceCfg: {
             ownerPubkey: "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9834bafb",
             contractId: "dc411912-bcdd-4f73-af43-32ec45844b9a",
-            image: "evernodedev/sashimono:hp.test-0.1.3-ubt.20.04-njs.20",
+            image: "evernodedev/sashimono:hp.udpvisa-test-0.0.1-ubt.20.04-njs.20",
             config: {}
         }
     }
@@ -319,39 +263,43 @@ const runNomadContract = async (nomadContext) => {
 
     // ////////////////// Start of the code for cluster info streaming ////////////////////
 
-    const data = fs.existsSync("streamer.config") && fs.readFileSync("streamer.config", 'utf8');
-    const streamerCfg = data ? JSON.parse(data) : {};
-    const isValidStreamer = streamerCfg?.ip?.length > 0 && streamerCfg?.port > 0;
+    // await new Promise((resolve, reject) => {
+    //     const data = fs.existsSync("streamer.config") && fs.readFileSync("streamer.config", 'utf8');
+    //     const streamerCfg = data ? JSON.parse(data) : {};
+    //     const isValidStreamer = streamerCfg?.ip?.length > 0 && streamerCfg?.port > 0;
 
-    if (isValidStreamer && nomadContext.hpContext.lclSeqNo % 5 === 0) {
-        try {
-            const ws = require('ws');
+    //     if (isValidStreamer && nomadContext.hpContext.lclSeqNo % 5 === 0) {
+    //         try {
+    //             const ws = require('ws');
 
-            const address = `ws://${streamerCfg.ip}:${streamerCfg.port}`;
-            const message = {
-                contract_id: nomadContext.hpContext.contractId,
-                cluster: nomadContext.clusterContext.getClusterNodes()
-            };
+    //             const address = `ws://${streamerCfg.ip}:${streamerCfg.port}`;
+    //             const message = {
+    //                 contract_id: nomadContext.hpContext.contractId,
+    //                 cluster: nomadContext.clusterContext.getClusterNodes()
+    //             };
 
-            const connection = new ws(address)
+    //             const connection = new ws(address)
 
-            connection.onopen = () => {
-                connection.send(JSON.stringify(message));
-                connection.close();
-            }
+    //             connection.onopen = () => {
+    //                 connection.send(JSON.stringify(message));
+    //                 connection.close();
+    //                 resolve();
+    //             }
 
-            connection.onerror = (error) => {
-                connection.close();
-                throw error;
-            }
-        }
-        catch (e) {
-            console.error(`${getDate()}:`, 'Stream web socket error: ', e);
-        }
-    }
+    //             connection.onerror = (error) => {
+    //                 connection.close();
+    //                 reject(error);
+    //             }
+    //         }
+    //         catch (e) {
+    //             console.error(`${getDate()}:`, 'Stream web socket error: ', e);
+    //             reject(e);
+    //         }
+    //     }
+    // });
 
-    ///////////////////// End of the code for cluster info streaming /////////////////////
-    
+    // ///////////////////// End of the code for cluster info streaming /////////////////////
+
     await nomadContext.init();
     info("Exited Nomad Contract...");
 }

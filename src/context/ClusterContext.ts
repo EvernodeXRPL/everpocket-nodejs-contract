@@ -12,7 +12,7 @@ import * as fs from 'fs';
 import { JSONHelpers } from "../utils";
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
-const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.test-0.1.3-ubt.20.04-njs.20";
+const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.udpvisa-test-0.0.1-ubt.20.04-njs.20";
 const ALIVENESS_CHECK_THRESHOLD = 5;
 const MATURITY_LCL_THRESHOLD = 2;
 const MAX_SIGNER_REPLACE_ATTEMPTS = 10;
@@ -200,8 +200,8 @@ class ClusterContext {
 
             // Update peer list.
             if (node) {
-                if (node?.ip && node?.peerPort) {
-                    let peer = `${node?.ip}:${node?.peerPort}`
+                if (node?.domain && node?.peerPort) {
+                    let peer = `${node?.domain}:${node?.peerPort}`
                     await this.hpContext.updatePeers(null, [peer]);
                 }
 
@@ -243,7 +243,7 @@ class ClusterContext {
         if (!isDefinedPeers || this.hpContext.lclSeqNo % 4 === 1) {
             log("Peer list Updating..");
             const detailedClusterNodes = this.clusterManager.getNodes();
-            const knownPeers = detailedClusterNodes.filter(n => n.isUnl && n.pubkey !== this.hpContext.publicKey).map(kp => { return `${kp.ip}:${kp.peerPort}` });
+            const knownPeers = detailedClusterNodes.filter(n => n.isUnl && n.pubkey !== this.hpContext.publicKey).map(kp => { return `${kp.domain}:${kp.peerPort}` });
             if (knownPeers) {
                 await this.hpContext.updatePeers(knownPeers, '*');
                 log(`Peer list was updated with ${knownPeers.length} peers.`);
@@ -293,11 +293,11 @@ class ClusterContext {
                         continue;
                     }
 
-                    if (!(await this.hpContext.checkLiveness(new Peer(info.ip, info.userPort)))) {
+                    if (!(await this.hpContext.checkLiveness(new Peer(info.domain, info.userPort)))) {
                         this.clusterManager.increaseAliveCheck(node.refId);
                     }
                     else {
-                        await this.hpContext.updatePeers([`${info.ip}:${info.peerPort}`]);
+                        await this.hpContext.updatePeers([`${info.domain}:${info.peerPort}`]);
 
                         this.clusterManager.addNode(<ClusterNode>{
                             refId: node.refId,
@@ -305,7 +305,8 @@ class ClusterContext {
                             createdOnLcl: this.hpContext.lclSeqNo,
                             createdOnTimestamp: this.hpContext.timestamp,
                             host: node.host,
-                            ip: info.ip,
+                            domain: info.domain,
+                            outboundIp: info.outboundIp,
                             name: info.name,
                             peerPort: info.peerPort,
                             pubkey: info.pubkey,
@@ -388,7 +389,7 @@ class ClusterContext {
         const unlNodes = this.getClusterUnlNodes();
         if (unlNodes && unlNodes.length > 0) {
             const addMessage = <ClusterMessage>{ type: ClusterMessageType.MATURED, data: this.hpContext.publicKey }
-            await this.hpContext.sendMessage(JSON.stringify(addMessage), unlNodes.map(n => new Peer(n.ip, n.userPort)));
+            await this.hpContext.sendMessage(JSON.stringify(addMessage), unlNodes.map(n => new Peer(n.domain, n.userPort)));
         }
         return false;
     }

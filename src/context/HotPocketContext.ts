@@ -85,7 +85,6 @@ class HotPocketContext {
                     await handleSuccess(data);
                 }
                 catch (e) {
-                    error("Handle Failure in performing action", e)
                     await handleFailure(e);
                 }
             }
@@ -94,7 +93,6 @@ class HotPocketContext {
             }
         }
         catch (e) {
-            error("Handle Failure in Connecting", e)
             await handleFailure(e);
         }
         return;

@@ -19,8 +19,7 @@
         "@typescript-eslint/parser": "5.48.1",
         "bson": "4.7.2",
         "hotpocket-js-client": "0.5.5",
-        "ripple-keypairs": "1.1.4",
-        "xrpl-binary-codec": "1.4.2"
+        "ripple-keypairs": "1.1.4"
     },
     "devDependencies": {
         "@types/node": "18.11.18",
@@ -28,7 +27,7 @@
         "typescript": "4.9.4"
     },
     "peerDependencies": {
-        "evernode-js-client": "0.6.16",
-        "hotpocket-nodejs-contract": "0.5.7"
+        "evernode-js-client": "0.6.19",
+        "hotpocket-nodejs-contract": "0.5.8"
     }
 }

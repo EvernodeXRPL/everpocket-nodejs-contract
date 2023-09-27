@@ -52,9 +52,7 @@ class EvernodeContext {
 
         try {
             this.registryClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
-            log("Connecting to Registry")
             await this.registryClient.connect();
-            log("Connected to Registry")
 
             await this.#checkForCompletedAcquires();
             this.initialized = true;
@@ -191,8 +189,14 @@ class EvernodeContext {
 
                     // Updated the acquires if there's a success response.
                     if (payload) {
-                        if (payload !== 'acquire_error')
+                        if (payload !== 'acquire_error') {
+                            // Assign ip to domain and outbound_ip for instance created from old sashimono version.
+                            if ('ip' in payload.content) {
+                                payload.content.domain = payload.content.ip;
+                                delete payload.content.ip;
+                            }
                             this.#updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
+                        }
                         this.#updatePendingAcquireInfo(item, "DELETE");
                         if (privateKey)
                             fs.unlinkSync(`../${item.messageKey}.txt`);
