@@ -1,3 +1,4 @@
 node_modules
 **/dist/**
 !hp.cfg.override
+!streamer.config

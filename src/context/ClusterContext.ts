@@ -487,6 +487,9 @@ class ClusterContext {
                         this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
                         throw e;
                     }
+                } else {
+                    this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
+                    throw `No NON-Quorum node was found to replace ${pubkey} signer node.`;
                 }
             }
             else {
