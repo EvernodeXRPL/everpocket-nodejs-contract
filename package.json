@@ -28,6 +28,6 @@
     },
     "peerDependencies": {
         "evernode-js-client": "0.6.19",
-        "hotpocket-nodejs-contract": "0.5.8"
+        "hotpocket-nodejs-contract": "0.5.9"
     }
 }

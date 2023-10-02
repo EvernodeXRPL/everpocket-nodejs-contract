@@ -161,7 +161,7 @@ class ClusterContext {
             const node = this.clusterManager.getNode(pubkey);
 
             log(`Removing the node ${pubkey}...`);
-            
+
             if (node?.signerAddress) {
                 if ((node?.signerReplaceFailedAttempts || 0) < MAX_SIGNER_REPLACE_ATTEMPTS) {
                     // Sorting logic to determine new pubkey - start
