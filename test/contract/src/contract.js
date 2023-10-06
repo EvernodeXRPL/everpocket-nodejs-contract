@@ -17,7 +17,7 @@ const MAX_ACQUIRES = 5;
 const MAX_CLUSTER = 8;
 
 const nomadOptions = {
-    targetNodeCount: 15,
+    targetNodeCount: 20,
     targetLifeMoments: 2,
     preferredHosts: [
         "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
@@ -312,40 +312,45 @@ const runNomadContract = async (nomadContext) => {
 
     // ////////////////// Start of the code for cluster info streaming ////////////////////
 
-    // await new Promise((resolve, reject) => {
-    //     const data = fs.existsSync("streamer.config") && fs.readFileSync("streamer.config", 'utf8');
-    //     const streamerCfg = data ? JSON.parse(data) : {};
-    //     const isValidStreamer = streamerCfg?.ip?.length > 0 && streamerCfg?.port > 0;
+    if (nomadContext.hpContext.lclSeqNo % 5 === 0) {
+        await new Promise((resolve, reject) => {
+            const data = fs.existsSync("streamer.config") && fs.readFileSync("streamer.config", 'utf8');
+            const streamerCfg = data ? JSON.parse(data) : {};
+            const isValidStreamer = streamerCfg?.ip?.length > 0 && streamerCfg?.port > 0;
 
-    //     if (isValidStreamer && nomadContext.hpContext.lclSeqNo % 5 === 0) {
-    //         try {
-    //             const ws = require('ws');
+            if (isValidStreamer) {
+                try {
+                    const ws = require('ws');
 
-    //             const address = `ws://${streamerCfg.ip}:${streamerCfg.port}`;
-    //             const message = {
-    //                 contract_id: nomadContext.hpContext.contractId,
-    //                 cluster: nomadContext.clusterContext.getClusterNodes()
-    //             };
+                    const address = `ws://${streamerCfg.ip}:${streamerCfg.port}`;
+                    const message = {
+                        contract_id: nomadContext.hpContext.contractId,
+                        cluster: nomadContext.clusterContext.getClusterNodes()
+                    };
 
-    //             const connection = new ws(address)
+                    const connection = new ws(address)
 
-    //             connection.onopen = () => {
-    //                 connection.send(JSON.stringify(message));
-    //                 connection.close();
-    //                 resolve();
-    //             }
+                    connection.onopen = () => {
+                        connection.send(JSON.stringify(message));
+                        connection.close();
+                        resolve();
+                    }
 
-    //             connection.onerror = (error) => {
-    //                 connection.close();
-    //                 reject(error);
-    //             }
-    //         }
-    //         catch (e) {
-    //             console.error(`${getDate()}:`, 'Stream web socket error: ', e);
-    //             reject(e);
-    //         }
-    //     }
-    // });
+                    connection.onerror = (error) => {
+                        connection.close();
+                        reject(error);
+                    }
+                }
+                catch (e) {
+                    console.error(`${getDate()}:`, 'Stream web socket error: ', e);
+                    reject(e);
+                }
+            }
+            else {
+                reject('Invalid streamer');
+            }
+        });
+    }
 
     // ///////////////////// End of the code for cluster info streaming /////////////////////
 
