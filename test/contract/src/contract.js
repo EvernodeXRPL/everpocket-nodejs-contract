@@ -20,7 +20,56 @@ const nomadOptions = {
     targetNodeCount: 15,
     targetLifeMoments: 2,
     preferredHosts: [
-        "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww"
+        "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
+        "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
+        "rhYqbRQpSy7RtQtXjfurprdB4Gj8PAJW2X",
+        "rhq7W8KuF2EBFpTQAJ7D6gihCJJJU6JZeX",
+        "rahTwEZefDFtShmgjsArNzxTCT8Zj8HXKN",
+        "rPTefScX95J1Un4MjZfLDRF2T9zdfXycta",
+        "rhKW2ihYKtd71yeuZK7f2KPXBXJ6byVdVo",
+        "rhiSZcQYBQoctG8QuEatxMR11TFiZUuGYu",
+        "rsEYGLqSobDiZpydSXq6dK4awsxFegqNMK",
+        "rzxoq8mHVBBZYVXtxg4EMpXXL4ARQjH4p",
+        "rfBQaUjF9UZWjdJ33hGDeas1hEXK7DmfCV",
+        "rfZFCjpFD1zhJP3DsSWy9NVUCmm9Kkhg4w",
+        "rfoukrqxvcrWbLRvXUpgwzKktkPqEmwBC9",
+        "rfuvNytxfavNgN57WqGfQR3duhUAsy8PEY",
+        "r92BHq5BXfRWBnyqaxQWiYhWCMZgfXJGe6",
+        "rw4fF5LDQsonyoYiEYrgPgTC2asnCQQZ6g",
+        "rwqWhVJZ1SgXBBpBNQ194sdDNBbUZTaTem",
+        "rwvxtQfKWH85D1RL3DSjZJj7J1ocSQ4k42",
+        "rB2SBLDLBUwaUV2QegZxoztpkJLgh1Kvcx",
+        "rDsNaTF6wGo6Rb2q8PBowRao5rkwjjUnwt",
+        "rDMiTtcVEnSvoeS8uh71fS2vdpQpP33gCN",
+        "rDVBMoZ6QcMS12Ty3aBNwrNPPfvHHdvkde",
+        "rD6Lgdxzq3dr42JD4F1bwF86BaCwAaeQWu",
+        "rDt8RqBshBPGRgeWdjpBRzoMYxmLwZKCKo",
+        "rDy4mHqVZnAwXS7sX4W34EAJT8izGUXTS2",
+        "rErmdQZLmAauqjY7ig8KeLAGhfxeVAHHnA",
+        "rE29fENEy8GBiFhcAnagCLBbJ7XqnaVmSX",
+        "rEe73SNfryStJeEEdbNjzXh3a11XCSJvPD",
+        "rEmGJ3uu7DSrNfM5JSZnFtMjYhLbSmVJ3A",
+        "rGnsENqQKqPNQKWMSNxbZcMuubjJaaBpf5",
+        "rGRGDybWYn8MWvf3f5EwCdNoGJbUJwiBxA",
+        "rHEfDyy1d5dV1LUC2LMHedm8eRXXCtEoC6",
+        "rHJqCseZFzCveSTdtJuDNpD4ARoMy41E1C",
+        "rH1NTQ73pksxX7Z8rEN6XrcibgEd34uJXo",
+        "rKrSVLgaKQANTSEv1bY4cT4PVThCzFXpX6",
+        "rKUq1MnzfqnZAUArkE2ttL1n4UavwUzGrn",
+        "rKqDVS5fYEWDNivosnFiri1bXfqt2ebj7q",
+        "rLBE5sCTcgRaKanhuHHS2ubxkG15DghE2t",
+        "rLHzHbqGF4RCf5Z9oDNQfvPXY5wGaKZrp4",
+        "rLWYzhhSZkcEbPcA8LU1VEVpwFMz2x7G4X",
+        "rLkSafYKvf5vBfFyQMVB6touhUnS6j5HR9",
+        "rMaHq7P7ibkbeiykRGyTsdyFEDBRGrLdx6",
+        "rMu8RLEKTtyWuhko1F5dVZoUAiVpRpi5GB",
+        "r4LF5L5tq7JdsAUY5YUXjAU1J6xZtm47HP",
+        "r4b2DEW4Wb6pGmxRwAXC925z7W9tDNjLgd",
+        "r4dVikgRzdVuZcFfMWJWiUo8iJxmYGDmiS",
+        "r3W7zdccdtnjfBhQfnMqxUwKj2HH3HY3z",
+        "rrssGm5h8aWncB3CGMuQ2WGfexubbeCTLV",
+        "rnpkkEEMDSYAg1G6eHWF66kKjrKoAqMbtV",
+        "rQLYPp4iGPraESkvkw6Ta5kacgigAabYQQ"
     ],
     instanceCfg: {
         config: {
@@ -131,14 +180,14 @@ const info = (...args) => {
 // Voting examples.
 const testVote = async (voteContext) => {
     // Send votes to an election.
-    const r1 = voteContext.vote("firstRound", [Math.ceil((Math.random() * 10))], new evp.AllVoteElector(10, 1000));
-    const r2 = voteContext.vote("secondRound", [Math.ceil((Math.random() * 10))], new evp.AllVoteElector(10, 1000));
+    const r1 = voteContext.vote("firstRound", [Math.ceil((Math.random() * 10))], new evp.AllVoteElector(10, 3000));
+    const r2 = voteContext.vote("secondRound", [Math.ceil((Math.random() * 10))], new evp.AllVoteElector(10, 3000));
     const r3 = voteContext.vote("thirdRound", [{
         SigningPubKey: '03FBBF4D613A46855D393A9C48F17E9935840335665F4F892BD88505CC1CA4E075',
         TxnSignature: '3045022100F13CEAC221F5FEECF954356F21FBFE9944D30A6734DCD24C064937DE2A75E222022020F089A2B59DB5DFDBA7EEC375C2B61A41FB48A2A42BE60DE8E3B52820F870F2',
         Account: 'rhBEKz6Sa26L13TjFB2SiYDjuPFazDnnqH',
         Sequence: Math.ceil((Math.random() * 10))
-    }], new evp.AllVoteElector(10, 1000));
+    }], new evp.AllVoteElector(10, 3000));
 
     const firstList = (await r1).map(v => v.data);
     console.log('First round votes', firstList);
@@ -148,7 +197,7 @@ const testVote = async (voteContext) => {
     fs.appendFileSync('second.txt', secondList?.length ? secondList.sort()[0].toString() : '');
     const thirdList = (await r3).map(v => v.data);
     console.log('Third round votes', thirdList);
-    fs.appendFileSync('thir.txt', thirdList?.length ? JSON.stringify(thirdList.sort()) : '');
+    fs.appendFileSync('thir.txt', thirdList?.length ? JSON.stringify(thirdList.sort()[0]) : '');
 }
 
 const addXrplSigner = async (xrplContext, publickey, quorum = null) => {

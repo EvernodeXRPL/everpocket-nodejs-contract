@@ -8,7 +8,6 @@ import { AllVoteElector } from "../vote/vote-electors";
 import { VoteElectorOptions } from "../models/vote";
 import HotPocketContext from "./HotPocketContext";
 import { error, info, log } from "../helpers/logger";
-import * as fs from 'fs';
 import { JSONHelpers } from "../utils";
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
@@ -235,22 +234,6 @@ class ClusterContext {
 
             this.clusterManager.initializeCluster(nodes);
             log('Initialized the cluster data with node info.');
-        }
-
-        // Helping to make connections
-        // This flag file is written at the first execution of the contract.
-        const isDefinedPeers = fs.existsSync('../flag_init_peers');
-        if (!isDefinedPeers || this.hpContext.lclSeqNo % 4 === 1) {
-            log("Peer list Updating..");
-            const detailedClusterNodes = this.clusterManager.getNodes();
-            const knownPeers = detailedClusterNodes.filter(n => n.isUnl && n.pubkey !== this.hpContext.publicKey).map(kp => { return `${kp.domain}:${kp.peerPort}` });
-            if (knownPeers) {
-                await this.hpContext.updatePeers(knownPeers, '*');
-                log(`Peer list was updated with ${knownPeers.length} peers.`);
-            }
-
-            if (!isDefinedPeers)
-                fs.writeFileSync('../flag_init_peers', '');
         }
     }
 
