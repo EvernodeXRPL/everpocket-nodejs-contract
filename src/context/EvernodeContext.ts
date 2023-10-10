@@ -221,7 +221,7 @@ class EvernodeContext {
         const messageKey = await this.decideMessageKey();
 
         if (!leaseOffer || !messageKey)
-            throw "Could not decide aquire params.";
+            throw "Could not decide acquire params.";
 
         // Perform acquire txn on the selected host.
         const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
@@ -263,58 +263,39 @@ class EvernodeContext {
     /**
      * Decides a lease offer collectively.
      * @param hostAddress Host that should be used to take lease offers.
-     * @param [options={}] Vote options for lease decision.
      * @returns URIToken related to the lease offer.
      */
-    public async decideLeaseOffer(hostAddress: string, options: VoteElectorOptions = {}): Promise<URIToken> {
+    public async decideLeaseOffer(hostAddress: string): Promise<URIToken> {
         // Get transaction details to use for xrpl tx submission.
         const hostClient = new evernode.HostClient(hostAddress);
         const leaseOffers = await hostClient.getLeaseOffers();
-        const leaseOffer = leaseOffers && leaseOffers[0];
+        const leaseOffer = leaseOffers && leaseOffers.length > 0 && leaseOffers.sort((a: any, b: any) => a.index.localeCompare(b.index))[0];
 
         if (!leaseOffer)
             throw "NO_LEASE_OFFER";
 
-        const electionName = `lease_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
-        let collection = (await voteRound).map((v) => v.data);
-
-        let sortCollection = collection.sort((a, b) => a.index.localeCompare(b.index));
-
-        return sortCollection[0];
+        return leaseOffer;
     }
 
     /**
      * Decides a host collectively.
      * @param [preferredHosts=null] List of proffered host addresses.
-     * @param [options={}] Vote options for host decision.
      * @returns Decided host address.
      */
-    public async decideHost(preferredHosts: string[] | null = null, options: VoteElectorOptions = {}): Promise<string> {
+    public async decideHost(preferredHosts: string[] | null = null): Promise<string> {
         const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
 
         // Choose from hosts that have available instances.
-        const vacantHosts = (await this.getHosts()).sort((a, b) => (a.maxInstances - a.activeInstances) > (b.maxInstances - b.activeInstances) ? -1 : 1);
+        const vacantHosts = await this.getHosts();
         const unusedHosts = preferredHosts ? preferredHosts.filter(a => vacantHosts.find(h => a === h.address)) : vacantHosts.map(h => h.address);
 
         let hostAddress = null;
         if (unusedHosts.length > 0)
-            hostAddress = unusedHosts[lclBasedNum % unusedHosts.length];
+            hostAddress = unusedHosts.sort((a: any, b: any) => a.localeCompare(b))[lclBasedNum % unusedHosts.length];
         else
             throw 'There are no vacant hosts in the network';
 
-        const electionName = `host_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
-        let collection = (await voteRound).map((v) => v.data);
-
-        let sortCollection = collection.sort((a, b) => {
-            if (a === b) {
-                return 0;
-            }
-            return a > b ? 1 : -1;
-        });
-
-        return sortCollection[0];
+        return hostAddress;
     }
 
     /**

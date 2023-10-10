@@ -11,7 +11,6 @@ import { error, log } from '../helpers/logger';
 
 const TIMEOUT = 10000;
 const TRANSACTION_VOTE_THRESHOLD = 0.5;
-const VOTE_PERCENTAGE_THRESHOLD = 60;
 
 class XrplContext {
     private transactionDataFile: string = "transactions.json";
@@ -319,24 +318,18 @@ class XrplContext {
         }
 
         const sorted = Object.entries<number>(votes).sort((a, b) => b[1] - a[1]);
-        const totalVotes = sorted.map(n => n[1]).reduce((acc, curr) => acc + curr, 0);
-
         const unlNodeCount = this.hpContext.getContractUnl().length;
-
-        // NOTE : Total Vote count should be considerable enough to make submission decision.
-        if (sorted.length && (unlNodeCount && (Math.ceil(totalVotes * 100 / unlNodeCount)) < VOTE_PERCENTAGE_THRESHOLD))
-            throw `${transaction.TransactionType} | Could not decide a transaction to submit.`;
 
         const txSubmitElector = new AllVoteElector(unlNodeCount, options?.voteElectorOptions?.timeout || TIMEOUT);
         const txSubmitElectionName = `txSubmit${this.voteContext.getUniqueNumber()}`;
         let txResults;
         let voteResults;
-        if (sorted.length && sorted[0][1] > (unlNodeCount * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
+        if (sorted.length && sorted[0][1] >= (unlNodeCount * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
             let error;
             const res = await this.xrplAcc.submitMultisigned(transaction).catch((e: any) => {
                 error = e;
             });
-            
+
             // In order to share a light weight content via NPL.
             const customRes = res ? <TransactionInfo>{
                 hash: res.result.tx_json.hash,
