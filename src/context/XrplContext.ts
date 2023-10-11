@@ -533,16 +533,12 @@ class XrplContext {
 
     /**
      * Replaces a signer node from a new node.
-     * @param oldPubKey Old pubkey to remove.
      * @param oldSignerAddress Signer address of old node.
-     * @param newPubKey New pubkey to add a signer.
+     * @param newSignerAddress New address to add as signer.
      * @param [options={}] Multisigner options to override.
      * @returns New signer address.
      */
-    async replaceSignerList(oldPubKey: string, oldSignerAddress: string, newPubKey: string, options: MultiSignOptions = {}): Promise<string> {
-        const elector = new AllVoteElector(1, options?.voteElectorOptions?.timeout || TIMEOUT);
-        const electionName = `replaceSigner${this.voteContext.getUniqueNumber()}`;
-
+    async replaceSignerList(oldSignerAddress: string, newSignerAddress: string, options: MultiSignOptions = {}): Promise<void> {
         // Replace signer from the list and renew the signer list. Clone objet to avoid reference.
         let signerListInfo = <SignerListInfo>{};
         if (this.signerListInfo)
@@ -556,42 +552,12 @@ class XrplContext {
         if (oldSignerIndex === -1)
             throw `Could not find a old signer with given address.`
 
-        let signer: Signer;
-        let newSigner: SignerKey | null = null;
-        // If this is a the owner, Generate new signer and send it.
-        // Otherwise just collect the signer.
-        if (newPubKey === this.hpContext.publicKey) {
-            newSigner = this.multiSigner.generateSigner();
-            const createdSigners = (await this.voteContext.vote(electionName, [<Signer>{
-                account: newSigner.account,
-                weight: signerListInfo.signerList[oldSignerIndex].weight
-            }], elector)).map(o => { return { pubkey: o.sender.publicKey, data: o.data } });
-
-            signer = (createdSigners).map(ob => ob.data)[0];
-        }
-        else {
-            const subscriptions = (await this.voteContext.subscribe(electionName, elector)).map(o => { return { pubkey: o.sender.publicKey, data: o.data } });
-            signer = (subscriptions).map(ob => ob.data)[0];
-        }
-
-        if (!signer)
-            throw `Could not generate a new signer.`
-
         // Replace old signer with new signer.
-        signerListInfo.signerList[oldSignerIndex].account = signer.account;
+        signerListInfo.signerList[oldSignerIndex].account = newSignerAddress;
         if (options.quorum)
             signerListInfo.signerQuorum = options.quorum;
 
         await this.setSignerList(signerListInfo, options);
-
-        if (newSigner)
-            this.multiSigner.setSigner(newSigner);
-
-        // Remove old signer and add new signer.
-        if (oldPubKey === this.hpContext.publicKey)
-            this.multiSigner.removeSigner();
-
-        return signer.account;
     }
 
     /**
