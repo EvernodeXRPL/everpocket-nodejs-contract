@@ -1,9 +1,10 @@
 import { error, log } from "../helpers/logger";
+import { NodeStatus } from "../models/cluster";
 import { NomadOptions } from "../models/nomad";
 import ClusterContext from "./ClusterContext";
 import HotPocketContext from "./HotPocketContext";
 
-const IMMATURE_PRUNE_LCL_THRESHOLD = 10;
+const IMMATURE_PRUNE_LCL_THRESHOLD = 15;
 const INACTIVE_PRUNE_LCL_THRESHOLD = 60;
 const EXPIRE_PRUNE_TS_THRESHOLD = 900000; // 15 mins in ms.
 
@@ -81,17 +82,17 @@ class NomadContext {
             let prune = false;
             let force = true;
             // Prune unl nodes if inactive. Only consider the nodes which are added to Unl before this ledger.
-            if (node.isUnl && ((node.addedToUnlOnLcl || 0) < curLcl) &&
+            if (node.isUnl && ((node.status.onLcl || 0) < curLcl) &&
                 (curLcl - (node.activeOnLcl || 0)) > INACTIVE_PRUNE_LCL_THRESHOLD) {
                 log(`Pruning the node ${node.pubkey} due to inactiveness.`);
                 log(`Last active lcl: ${(node.activeOnLcl || 0)}, Current lcl: ${curLcl}`);
                 prune = true;
             }
             // Prune if not matured for long period.
-            else if (!node.isUnl && !node.ackReceivedOnLcl &&
-                (curLcl - node.createdOnLcl) > IMMATURE_PRUNE_LCL_THRESHOLD) {
+            else if (!node.isUnl && (node.status.status === NodeStatus.CREATED) &&
+                (curLcl - node.status.onLcl) > IMMATURE_PRUNE_LCL_THRESHOLD) {
                 log(`Pruning the node ${node.pubkey} due to not getting matured.`);
-                log(`Created on lcl: ${node.createdOnLcl}, Current moment: ${curLcl}`);
+                log(`Created on lcl: ${node.status.onLcl}, Current moment: ${curLcl}`);
                 prune = true;
             }
             // Prune if close to expire except the nodes which has pending extends or the node which are created by contract.

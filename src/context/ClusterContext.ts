@@ -2,7 +2,7 @@ import { AcquireOptions } from "../models/evernode";
 import { Peer, User } from "../models";
 import { Buffer } from 'buffer';
 import { EvernodeContext, VoteContext } from "../context";
-import { ClusterOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode, OperationData, OperationType, AddNodeOperation, ExtendNodeOperation, RemoveNodeOperation } from "../models/cluster";
+import { ClusterOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode, OperationData, OperationType, AddNodeOperation, ExtendNodeOperation, RemoveNodeOperation, ClusterOwner, NodeStatus, NodeInfo } from "../models/cluster";
 import { ClusterManager } from "../cluster";
 import { AllVoteElector } from "../vote/vote-electors";
 import { VoteElectorOptions } from "../models/vote";
@@ -14,16 +14,22 @@ const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
 const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.udpvisa-test-0.0.1-ubt.20.04-njs.20";
 const ALIVENESS_CHECK_THRESHOLD = 5;
 const MATURITY_LCL_THRESHOLD = 2;
+const ACKNOWLEDGE_LCL_THRESHOLD = 2;
+const ACKNOWLEDGE_RETRY_LCL_THRESHOLD = 5;
+const MAX_ACKNOWLEDGE_ATTEMPTS = 3;
 const MAX_SIGNER_REPLACE_ATTEMPTS = 10;
 const TIMEOUT = 10000;
 
 class ClusterContext {
     private operationDataFile: string = "operations.json";
+    private nodePrivateInfoFile: string = "../node_private_info.json";
     private operationData: OperationData = { operations: [] };
     private updatedData: boolean = false;
     private clusterManager: ClusterManager;
     private userMessageProcessing: boolean;
     private maturityLclThreshold: number;
+    private acknowledgeLclThreshold: number;
+    private acknowledgeRetryLclThreshold: number;
     private initialized: boolean = false;
     public hpContext: HotPocketContext;
     public voteContext: VoteContext;
@@ -35,6 +41,8 @@ class ClusterContext {
         this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
         this.maturityLclThreshold = options.maturityLclThreshold || MATURITY_LCL_THRESHOLD;
+        this.acknowledgeLclThreshold = options.acknowledgeLclThreshold || ACKNOWLEDGE_LCL_THRESHOLD;
+        this.acknowledgeRetryLclThreshold = options.acknowledgeLclThreshold || ACKNOWLEDGE_RETRY_LCL_THRESHOLD;
         this.userMessageProcessing = false;
 
         const data = JSONHelpers.readFromFile<OperationData>(this.operationDataFile);
@@ -159,7 +167,9 @@ class ClusterContext {
                 log(`Removing the node ${pubkey}...`);
 
                 if (node?.signerAddress) {
-                    if ((node?.signerReplaceFailedAttempts || 0) < MAX_SIGNER_REPLACE_ATTEMPTS) {
+                    const nonQuorumNodes = this.getClusterUnlNodes().filter(n => !n.signerAddress);
+
+                    if (nonQuorumNodes.length > 0 && (node?.signerReplaceFailedAttempts || 0) < MAX_SIGNER_REPLACE_ATTEMPTS) {
                         // Generate new multi signer if this node is not already a signer.
                         let newSignerKey, newSignerAddress;
                         if (!this.evernodeContext.xrplContext.multiSigner.isSignerNode()) {
@@ -202,7 +212,22 @@ class ClusterContext {
                         }
                     }
                     else {
-                        error(`${MAX_SIGNER_REPLACE_ATTEMPTS} attempts on signer replacement failed, Skipping the signer replacement.`);
+                        if (nonQuorumNodes.length == 0)
+                            log("There are no non quorum nodes to replace signer");
+                        else
+                            error(`${MAX_SIGNER_REPLACE_ATTEMPTS} attempts on signer replacement failed`);
+
+                        log("Transferring the signer.");
+                        // Try to remove the signer and add it's weight to a random signer.
+                        const quorumNodes = this.getClusterUnlNodes().filter(n => n.signerAddress).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
+                        const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
+                        const newSignerNode = quorumNodes[lclBasedNum % quorumNodes.length];
+                        try {
+                            await this.evernodeContext.xrplContext.replaceSignerList(node.signerAddress, newSignerNode.signerAddress!);
+                        }
+                        catch (e) {
+                            error("Signer transfer failed. Skip altering the signer list. ", e);
+                        }
                     }
                 }
 
@@ -305,7 +330,10 @@ class ClusterContext {
                         this.clusterManager.addNode(<ClusterNode>{
                             refId: node.refId,
                             contractId: info.contractId,
-                            createdOnLcl: this.hpContext.lclSeqNo,
+                            status: {
+                                status: NodeStatus.CREATED,
+                                onLcl: this.hpContext.lclSeqNo
+                            },
                             createdOnTimestamp: this.hpContext.timestamp,
                             host: node.host,
                             domain: info.domain,
@@ -316,7 +344,8 @@ class ClusterContext {
                             userPort: info.userPort,
                             isUnl: false,
                             lifeMoments: 1,
-                            targetLifeMoments: node.targetLifeMoments
+                            targetLifeMoments: node.targetLifeMoments,
+                            owner: ClusterOwner.SELF_MANAGER
                         });
 
                         log(`Added node ${info.pubkey} to the cluster as nonUnl.`);
@@ -357,8 +386,8 @@ class ClusterContext {
         // Add one by one to Unl to avoid forking.
         const clusterNodes = this.getClusterNodes();
         const pendingAcknowledged = clusterNodes
-            .filter(n => !n.isUnl && n.ackReceivedOnLcl && (n.ackReceivedOnLcl + this.maturityLclThreshold) < this.hpContext.lclSeqNo)
-            .sort((a, b) => (a.ackReceivedOnLcl || 0) < (b.ackReceivedOnLcl || 0) ? -1 : 1);
+            .filter(n => !n.isUnl && n.status.status === NodeStatus.ACKNOWLEDGED && (n.status.onLcl + this.maturityLclThreshold) < this.hpContext.lclSeqNo)
+            .sort((a, b) => (a.status.onLcl || 0) < (b.status.onLcl || 0) ? -1 : 1);
 
         if (pendingAcknowledged && pendingAcknowledged.length > 0) {
             const node = pendingAcknowledged[0];
@@ -377,10 +406,49 @@ class ClusterContext {
     async #checkForMatured(): Promise<void> {
         const selfNode = this.clusterManager.getNode(this.hpContext.publicKey);
 
-        // If this node is not in UNL acknowledge others to add to UNL.
-        if (selfNode && !selfNode.isUnl && !selfNode.ackReceivedOnLcl) {
-            await this.#acknowledgeMaturity().catch(error);
-            log(`Maturity acknowledgement sent.`);
+        if (selfNode && selfNode.owner === ClusterOwner.SELF_MANAGER) {
+            let nodeInfo = JSONHelpers.readFromFile<NodeInfo>(this.nodePrivateInfoFile);
+
+            // If this node is owned by self manager and not a UNL node, probably this might needed to be configured and acknowledge the maturity.
+            if (!selfNode.isUnl) {
+                // WE CANNOT DO STATE OPERATIONS HERE SINCE WE ARE NOT IN THE UNL, SO WE MANAGE TEMPORARY PRIVATE FILE FOR THIS SECTION.
+                // If this is still in CREATED state we should configure the node.
+                if (!nodeInfo && selfNode.status.status === NodeStatus.CREATED) {
+                    // Update the peer list of the node.
+                    log("Peer list Updating..");
+                    const unlNodes = this.clusterManager.getUnlNodes();
+                    const knownPeers = unlNodes.map(kp => { return `${kp.domain}:${kp.peerPort}` });
+                    if (knownPeers && knownPeers.length > 0) {
+                        await this.hpContext.updatePeers(knownPeers);
+                        log(`Peer list was updated with ${knownPeers.length} peers.`);
+                    }
+
+                    // Create a private file stating that the node is configured.
+                    JSONHelpers.writeToFile(this.nodePrivateInfoFile, <NodeInfo>{ status: { status: NodeStatus.CONFIGURED, onLcl: this.hpContext.lclSeqNo }, acknowledgeTries: 0 });
+                }
+                // If the node is configured, Send the acknowledgement after the threshold ledgers.
+                // Or if we have already acknowledged and we have not yet reached the max retry, yet we have been not added to the UNL.
+                // Then we wait for the ledger threshold and resend the acknowledgement.
+                else if (nodeInfo && ((nodeInfo.status.status === NodeStatus.CONFIGURED && (nodeInfo.status.onLcl + this.acknowledgeLclThreshold) < this.hpContext.lclSeqNo) ||
+                    (nodeInfo.acknowledgeTries <= MAX_ACKNOWLEDGE_ATTEMPTS && (nodeInfo.status.status === NodeStatus.ACKNOWLEDGED && (this.hpContext.lclSeqNo - nodeInfo.status.onLcl) > (this.acknowledgeRetryLclThreshold))))) {
+                    try {
+                        await this.#acknowledgeMaturity();
+                        log(`Maturity acknowledgement sent.`);
+
+                        // We record that we have acknowledged the maturity.
+                        nodeInfo.status = { status: NodeStatus.ACKNOWLEDGED, onLcl: this.hpContext.lclSeqNo };
+                        nodeInfo.acknowledgeTries++;
+                        JSONHelpers.writeToFile(this.nodePrivateInfoFile, nodeInfo);
+                    }
+                    catch (e) {
+                        error(e);
+                    }
+                }
+            }
+            else if (nodeInfo) {
+                // If we are in the UNL and still we have the temporary private info file, Remove it.
+                JSONHelpers.removeFile(this.nodePrivateInfoFile);
+            }
         }
     }
 

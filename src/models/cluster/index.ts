@@ -1,13 +1,23 @@
 import { AcquireOptions, AcquiredNode, PendingAcquire } from "../evernode";
 
+export interface NodeStatusInfo {
+  status: NodeStatus;
+  onLcl: number;
+}
+
+export interface NodeInfo {
+  status: NodeStatusInfo;
+  acknowledgeTries: number;
+}
+
 export interface ClusterOptions {
   maturityLclThreshold?: number;
+  acknowledgeLclThreshold?: number;
+  acknowledgeRetryLclThreshold?: number;
 }
 
 export interface ClusterNode extends AcquiredNode {
-  createdOnLcl: number;
-  addedToUnlOnLcl?: number;
-  ackReceivedOnLcl?: number;
+  status: NodeStatusInfo;
   activeOnLcl?: number;
   isUnl: boolean;
   signerAddress?: string;
@@ -15,6 +25,7 @@ export interface ClusterNode extends AcquiredNode {
   lifeMoments: number;
   targetLifeMoments: number;
   signerReplaceFailedAttempts?: number;
+  owner: number;
 }
 
 export interface PendingNode extends PendingAcquire {
@@ -79,4 +90,17 @@ export enum OperationType {
   ADD_NODE = "add_node",
   EXTEND_NODE = "extend_node",
   REMOVE_NODE = "remove_node"
+}
+
+export enum NodeStatus {
+  NONE = 0,
+  CREATED,
+  CONFIGURED,
+  ACKNOWLEDGED,
+  ADDED_TO_UNL
+}
+
+export enum ClusterOwner {
+  NONE = 0,
+  SELF_MANAGER
 }

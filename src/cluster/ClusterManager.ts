@@ -1,5 +1,5 @@
 import { JSONHelpers } from "../utils";
-import { ClusterData, ClusterNode, PendingNode } from '../models/cluster';
+import { ClusterData, ClusterNode, NodeStatus, NodeStatusInfo, PendingNode } from '../models/cluster';
 
 class ClusterManager {
     private clusterDataFile: string = "cluster.json";
@@ -185,7 +185,10 @@ class ClusterManager {
 
         if (!this.clusterData.nodes[index].isUnl) {
             this.clusterData.nodes[index].isUnl = true;
-            this.clusterData.nodes[index].addedToUnlOnLcl = lclSeqNo;
+            this.clusterData.nodes[index].status = <NodeStatusInfo>{
+                status: NodeStatus.ADDED_TO_UNL,
+                onLcl: lclSeqNo
+            }
             this.updated = true;
         }
     }
@@ -201,8 +204,11 @@ class ClusterManager {
         if (index === -1)
             throw 'Pubkey does not exist in the cluster.';
 
-        if (!this.clusterData.nodes[index].ackReceivedOnLcl) {
-            this.clusterData.nodes[index].ackReceivedOnLcl = lclSeqNo;
+        if (this.clusterData.nodes[index].status.status !== NodeStatus.ACKNOWLEDGED) {
+            this.clusterData.nodes[index].status = <NodeStatusInfo>{
+                status: NodeStatus.ACKNOWLEDGED,
+                onLcl: lclSeqNo
+            }
             this.updated = true;
         }
     }

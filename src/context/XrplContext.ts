@@ -502,7 +502,7 @@ class XrplContext {
 
         let signer: Signer;
         let curSigner: SignerKey | null = null;
-        // If this is a the owner, Generate new signer and send it.
+        // If this is a the owner, Get the signer and send it.
         // Otherwise just collect the signer.
         if (pubkey === this.hpContext.publicKey) {
             curSigner = this.multiSigner.getSigner();
@@ -552,8 +552,16 @@ class XrplContext {
         if (oldSignerIndex === -1)
             throw `Could not find a old signer with given address.`
 
-        // Replace old signer with new signer.
-        signerListInfo.signerList[oldSignerIndex].account = newSignerAddress;
+        const newSignerIndex = signerListInfo.signerList.findIndex(s => s.account === newSignerAddress);
+
+        // Replace old signer with new signer, If the new signer is not already in signer list. Otherwise transfer the weight.
+        if (newSignerIndex == -1) {
+            signerListInfo.signerList[oldSignerIndex].account = newSignerAddress;
+        }
+        else {
+            signerListInfo.signerList[newSignerIndex].weight += signerListInfo.signerList[oldSignerIndex].weight;
+            signerListInfo.signerList.splice(oldSignerIndex, 1);
+        }
         if (options.quorum)
             signerListInfo.signerQuorum = options.quorum;
 

@@ -59,6 +59,14 @@ class JSONHelpers {
         const data = rawData ? JSON.parse(rawData) : {};
         return data as T;
     }
+
+    /**
+     * Delete a given file.
+     * @param filePath File path of the json.
+     */
+    public static removeFile(filePath: string) {
+        fs.rmSync(filePath);
+    }
 }
 
 export default JSONHelpers;
