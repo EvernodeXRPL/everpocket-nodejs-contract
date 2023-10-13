@@ -2,7 +2,7 @@ import { AcquireOptions } from "../models/evernode";
 import { Peer, User } from "../models";
 import { Buffer } from 'buffer';
 import { EvernodeContext, VoteContext } from "../context";
-import { ClusterOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode, OperationData, OperationType, AddNodeOperation, ExtendNodeOperation, RemoveNodeOperation, ClusterOwner, NodeStatus, NodeInfo } from "../models/cluster";
+import { ClusterOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode, OperationData, OperationType, AddNodeOperation, ExtendNodeOperation, RemoveNodeOperation, ClusterOwner, NodeStatus, NodeInfo, Operation } from "../models/cluster";
 import { ClusterManager } from "../cluster";
 import { AllVoteElector } from "../vote/vote-electors";
 import { VoteElectorOptions } from "../models/vote";
@@ -64,11 +64,14 @@ class ClusterContext {
         try {
             await this.#setupClusterInfo();
             await this.#updateActiveness();
-            await this.#checkForPendingNodes();
+            const aliveCheckReached = await this.#checkForPendingNodes();
             await this.#checkForMatured();
             await this.#checkForAcknowledged();
             await this.#checkForExtends();
-            await this.#processOperations();
+            // We do not process operations if aliveness check is tried in this round.
+            // Because user connection takes time, So due to that some nodes might be unstable.
+            if (!aliveCheckReached)
+                await this.#processOperations();
             this.initialized = true;
         } catch (e) {
             await this.deinit();
@@ -110,13 +113,28 @@ class ClusterContext {
 
     /**
      * Queue an operation in the queue.
+     * @param type Type of the queue operation.
+     * @param ref Unique reference for the operation.
+     * @param data Operation data.
      */
-    #queueOperation(type: OperationType, data: AddNodeOperation | ExtendNodeOperation | RemoveNodeOperation) {
-        this.operationData.operations.push({
-            type: type,
-            data: data
-        });
+    #queueOperation(type: OperationType, ref: string, data: AddNodeOperation | ExtendNodeOperation | RemoveNodeOperation) {
+        if (!this.#hasPendingOperation(type, ref))
+            this.operationData.operations.push({
+                type: type,
+                ref: ref,
+                data: data
+            });
         this.updatedData = true;
+    }
+
+    /**
+     * Check if there are operations with given type and query.
+     * @param type Operation type.
+     * @param ref Unique reference of the operation.
+     * @returns True if there's an pending operation, False otherwise.
+     */
+    #hasPendingOperation(type: OperationType, ref: string) {
+        return !!this.operationData.operations.find((o: Operation) => o.type === type && o.ref === ref);
     }
 
     /**
@@ -304,10 +322,12 @@ class ClusterContext {
 
     /**
      * Check and update node list if there are pending acquired which are completed now.
+     * @returns True if pending node found and aliveness check tried. Otherwise false;
      */
-    async #checkForPendingNodes(): Promise<void> {
+    async #checkForPendingNodes(): Promise<boolean> {
         const pendingNodes = this.getPendingNodes();
 
+        let aliveCheckReached = false;
         for (const node of pendingNodes) {
             const info = this.evernodeContext.getIfAcquired(node.refId);
             // If acquired, Check the liveliness and add that to the node list as a non-UNL node.
@@ -321,6 +341,7 @@ class ClusterContext {
                         continue;
                     }
 
+                    aliveCheckReached = true;
                     if (!(await this.hpContext.checkLiveness(new Peer(info.domain, info.userPort)))) {
                         this.clusterManager.increaseAliveCheck(node.refId);
                     }
@@ -362,6 +383,8 @@ class ClusterContext {
                 log(`Pending node ${node.refId} is removed due to unavailability.`);
             }
         }
+
+        return aliveCheckReached;
     }
 
     /**
@@ -372,7 +395,7 @@ class ClusterContext {
         const pendingExtend = clusterNodes.find(n => n.targetLifeMoments > n.lifeMoments);
 
         if (pendingExtend) {
-            this.#queueOperation(OperationType.EXTEND_NODE, <ExtendNodeOperation>{
+            this.#queueOperation(OperationType.EXTEND_NODE, pendingExtend.pubkey, <ExtendNodeOperation>{
                 nodePubkey: pendingExtend.pubkey,
                 moments: pendingExtend.targetLifeMoments - pendingExtend.lifeMoments
             });
@@ -638,7 +661,7 @@ class ClusterContext {
             }
         }
 
-        this.#queueOperation(OperationType.ADD_NODE, <AddNodeOperation>{
+        this.#queueOperation(OperationType.ADD_NODE, `${options.host}${this.hpContext.lclHash}`, <AddNodeOperation>{
             acquireOptions: options,
             lifeMoments: lifeMoments
         });
@@ -670,12 +693,21 @@ class ClusterContext {
     }
 
     /**
+     * Record a provided node for extend.
+     * @param pubkey Public key of the node to be extended.
+     * @param lifeMoments Number of moments to be extended.
+     */
+    public async extendNode(pubkey: string, lifeMoments: number): Promise<void> {
+        this.clusterManager.increaseTargetLifeMoments(pubkey, lifeMoments);
+    }
+
+    /**
      * Removes a provided a node from the cluster.
      * @param pubkey Public key of the node to be removed.
      * @param [force=false] Force remove. (This might cause to fail some pending operations).
      */
     public async removeNode(pubkey: string, force: boolean = false): Promise<void> {
-        this.#queueOperation(OperationType.REMOVE_NODE, <RemoveNodeOperation>{
+        this.#queueOperation(OperationType.REMOVE_NODE, pubkey, <RemoveNodeOperation>{
             nodePubkey: pubkey,
             force: force
         })

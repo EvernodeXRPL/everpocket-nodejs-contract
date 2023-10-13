@@ -67,6 +67,7 @@ export interface RemoveNodeOperation {
 
 export interface Operation {
   type: OperationType,
+  ref: string,
   data: AddNodeOperation | ExtendNodeOperation | RemoveNodeOperation
 }
 

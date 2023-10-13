@@ -2,8 +2,14 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "r3HfHxf6LeY8y1SGWHoKRRrUGdxruJyXEL";
-// const masterSecret = "sniK4psjdEXiogzMjQZonjVvZwmSP";
+// const masterAddress = "rEXHYDpWZdyiKNq8rHg7kA3cW1r84aCCeo";
+// // const masterSecret = "ssF7oVZdyezJ4B5pqtJKubYGMaQQQ";
+// const masterAddress = "r3HfHxf6LeY8y1SGWHoKRRrUGdxruJyXEL";
+// // const masterSecret = "sniK4psjdEXiogzMjQZonjVvZwmSP";
+const masterAddress = "rDxQsedp7zFV7KCvZuh4bL5PjA8VC4AG1D";
+// const masterSecret = "sn1vRDGHVT6pqFihvi2sgdQtLvYQS";
+// const masterAddress = "rs3aeAwccnxuiM2fhUK4yf5i7NEPmNqT5p";
+// // const masterSecret = "ssBzJ6Vk2cyYzKzxgdhvWpKtBTgUe";
 
 
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
@@ -18,58 +24,26 @@ const MAX_CLUSTER = 8;
 
 const nomadOptions = {
     targetNodeCount: 20,
-    targetLifeMoments: 2,
+    lifeIncrMomentMinLimit: 4,
+    lifeIncrMomentMaxLimit: 48,
     preferredHosts: [
         "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
         "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
-        "rhYqbRQpSy7RtQtXjfurprdB4Gj8PAJW2X",
-        "rhq7W8KuF2EBFpTQAJ7D6gihCJJJU6JZeX",
-        "rahTwEZefDFtShmgjsArNzxTCT8Zj8HXKN",
-        "rPTefScX95J1Un4MjZfLDRF2T9zdfXycta",
-        "rhKW2ihYKtd71yeuZK7f2KPXBXJ6byVdVo",
-        "rhiSZcQYBQoctG8QuEatxMR11TFiZUuGYu",
-        "rsEYGLqSobDiZpydSXq6dK4awsxFegqNMK",
-        "rzxoq8mHVBBZYVXtxg4EMpXXL4ARQjH4p",
-        "rfBQaUjF9UZWjdJ33hGDeas1hEXK7DmfCV",
-        "rfZFCjpFD1zhJP3DsSWy9NVUCmm9Kkhg4w",
-        "rfoukrqxvcrWbLRvXUpgwzKktkPqEmwBC9",
-        "rfuvNytxfavNgN57WqGfQR3duhUAsy8PEY",
-        "r92BHq5BXfRWBnyqaxQWiYhWCMZgfXJGe6",
-        "rw4fF5LDQsonyoYiEYrgPgTC2asnCQQZ6g",
+        "r6fLvZafDEBRvLiAmQPLoPPHqj65aPJAx",
+        "rn7BLMzkfbWYiEfsgzrJ1bjo3qudtuEpnL", 
+        "raL76YeFLJxccNjkNkud5zkitaY8Kofqi6",
+        "rfCtydrbDS94ihkCPrTej494c1s1n7NYti",
         "rwqWhVJZ1SgXBBpBNQ194sdDNBbUZTaTem",
         "rwvxtQfKWH85D1RL3DSjZJj7J1ocSQ4k42",
-        "rB2SBLDLBUwaUV2QegZxoztpkJLgh1Kvcx",
-        "rDsNaTF6wGo6Rb2q8PBowRao5rkwjjUnwt",
         "rDMiTtcVEnSvoeS8uh71fS2vdpQpP33gCN",
-        "rDVBMoZ6QcMS12Ty3aBNwrNPPfvHHdvkde",
-        "rD6Lgdxzq3dr42JD4F1bwF86BaCwAaeQWu",
-        "rDt8RqBshBPGRgeWdjpBRzoMYxmLwZKCKo",
-        "rDy4mHqVZnAwXS7sX4W34EAJT8izGUXTS2",
-        "rErmdQZLmAauqjY7ig8KeLAGhfxeVAHHnA",
-        "rE29fENEy8GBiFhcAnagCLBbJ7XqnaVmSX",
-        "rEe73SNfryStJeEEdbNjzXh3a11XCSJvPD",
-        "rEmGJ3uu7DSrNfM5JSZnFtMjYhLbSmVJ3A",
-        "rGnsENqQKqPNQKWMSNxbZcMuubjJaaBpf5",
-        "rGRGDybWYn8MWvf3f5EwCdNoGJbUJwiBxA",
-        "rHEfDyy1d5dV1LUC2LMHedm8eRXXCtEoC6",
-        "rHJqCseZFzCveSTdtJuDNpD4ARoMy41E1C",
-        "rH1NTQ73pksxX7Z8rEN6XrcibgEd34uJXo",
-        "rKrSVLgaKQANTSEv1bY4cT4PVThCzFXpX6",
+        "rE9kkUTado983bLcUYKriyVHsjDoULPjDf",
+        "rEJUrcoBUkS4wjU1CG8XzLuLKc8sJKDicn",
+        "rEtBQShEjRXGPVC9AsmySJSaVtSsVZcR6p",
+        "rGYPizbATsej8iJ4kDeFf7tRysf6ggwcQY",
+        "rJaG3NCFz1yenvJftaHUAPVUy9MJHtpSa6",
         "rKUq1MnzfqnZAUArkE2ttL1n4UavwUzGrn",
-        "rKqDVS5fYEWDNivosnFiri1bXfqt2ebj7q",
-        "rLBE5sCTcgRaKanhuHHS2ubxkG15DghE2t",
-        "rLHzHbqGF4RCf5Z9oDNQfvPXY5wGaKZrp4",
-        "rLWYzhhSZkcEbPcA8LU1VEVpwFMz2x7G4X",
-        "rLkSafYKvf5vBfFyQMVB6touhUnS6j5HR9",
-        "rMaHq7P7ibkbeiykRGyTsdyFEDBRGrLdx6",
-        "rMu8RLEKTtyWuhko1F5dVZoUAiVpRpi5GB",
-        "r4LF5L5tq7JdsAUY5YUXjAU1J6xZtm47HP",
-        "r4b2DEW4Wb6pGmxRwAXC925z7W9tDNjLgd",
-        "r4dVikgRzdVuZcFfMWJWiUo8iJxmYGDmiS",
-        "r3W7zdccdtnjfBhQfnMqxUwKj2HH3HY3z",
-        "rrssGm5h8aWncB3CGMuQ2WGfexubbeCTLV",
-        "rnpkkEEMDSYAg1G6eHWF66kKjrKoAqMbtV",
-        "rQLYPp4iGPraESkvkw6Ta5kacgigAabYQQ"
+        "rPpkvJRgUAro6Tk66bzxzTKi49YttKUQik",
+        "rPTefScX95J1Un4MjZfLDRF2T9zdfXycta"
     ],
     instanceCfg: {
         config: {

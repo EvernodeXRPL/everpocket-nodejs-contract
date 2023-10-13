@@ -173,6 +173,20 @@ class ClusterManager {
     }
 
     /**
+     * Increase target moments of the node.
+     * @param pubkey Public key of the node.
+     * @param increment Life moments value to incement.
+     */
+    public increaseTargetLifeMoments(pubkey: string, increment: number): void {
+        const index = this.clusterData.nodes.findIndex(n => n.pubkey === pubkey);
+
+        if (index >= 0) {
+            this.clusterData.nodes[index].targetLifeMoments += increment;
+            this.updated = true;
+        }
+    }
+
+    /**
      * Mark the node as a UNL node.
      * @param pubkey Public key of the node.
      * @param lclSeqNo Current lcl sequence number.

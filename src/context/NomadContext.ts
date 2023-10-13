@@ -6,7 +6,6 @@ import HotPocketContext from "./HotPocketContext";
 
 const IMMATURE_PRUNE_LCL_THRESHOLD = 15;
 const INACTIVE_PRUNE_LCL_THRESHOLD = 60;
-const EXPIRE_PRUNE_TS_THRESHOLD = 900000; // 15 mins in ms.
 
 class NomadContext {
     private initialized: boolean = false;
@@ -30,6 +29,7 @@ class NomadContext {
         await this.clusterContext.init();
         await this.prune();
         await this.grow();
+        await this.extend();
         this.initialized = true;
     }
 
@@ -62,9 +62,42 @@ class NomadContext {
             log('Growing the cluster.');
             log(`Target count: ${this.options.targetNodeCount}, Existing count: ${totalCount}`);
 
-            await this.clusterContext.addNewClusterNode(this.options.targetLifeMoments, {
+            // Decide a random number to increment the life.
+            // Take a number between min and max increment moments.
+            const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
+            const randomIncrement = this.options.lifeIncrMomentMinLimit +
+                (lclBasedNum % (this.options.lifeIncrMomentMaxLimit - this.options.lifeIncrMomentMinLimit))
+
+            await this.clusterContext.addNewClusterNode(randomIncrement, {
                 preferredHosts: this.options.preferredHosts, instanceCfg: this.options.instanceCfg
             }).catch(error);
+        }
+    }
+
+    /**
+     * Check for expiring nodes and send for extend.
+     */
+    public async extend(): Promise<void> {
+        const momentSize = this.clusterContext.evernodeContext.getEvernodeConfig().momentSize;
+        const curTimestamp = this.hpContext.timestamp;
+
+        for (const node of this.clusterContext.getClusterNodes()) {
+            const nodeExpiryTs = (node.createdOnTimestamp || 0) + (node.lifeMoments * momentSize * 1000);
+            // Extend if close to expire except the nodes which has pending extends or the node which are created by contract.
+            // Extend decision threshold is taken as before the half of the minimum increment moments.
+            if (node.targetLifeMoments <= node.lifeMoments && node.createdOnTimestamp &&
+                curTimestamp > (nodeExpiryTs - (this.options.lifeIncrMomentMinLimit * momentSize * 500))) {
+                log(`Extending the node ${node.pubkey} due to expiring.`);
+                log(`Expiry ts: ${nodeExpiryTs}, Current ts: ${curTimestamp}`);
+
+                // Decide a random number to increment the life.
+                // Take a number between min and max increment moments.
+                const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
+                const randomIncrement = this.options.lifeIncrMomentMinLimit +
+                    (lclBasedNum % (this.options.lifeIncrMomentMaxLimit - this.options.lifeIncrMomentMinLimit))
+
+                this.clusterContext.extendNode(node.pubkey, randomIncrement);
+            }
         }
     }
 
@@ -72,13 +105,9 @@ class NomadContext {
      * Prune the nodes which fulfils the prune conditions.
      */
     public async prune(): Promise<void> {
-        const momentSize = this.clusterContext.evernodeContext.getEvernodeConfig().momentSize;
-        const curTimestamp = this.hpContext.timestamp;
         const curLcl = this.hpContext.lclSeqNo;
 
         for (const node of this.clusterContext.getClusterNodes()) {
-            const nodeExpiryTs = (node.createdOnTimestamp || 0) + (node.lifeMoments * momentSize * 1000);
-
             let prune = false;
             let force = true;
             // Prune unl nodes if inactive. Only consider the nodes which are added to Unl before this ledger.
@@ -94,15 +123,6 @@ class NomadContext {
                 log(`Pruning the node ${node.pubkey} due to not getting matured.`);
                 log(`Created on lcl: ${node.status.onLcl}, Current moment: ${curLcl}`);
                 prune = true;
-            }
-            // Prune if close to expire except the nodes which has pending extends or the node which are created by contract.
-            else if (node.targetLifeMoments <= node.lifeMoments && node.createdOnTimestamp &&
-                curTimestamp > (nodeExpiryTs - EXPIRE_PRUNE_TS_THRESHOLD)) {
-                log(`Pruning the node ${node.pubkey} due to expiring.`);
-                log(`Expiry ts: ${nodeExpiryTs}, Current ts: ${curTimestamp}`);
-                prune = true;
-                // When removing nodes close to expire, Do not force remove them which might cause to fail pending acquires.
-                force = false;
             }
 
             if (prune) {
