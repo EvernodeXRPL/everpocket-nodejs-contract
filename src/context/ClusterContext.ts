@@ -9,6 +9,7 @@ import { VoteElectorOptions } from "../models/vote";
 import HotPocketContext from "./HotPocketContext";
 import { error, info, log } from "../helpers/logger";
 import { JSONHelpers } from "../utils";
+import NumberHelpers from "../utils/helpers/NumberHelper";
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
 const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.udpvisa-test-0.0.1-ubt.20.04-njs.20";
@@ -156,6 +157,7 @@ class ClusterContext {
                 log(`Acquiring a new node...`);
                 let acquire = (await this.evernodeContext.acquireNode(data.acquireOptions)) as PendingNode;
                 acquire.targetLifeMoments = data.lifeMoments;
+                acquire.maxLifeMoments = data.maxLifeMoments;
                 acquire.aliveCheckCount = 0;
 
                 this.clusterManager.addPending(acquire);
@@ -238,8 +240,8 @@ class ClusterContext {
                         log("Transferring the signer.");
                         // Try to remove the signer and add it's weight to a random signer.
                         const quorumNodes = this.getClusterUnlNodes().filter(n => n.signerAddress).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
-                        const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
-                        const newSignerNode = quorumNodes[lclBasedNum % quorumNodes.length];
+                        const randomIndex = NumberHelpers.getRandomNumber(this.hpContext, 0, quorumNodes.length);
+                        const newSignerNode = quorumNodes[randomIndex];
                         try {
                             await this.evernodeContext.xrplContext.replaceSignerList(node.signerAddress, newSignerNode.signerAddress!);
                         }
@@ -366,6 +368,7 @@ class ClusterContext {
                             isUnl: false,
                             lifeMoments: 1,
                             targetLifeMoments: node.targetLifeMoments,
+                            maxLifeMoments: node.maxLifeMoments,
                             owner: ClusterOwner.SELF_MANAGER
                         });
 
@@ -621,10 +624,11 @@ class ClusterContext {
 
     /**
      * Acquire and add new node to the cluster.
+     * @param [maxLifeMoments=1] Amount of maximum life moments for the instance.
      * @param [lifeMoments=1] Amount of life moments for the instance.
      * @param [options={}]  Acquire instance options.
      */
-    public async addNewClusterNode(lifeMoments: number = 1, options: AcquireOptions = {}): Promise<void> {
+    public async addNewClusterNode(maxLifeMoments: number = 1, lifeMoments: number = 1, options: AcquireOptions = {}): Promise<void> {
         const hpconfig = await this.hpContext.getContractConfig();
         const unl = hpconfig.unl;
 
@@ -663,7 +667,8 @@ class ClusterContext {
 
         this.#queueOperation(OperationType.ADD_NODE, `${options.host}${this.hpContext.lclHash}`, <AddNodeOperation>{
             acquireOptions: options,
-            lifeMoments: lifeMoments
+            lifeMoments: lifeMoments,
+            maxLifeMoments: maxLifeMoments
         });
     }
 

@@ -2,8 +2,8 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rEXHYDpWZdyiKNq8rHg7kA3cW1r84aCCeo";
-// const masterSecret = "ssF7oVZdyezJ4B5pqtJKubYGMaQQQ";
+const masterAddress = "rs3aeAwccnxuiM2fhUK4yf5i7NEPmNqT5p";
+// const masterSecret = "ssBzJ6Vk2cyYzKzxgdhvWpKtBTgUe";
 
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
@@ -18,18 +18,10 @@ const MAX_CLUSTER = 8;
 const nomadOptions = {
     targetNodeCount: 20,
     lifeIncrMomentMinLimit: 4,
-    lifeIncrMomentMaxLimit: 48,
+    maxLifeMomentLimit: 48,
     preferredHosts: [
         "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
-        "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N",
-        "r6fLvZafDEBRvLiAmQPLoPPHqj65aPJAx",
-        "rn7BLMzkfbWYiEfsgzrJ1bjo3qudtuEpnL",
-        "rwqWhVJZ1SgXBBpBNQ194sdDNBbUZTaTem",
-        "rDMiTtcVEnSvoeS8uh71fS2vdpQpP33gCN",
-        "rE9kkUTado983bLcUYKriyVHsjDoULPjDf",
-        "rGYPizbATsej8iJ4kDeFf7tRysf6ggwcQY",
-        "rKUq1MnzfqnZAUArkE2ttL1n4UavwUzGrn",
-        "rPTefScX95J1Un4MjZfLDRF2T9zdfXycta"
+        "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N"
     ],
     instanceCfg: {
         config: {

@@ -24,12 +24,14 @@ export interface ClusterNode extends AcquiredNode {
   createdOnTimestamp?: number;
   lifeMoments: number;
   targetLifeMoments: number;
+  maxLifeMoments: number;
   signerReplaceFailedAttempts?: number;
   owner: number;
 }
 
 export interface PendingNode extends PendingAcquire {
   targetLifeMoments: number;
+  maxLifeMoments: number;
   aliveCheckCount: number;
 }
 
@@ -53,6 +55,7 @@ export interface ClusterMessageResponse {
 export interface AddNodeOperation {
   acquireOptions: AcquireOptions;
   lifeMoments: number;
+  maxLifeMoments: number
 }
 
 export interface ExtendNodeOperation {

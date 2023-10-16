@@ -10,6 +10,7 @@ import { JSONHelpers } from "../utils";
 import { VoteElectorOptions } from "../models/vote";
 import HotPocketContext from "./HotPocketContext";
 import { error, log } from "../helpers/logger";
+import NumberHelpers from "../utils/helpers/NumberHelper";
 
 const TIMEOUT = 10000;
 const ACQUIRE_ABANDON_LCL_THRESHOLD = 10;
@@ -283,15 +284,15 @@ class EvernodeContext {
      * @returns Decided host address.
      */
     public async decideHost(preferredHosts: string[] | null = null): Promise<string> {
-        const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
-
         // Choose from hosts that have available instances.
         const vacantHosts = await this.getHosts();
         const unusedHosts = preferredHosts ? preferredHosts.filter(a => vacantHosts.find(h => a === h.address)) : vacantHosts.map(h => h.address);
 
         let hostAddress = null;
-        if (unusedHosts.length > 0)
-            hostAddress = unusedHosts.sort((a: any, b: any) => a.localeCompare(b))[lclBasedNum % unusedHosts.length];
+        if (unusedHosts.length > 0) {
+            const randomIndex = NumberHelpers.getRandomNumber(this.hpContext, 0, unusedHosts.length);
+            hostAddress = unusedHosts.sort((a: any, b: any) => a.localeCompare(b))[randomIndex];
+        }
         else
             throw 'There are no vacant hosts in the network';
 

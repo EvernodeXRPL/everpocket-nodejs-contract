@@ -180,6 +180,11 @@ class ClusterManager {
     public increaseTargetLifeMoments(pubkey: string, increment: number): void {
         const index = this.clusterData.nodes.findIndex(n => n.pubkey === pubkey);
 
+        const maxLifeMoments = this.clusterData.nodes[index].maxLifeMoments;
+        
+        if (this.clusterData.nodes[index].targetLifeMoments + increment > maxLifeMoments)
+            throw `This node's life cannot be increased more than ${maxLifeMoments}`;
+
         if (index >= 0) {
             this.clusterData.nodes[index].targetLifeMoments += increment;
             this.updated = true;
