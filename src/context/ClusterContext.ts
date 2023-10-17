@@ -394,7 +394,8 @@ class ClusterContext {
      * Check for node which needed to extended.
      */
     async #checkForExtends(): Promise<void> {
-        const clusterNodes = this.getClusterNodes();
+        // Get only the nodes which are in the UNL, Otherwise it'll be a waste if it's pruned due to not getting matured.
+        const clusterNodes = this.getClusterUnlNodes();
         const pendingExtend = clusterNodes.find(n => n.targetLifeMoments > n.lifeMoments);
 
         if (pendingExtend) {
