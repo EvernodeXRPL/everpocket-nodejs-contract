@@ -31,8 +31,8 @@ class NomadContext {
         const remainingLife = (node.maxLifeMoments - node.targetLifeMoments);
 
         let randomIncrement = remainingLife > this.options.lifeIncrMomentMinLimit ?
-            remainingLife :
-            NumberHelpers.getRandomNumber(this.hpContext, this.options.lifeIncrMomentMinLimit, remainingLife);
+            NumberHelpers.getRandomNumber(this.hpContext, this.options.lifeIncrMomentMinLimit, remainingLife) :
+            remainingLife;
 
         return randomIncrement;
     }
@@ -97,9 +97,10 @@ class NomadContext {
 
         for (const node of this.clusterContext.getClusterNodes()) {
             const nodeExpiryTs = (node.createdOnTimestamp || 0) + (node.lifeMoments * momentSize * 1000);
-            // Extend if close to expire except the nodes which has pending extends or the node which are created by contract.
+            // Extend if close to expire and max life is not reached yet.
+            // Except the nodes which has pending extends or the node which are created by contract.
             // Extend decision threshold is taken as before the half of the minimum increment moments.
-            if (node.targetLifeMoments <= node.lifeMoments && node.createdOnTimestamp &&
+            if (node.targetLifeMoments <= node.lifeMoments && node.targetLifeMoments < node.maxLifeMoments && node.createdOnTimestamp &&
                 curTimestamp > (nodeExpiryTs - (this.options.lifeIncrMomentMinLimit * momentSize * 500))) {
                 log(`Extending the node ${node.pubkey} due to expiring.`);
                 log(`Expiry ts: ${nodeExpiryTs}, Current ts: ${curTimestamp}`);
