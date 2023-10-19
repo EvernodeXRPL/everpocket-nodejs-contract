@@ -80,7 +80,7 @@ class NomadContext {
             log('Growing the cluster.');
             log(`Target count: ${this.options.targetNodeCount}, Existing count: ${totalCount}`);
 
-            const randomIncrement = NumberHelpers.getRandomNumber(this.hpContext, this.options.maxLifeMomentLimit, this.options.maxLifeMomentLimit);
+            const randomIncrement = NumberHelpers.getRandomNumber(this.hpContext, this.options.lifeIncrMomentMinLimit, this.options.maxLifeMomentLimit);
 
             await this.clusterContext.addNewClusterNode(this.options.maxLifeMomentLimit, randomIncrement, {
                 preferredHosts: this.options.preferredHosts, instanceCfg: this.options.instanceCfg
