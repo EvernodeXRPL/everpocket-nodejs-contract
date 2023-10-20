@@ -625,11 +625,11 @@ class ClusterContext {
 
     /**
      * Acquire and add new node to the cluster.
-     * @param [maxLifeMoments=1] Amount of maximum life moments for the instance.
+     * @param [maxLifeMoments=0] Amount of maximum life moments for the instance. 0 means there's no max life limit for the node.
      * @param [lifeMoments=1] Amount of life moments for the instance.
      * @param [options={}]  Acquire instance options.
      */
-    public async addNewClusterNode(maxLifeMoments: number = 1, lifeMoments: number = 1, options: AcquireOptions = {}): Promise<void> {
+    public async addNewClusterNode(maxLifeMoments: number = 0, lifeMoments: number = 1, options: AcquireOptions = {}): Promise<void> {
         const hpconfig = await this.hpContext.getContractConfig();
         const unl = hpconfig.unl;
 

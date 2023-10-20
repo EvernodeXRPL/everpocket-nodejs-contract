@@ -7,6 +7,7 @@ import HotPocketContext from "./HotPocketContext";
 
 const IMMATURE_PRUNE_LCL_THRESHOLD = 15;
 const INACTIVE_PRUNE_LCL_THRESHOLD = 60;
+const LIFE_INCR_MOMENT_MAX_LIMIT = 48;
 const EXPIRE_PRUNE_TS_THRESHOLD = 900000; // 15 mins in ms.
 
 class NomadContext {
@@ -28,7 +29,7 @@ class NomadContext {
      */
     #decideRandomLifeIncrement(node: ClusterNode) {
         // Increase by random value if remaining life is greater than min limit, Otherwise increase by remaining life.
-        const remainingLife = (node.maxLifeMoments - node.targetLifeMoments);
+        const remainingLife = node.maxLifeMoments ? (node.maxLifeMoments - node.targetLifeMoments) : LIFE_INCR_MOMENT_MAX_LIMIT;
 
         let randomIncrement = remainingLife > this.options.lifeIncrMomentMinLimit ?
             NumberHelpers.getRandomNumber(this.hpContext, this.options.lifeIncrMomentMinLimit, remainingLife) :
@@ -80,7 +81,7 @@ class NomadContext {
             log('Growing the cluster.');
             log(`Target count: ${this.options.targetNodeCount}, Existing count: ${totalCount}`);
 
-            const randomIncrement = NumberHelpers.getRandomNumber(this.hpContext, this.options.lifeIncrMomentMinLimit, this.options.maxLifeMomentLimit);
+            const randomIncrement = NumberHelpers.getRandomNumber(this.hpContext, this.options.lifeIncrMomentMinLimit, this.options.maxLifeMomentLimit || LIFE_INCR_MOMENT_MAX_LIMIT);
 
             await this.clusterContext.addNewClusterNode(this.options.maxLifeMomentLimit, randomIncrement, {
                 preferredHosts: this.options.preferredHosts, instanceCfg: this.options.instanceCfg
@@ -100,8 +101,8 @@ class NomadContext {
             // Extend if close to expire and max life is not reached yet.
             // Except the nodes which has pending extends or the node which are created by contract.
             // Extend decision threshold is taken as before the half of the minimum increment moments.
-            if (node.targetLifeMoments <= node.lifeMoments && node.targetLifeMoments < node.maxLifeMoments && node.createdOnTimestamp &&
-                curTimestamp > (nodeExpiryTs - (this.options.lifeIncrMomentMinLimit * momentSize * 500))) {
+            if (node.targetLifeMoments <= node.lifeMoments && (!node.maxLifeMoments || node.targetLifeMoments < node.maxLifeMoments) &&
+                node.createdOnTimestamp && curTimestamp > (nodeExpiryTs - (this.options.lifeIncrMomentMinLimit * momentSize * 500))) {
                 log(`Extending the node ${node.pubkey} due to expiring.`);
                 log(`Expiry ts: ${nodeExpiryTs}, Current ts: ${curTimestamp}`);
 
@@ -139,9 +140,9 @@ class NomadContext {
                 prune = true;
             }
             // Prune if node reached it's maximum life.
-            else if (node.maxLifeMoments <= node.lifeMoments && node.createdOnTimestamp &&
+            else if (node.maxLifeMoments && node.maxLifeMoments <= node.lifeMoments && node.createdOnTimestamp &&
                 curTimestamp > (nodeExpiryTs - EXPIRE_PRUNE_TS_THRESHOLD)) {
-                log(`Pruning the node ${node.pubkey} due to expiring.`);
+                log(`Pruning the node ${node.pubkey} due to the maximum life.`);
                 log(`Expiry ts: ${nodeExpiryTs}, Current ts: ${curTimestamp}`);
                 prune = true;
                 // When removing nodes close to expire, Do not force remove them which might cause to fail pending acquires.
