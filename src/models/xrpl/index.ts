@@ -35,9 +35,15 @@ export interface TransactionData {
   validated: TransactionInfo[];
 }
 
+export interface DecisionOptions {
+  key: string;
+  options?: any;
+}
+
 export interface TransactionSubmissionInfo {
   sequence: number;
   maxLedgerSequence: number;
+  options?: DecisionOptions;
 }
 
 export interface XrplOptions {
@@ -49,6 +55,7 @@ export interface MultiSignOptions {
   weight?: number;
   signerCount?: number;
   voteElectorOptions?: VoteElectorOptions;
+  txSubmitInfo?: TransactionSubmissionInfo;
   txOptions?: any;
 }
 

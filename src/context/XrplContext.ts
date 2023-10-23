@@ -1,4 +1,4 @@
-import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Signature, TransactionData, TransactionInfo } from '../models';
+import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Signature, TransactionData, TransactionInfo, DecisionOptions } from '../models';
 import { MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
 import * as evernode from 'evernode-js-client';
@@ -8,6 +8,7 @@ import HotPocketContext from './HotPocketContext';
 import VoteContext from './VoteContext';
 import { JSONHelpers } from '../utils';
 import { error, log } from '../helpers/logger';
+import NumberHelpers from '../utils/helpers/NumberHelper';
 
 const TIMEOUT = 10000;
 const TRANSACTION_VOTE_THRESHOLD = 0.5;
@@ -223,19 +224,33 @@ class XrplContext {
     /**
      * Decide a transaction submission info for a transaction.
      * @param [options={}] Vote options to decide the transaction submission info.
+     * @param [decisionOptions=null] Any other options that needed to be decided.
      * @returns Transaction submission info.
      */
-    public async getTransactionSubmissionInfo(options: VoteElectorOptions = {}): Promise<TransactionSubmissionInfo> {
-        // Decide a sequence number and max ledger sequence to send the same transaction from all the nodes.
-        const infos: TransactionSubmissionInfo[] = (await this.voteContext.vote(`transactionInfo${this.voteContext.getUniqueNumber()}`, [<TransactionSubmissionInfo>{
+    public async getTransactionSubmissionInfo(options: VoteElectorOptions = {}, decisionOptions: DecisionOptions | null = null): Promise<TransactionSubmissionInfo> {
+        let info = <TransactionSubmissionInfo>{
             sequence: await this.getSequence(),
-            maxLedgerSequence: this.getMaxLedgerSequence()
-        }], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT))).map(ob => ob.data);
+            maxLedgerSequence: this.getMaxLedgerSequence(),
+        }
 
-        return <TransactionSubmissionInfo>{
+        if (decisionOptions)
+            info.options = decisionOptions;
+
+        // Decide a sequence number and max ledger sequence to send the same transaction from all the nodes.
+        const infos: TransactionSubmissionInfo[] = (await this.voteContext.vote(`transactionInfo${this.voteContext.getUniqueNumber()}`, [info], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT))).map(ob => ob.data);
+
+        var res = <TransactionSubmissionInfo>{
             sequence: infos.map(i => i.sequence).sort((a, b) => b - a)[0],
             maxLedgerSequence: infos.map(i => i.maxLedgerSequence).sort((a, b) => b - a)[0]
         };
+
+        const decisionOptionList = infos.filter(i => i.options).map(i => i.options).sort((a, b) => (a?.key.localeCompare(b?.key!) || 0));
+        if (decisionOptionList && decisionOptionList.length > 0) {
+            const randomIndex = NumberHelpers.getRandomNumber(this.hpContext, 0, decisionOptionList.length);
+            res.options = decisionOptionList[randomIndex];
+        }
+
+        return res;
     }
 
     /**
@@ -254,7 +269,7 @@ class XrplContext {
     * @param [options={}] Multisigner options.
      */
     public async multiSignAndSubmitTransaction(transaction: any, options: MultiSignOptions = {}): Promise<any> {
-        const txSubmitInfo = await this.getTransactionSubmissionInfo(options?.voteElectorOptions);
+        const txSubmitInfo = options?.txSubmitInfo || await this.getTransactionSubmissionInfo(options?.voteElectorOptions);
         if (!txSubmitInfo)
             throw `${transaction.TransactionType} | Could not get transaction submission info`;
 
