@@ -12,7 +12,7 @@ import { JSONHelpers } from "../utils";
 import NumberHelpers from "../utils/helpers/NumberHelper";
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
-const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.udpvisa-test-0.0.1-ubt.20.04-njs.20";
+const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.0.6.4-ubt.20.04-njs.20";
 const ALIVENESS_CHECK_THRESHOLD = 5;
 const MATURITY_LCL_THRESHOLD = 2;
 const ACKNOWLEDGE_LCL_THRESHOLD = 2;
@@ -228,10 +228,10 @@ class ClusterContext {
                         }
                     }
                     else {
-                        if (nonQuorumNodes.length == 0)
-                            log("There are no non quorum nodes to replace signer");
-                        else
+                        if ((node?.signerReplaceFailedAttempts || 0) >= MAX_SIGNER_REPLACE_ATTEMPTS)
                             error(`${MAX_SIGNER_REPLACE_ATTEMPTS} attempts on signer replacement failed`);
+                        else
+                            log("There are no non quorum nodes to replace signer");
 
                         log("Transferring the signer.");
                         // Try to remove the signer and add it's weight to a random signer.
@@ -242,7 +242,13 @@ class ClusterContext {
                             await this.evernodeContext.xrplContext.replaceSignerList(node.signerAddress, newSignerNode.signerAddress!);
                         }
                         catch (e) {
-                            error("Signer transfer failed. Skip altering the signer list. ", e);
+                            if ((node?.signerReplaceFailedAttempts || 0) >= MAX_SIGNER_REPLACE_ATTEMPTS)
+                                error("Signer transfer failed. Skip altering the signer list. ", e);
+                            else {
+                                this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
+                                throw `No NON-Quorum node was found to replace ${pubkey} signer node.`;
+                            }
+
                         }
                     }
                 }
