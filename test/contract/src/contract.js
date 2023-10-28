@@ -54,7 +54,7 @@ const testContract = async (contractCtx) => {
             voteContext.feedUnlMessage(node, msg);
         });
 
-        ///////// TODO: This part is temporary for preparing multisig /////////
+        ///////// TODO: This part is temporary for preparing multisig. /////////
         // if (!fs.existsSync('multisig')) {
         //     const isSigner = !nonSigners.includes(hpContext.publicKey);
 
@@ -62,7 +62,7 @@ const testContract = async (contractCtx) => {
 
         //     fs.writeFileSync('multisig', '');
         // }
-        ///////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////
     }
 
     const xrplContext = new evp.XrplContext(hpContext, masterAddress);
