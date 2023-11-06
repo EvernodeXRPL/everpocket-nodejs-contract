@@ -1,26 +1,36 @@
 import { AcquireOptions } from "../models/evernode";
-import { Peer, User } from "../models";
+import { DecisionOptions, Peer, User } from "../models";
 import { Buffer } from 'buffer';
 import { EvernodeContext, VoteContext } from "../context";
-import { ClusterOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode } from "../models/cluster";
+import { ClusterOptions, ClusterMessage, ClusterMessageResponse, ClusterMessageResponseStatus, ClusterMessageType, ClusterNode, PendingNode, OperationData, OperationType, AddNodeOperation, ExtendNodeOperation, RemoveNodeOperation, ClusterOwner, NodeStatus, NodeInfo, Operation } from "../models/cluster";
 import { ClusterManager } from "../cluster";
 import { AllVoteElector } from "../vote/vote-electors";
 import { VoteElectorOptions } from "../models/vote";
 import HotPocketContext from "./HotPocketContext";
-import { error, log } from "../helpers/logger";
-import * as fs from 'fs';
+import { error, info, log } from "../helpers/logger";
+import { JSONHelpers } from "../utils";
+import NumberHelpers from "../utils/helpers/NumberHelper";
 
 const DUMMY_OWNER_PUBKEY = "dummy_owner_pubkey";
-const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.latest-ubt.20.04-njs.20";
+const SASHIMONO_NODEJS_IMAGE = "evernodedev/sashimono:hp.0.6.4-ubt.20.04-njs.20";
 const ALIVENESS_CHECK_THRESHOLD = 5;
 const MATURITY_LCL_THRESHOLD = 2;
-const MAX_SIGNER_REPLACE_ATTEMPTS = 5;
+const ACKNOWLEDGE_LCL_THRESHOLD = 2;
+const ACKNOWLEDGE_RETRY_LCL_THRESHOLD = 5;
+const MAX_ACKNOWLEDGE_ATTEMPTS = 3;
+const MAX_SIGNER_REPLACE_ATTEMPTS = 10;
 const TIMEOUT = 10000;
 
 class ClusterContext {
+    private operationDataFile: string = "operations.json";
+    private nodePrivateInfoFile: string = "../node_private_info.json";
+    private operationData: OperationData = { operations: [] };
+    private updatedData: boolean = false;
     private clusterManager: ClusterManager;
     private userMessageProcessing: boolean;
     private maturityLclThreshold: number;
+    private acknowledgeLclThreshold: number;
+    private acknowledgeRetryLclThreshold: number;
     private initialized: boolean = false;
     public hpContext: HotPocketContext;
     public voteContext: VoteContext;
@@ -32,7 +42,15 @@ class ClusterContext {
         this.voteContext = this.evernodeContext.voteContext;
         this.clusterManager = new ClusterManager();
         this.maturityLclThreshold = options.maturityLclThreshold || MATURITY_LCL_THRESHOLD;
+        this.acknowledgeLclThreshold = options.acknowledgeLclThreshold || ACKNOWLEDGE_LCL_THRESHOLD;
+        this.acknowledgeRetryLclThreshold = options.acknowledgeLclThreshold || ACKNOWLEDGE_RETRY_LCL_THRESHOLD;
         this.userMessageProcessing = false;
+
+        const data = JSONHelpers.readFromFile<OperationData>(this.operationDataFile);
+        if (data)
+            this.operationData = data;
+        else
+            JSONHelpers.writeToFile(this.operationDataFile, this.operationData);
     }
 
     /**
@@ -47,10 +65,14 @@ class ClusterContext {
         try {
             await this.#setupClusterInfo();
             await this.#updateActiveness();
-            await this.#checkForPendingNodes();
+            const aliveCheckReached = await this.#checkForPendingNodes();
             await this.#checkForMatured();
             await this.#checkForAcknowledged();
             await this.#checkForExtends();
+            // We do not process operations if aliveness check is tried in this round.
+            // Because user connection takes time, So due to that some nodes might be unstable.
+            if (!aliveCheckReached)
+                await this.#processOperations();
             this.initialized = true;
         } catch (e) {
             await this.deinit();
@@ -63,8 +85,197 @@ class ClusterContext {
      */
     public async deinit(): Promise<void> {
         this.clusterManager.persist();
+        this.#persistOperationData();
         await this.evernodeContext.deinit();
         this.initialized = false;
+    }
+
+    /**
+     * Persist details of operations.
+     */
+    #persistOperationData(): void {
+        if (!this.updatedData)
+            return;
+
+        try {
+            JSONHelpers.writeToFile(this.operationDataFile, this.operationData);
+        } catch (error) {
+            throw `Error writing file ${this.operationDataFile}: ${error}`;
+        }
+    }
+
+    /**
+     * Get the queued add node operations.
+     * @returns Total number of cluster nodes.
+     */
+    public addNodeQueueCount(): number {
+        return this.operationData.operations.filter(o => o.type === OperationType.ADD_NODE).length;
+    }
+
+    /**
+     * Queue an operation in the queue.
+     * @param type Type of the queue operation.
+     * @param ref Unique reference for the operation.
+     * @param data Operation data.
+     */
+    #queueOperation(type: OperationType, ref: string, data: AddNodeOperation | ExtendNodeOperation | RemoveNodeOperation) {
+        if (!this.#hasPendingOperation(type, ref))
+            this.operationData.operations.push({
+                type: type,
+                ref: ref,
+                data: data
+            });
+        this.updatedData = true;
+    }
+
+    /**
+     * Check if there are operations with given type and query.
+     * @param type Operation type.
+     * @param ref Unique reference of the operation.
+     * @returns True if there's an pending operation, False otherwise.
+     */
+    #hasPendingOperation(type: OperationType, ref: string) {
+        return !!this.operationData.operations.find((o: Operation) => o.type === type && o.ref === ref);
+    }
+
+    /**
+     * Process operations one by one at each execution.
+     */
+    async #processOperations() {
+        if (this.operationData.operations.length === 0)
+            return;
+
+        info(`Operations processor started.`);
+
+        const operation = this.operationData.operations.splice(0, 1)[0];
+        this.updatedData = true;
+
+        try {
+            if (operation.type === OperationType.ADD_NODE) {
+                const data = operation.data as AddNodeOperation;
+
+                log(`Acquiring a new node...`);
+                let acquire = (await this.evernodeContext.acquireNode(data.acquireOptions)) as PendingNode;
+                acquire.targetLifeMoments = data.lifeMoments;
+                acquire.maxLifeMoments = data.maxLifeMoments;
+                acquire.aliveCheckCount = 0;
+
+                this.clusterManager.addPending(acquire);
+            }
+            else if (operation.type === OperationType.EXTEND_NODE) {
+                const data = operation.data as ExtendNodeOperation;
+                const clusterNodes = this.getClusterNodes();
+                const pendingExtend = clusterNodes.find(n => n.pubkey === data.nodePubkey);
+
+                if (pendingExtend) {
+                    log(`Extending node ${pendingExtend?.pubkey} by ${data.moments}...`);
+                    const res = await this.evernodeContext.extendSubmit(pendingExtend.host, data.moments, pendingExtend.name);
+                    if (res)
+                        this.clusterManager.increaseLifeMoments(pendingExtend.pubkey, data.moments);
+                }
+            }
+            else if (operation.type === OperationType.REMOVE_NODE) {
+                const data = operation.data as RemoveNodeOperation;
+
+                // If there ares pending acquires, There could be issues while removing the node.
+                if (!data.force && this.getPendingNodes().length > 0)
+                    throw 'Nodes cannot be removed, There are pending acquires.'
+
+                const pubkey = data.nodePubkey;
+                const node = this.clusterManager.getNode(pubkey);
+
+                log(`Removing the node ${pubkey}...`);
+
+                if (node?.signerAddress) {
+                    const nonQuorumNodes = this.getClusterUnlNodes().filter(n => !n.signerAddress);
+
+                    if (nonQuorumNodes.length > 0 && (node?.signerReplaceFailedAttempts || 0) < MAX_SIGNER_REPLACE_ATTEMPTS) {
+                        // Generate new multi signer if this node is not already a signer.
+                        let newSignerKey, newSignerAddress;
+                        if (!this.evernodeContext.xrplContext.multiSigner.isSignerNode()) {
+                            // Generate new multi signer;
+                            newSignerKey = this.evernodeContext.xrplContext.multiSigner.generateSigner();
+                            newSignerAddress = newSignerKey.account;
+                        }
+
+                        const txSubmitInfo = await this.evernodeContext.xrplContext.getTransactionSubmissionInfo({},
+                            newSignerAddress ? <DecisionOptions>{ key: this.hpContext.publicKey, options: { signerAddress: newSignerAddress } } : null);
+
+                        const newSignerPubkey = txSubmitInfo.options?.key;
+                        newSignerAddress = txSubmitInfo.options?.options?.signerAddress;
+
+                        if (newSignerPubkey && newSignerAddress) {
+                            log(`Replacing the signer ${pubkey} with ${newSignerPubkey}...`);
+                            try {
+                                await this.evernodeContext.xrplContext.replaceSignerList(node.signerAddress, newSignerAddress, { txSubmitInfo: txSubmitInfo });
+                                this.clusterManager.markAsQuorum(newSignerPubkey, newSignerAddress);
+
+                                // Set new signer if new signer is self.
+                                if (newSignerPubkey === this.hpContext.publicKey && newSignerKey)
+                                    this.evernodeContext.xrplContext.multiSigner.setSigner(newSignerKey);
+
+                                // Remove old signer if old signer is self.
+                                if (pubkey === this.hpContext.publicKey)
+                                    this.evernodeContext.xrplContext.multiSigner.removeSigner();
+                            }
+                            catch (e) {
+                                this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
+                                throw e;
+                            }
+                        } else {
+                            this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
+                            throw `No NON-Quorum node was found to replace ${pubkey} signer node.`;
+                        }
+                    }
+                    else {
+                        if ((node?.signerReplaceFailedAttempts || 0) >= MAX_SIGNER_REPLACE_ATTEMPTS)
+                            error(`${MAX_SIGNER_REPLACE_ATTEMPTS} attempts on signer replacement failed`);
+                        else
+                            log("There are no non quorum nodes to replace signer");
+
+                        log("Transferring the signer.");
+                        // Try to remove the signer and add it's weight to a random signer.
+                        const quorumNodes = this.getClusterUnlNodes().filter(n => n.signerAddress).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
+                        const randomIndex = NumberHelpers.getRandomNumber(this.hpContext, 0, quorumNodes.length);
+                        const newSignerNode = quorumNodes[randomIndex];
+                        try {
+                            await this.evernodeContext.xrplContext.replaceSignerList(node.signerAddress, newSignerNode.signerAddress!);
+                        }
+                        catch (e) {
+                            if ((node?.signerReplaceFailedAttempts || 0) >= MAX_SIGNER_REPLACE_ATTEMPTS)
+                                error("Signer transfer failed. Skip altering the signer list. ", e);
+                            else {
+                                this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
+                                throw `No NON-Quorum node was found to replace ${pubkey} signer node.`;
+                            }
+
+                        }
+                    }
+                }
+
+                // Update patch config if node exists in UNL.
+                let config = await this.hpContext.getContractConfig();
+                const idx = config.unl.findIndex((p: string) => p === pubkey);
+                if (idx > -1) {
+                    config.unl.splice(idx, 1);
+                    await this.hpContext.updateContractConfig(config);
+                }
+
+                // Update peer list.
+                if (node) {
+                    if (node?.domain && node?.peerPort) {
+                        let peer = `${node?.domain}:${node?.peerPort}`
+                        await this.hpContext.updatePeers(null, [peer]);
+                    }
+
+                    this.clusterManager.removeNode(pubkey);
+                }
+            }
+        } catch (e) {
+            error(e);
+        }
+
+        info(`Operations processor ended.`);
     }
 
     /**
@@ -91,22 +302,6 @@ class ClusterContext {
             this.clusterManager.initializeCluster(nodes);
             log('Initialized the cluster data with node info.');
         }
-
-        // Helping to make connections
-        // This flag file is written at the first execution of the contract.
-        const isDefinedPeers = fs.existsSync('../flag_init_peers');
-        if (!isDefinedPeers || this.hpContext.lclSeqNo % 4 === 1) {
-            console.log("Peer list Updating..");
-            const detailedClusterNodes = this.clusterManager.getNodes();
-            const knownPeers = detailedClusterNodes.filter(n => n.isUnl && n.pubkey !== this.hpContext.publicKey).map(kp => { return `${kp.ip}:${kp.peerPort}` });
-            if (knownPeers) {
-                await this.hpContext.updatePeers(knownPeers);
-                console.log(`Peer list was updated with ${knownPeers.length} peers.`);
-            }
-
-            if (!isDefinedPeers)
-                fs.writeFileSync('../flag_init_peers', '');
-        }
     }
 
     /**
@@ -131,10 +326,12 @@ class ClusterContext {
 
     /**
      * Check and update node list if there are pending acquired which are completed now.
+     * @returns True if pending node found and aliveness check tried. Otherwise false;
      */
-    async #checkForPendingNodes(): Promise<void> {
+    async #checkForPendingNodes(): Promise<boolean> {
         const pendingNodes = this.getPendingNodes();
 
+        let aliveCheckReached = false;
         for (const node of pendingNodes) {
             const info = this.evernodeContext.getIfAcquired(node.refId);
             // If acquired, Check the liveliness and add that to the node list as a non-UNL node.
@@ -148,33 +345,40 @@ class ClusterContext {
                         continue;
                     }
 
-                    if (!(await this.hpContext.checkLiveness(new Peer(info.ip, info.userPort)))) {
+                    aliveCheckReached = true;
+                    if (!(await this.hpContext.checkLiveness(new Peer(info.domain, info.userPort)))) {
                         this.clusterManager.increaseAliveCheck(node.refId);
                     }
                     else {
-                        await this.hpContext.updatePeers([`${info.ip}:${info.peerPort}`]);
+                        await this.hpContext.updatePeers([`${info.domain}:${info.peerPort}`]);
 
                         this.clusterManager.addNode(<ClusterNode>{
                             refId: node.refId,
                             contractId: info.contractId,
-                            createdOnLcl: this.hpContext.lclSeqNo,
+                            status: {
+                                status: NodeStatus.CREATED,
+                                onLcl: this.hpContext.lclSeqNo
+                            },
                             createdOnTimestamp: this.hpContext.timestamp,
                             host: node.host,
-                            ip: info.ip,
+                            domain: info.domain,
+                            outboundIp: info.outboundIp,
                             name: info.name,
                             peerPort: info.peerPort,
                             pubkey: info.pubkey,
                             userPort: info.userPort,
                             isUnl: false,
                             lifeMoments: 1,
-                            targetLifeMoments: node.targetLifeMoments
+                            targetLifeMoments: node.targetLifeMoments,
+                            maxLifeMoments: node.maxLifeMoments,
+                            owner: ClusterOwner.SELF_MANAGER
                         });
 
                         log(`Added node ${info.pubkey} to the cluster as nonUnl.`);
                     }
                 }
                 catch (e) {
-                    log(e);
+                    error(e);
                 }
 
             }
@@ -184,25 +388,23 @@ class ClusterContext {
                 log(`Pending node ${node.refId} is removed due to unavailability.`);
             }
         }
+
+        return aliveCheckReached;
     }
 
     /**
      * Check for node which needed to extended.
      */
     async #checkForExtends(): Promise<void> {
-        const clusterNodes = this.getClusterNodes();
-        const pendingExtends = clusterNodes.filter(n => n.targetLifeMoments > n.lifeMoments);
+        // Get only the nodes which are in the UNL, Otherwise it'll be a waste if it's pruned due to not getting matured.
+        const clusterNodes = this.getClusterUnlNodes();
+        const pendingExtend = clusterNodes.find(n => n.targetLifeMoments > n.lifeMoments);
 
-        for (const pendingExtend of pendingExtends) {
-            const extension = pendingExtend.targetLifeMoments - pendingExtend.lifeMoments;
-            try {
-                log(`Extending node ${pendingExtend.pubkey} by ${extension}.`);
-                const res = await this.evernodeContext.extendSubmit(pendingExtend.host, extension, pendingExtend.name);
-                if (res)
-                    this.clusterManager.updateLifeMoments(pendingExtend.pubkey, pendingExtend.lifeMoments + extension);
-            } catch (e) {
-                error(e)
-            }
+        if (pendingExtend) {
+            this.#queueOperation(OperationType.EXTEND_NODE, pendingExtend.pubkey, <ExtendNodeOperation>{
+                nodePubkey: pendingExtend.pubkey,
+                moments: pendingExtend.targetLifeMoments - pendingExtend.lifeMoments
+            });
         }
     }
 
@@ -213,8 +415,8 @@ class ClusterContext {
         // Add one by one to Unl to avoid forking.
         const clusterNodes = this.getClusterNodes();
         const pendingAcknowledged = clusterNodes
-            .filter(n => !n.isUnl && n.ackReceivedOnLcl && (n.ackReceivedOnLcl + this.maturityLclThreshold) < this.hpContext.lclSeqNo)
-            .sort((a, b) => (a.ackReceivedOnLcl || 0) < (b.ackReceivedOnLcl || 0) ? -1 : 1);
+            .filter(n => !n.isUnl && n.status.status === NodeStatus.ACKNOWLEDGED && (n.status.onLcl + this.maturityLclThreshold) < this.hpContext.lclSeqNo)
+            .sort((a, b) => (a.status.onLcl || 0) < (b.status.onLcl || 0) ? -1 : 1);
 
         if (pendingAcknowledged && pendingAcknowledged.length > 0) {
             const node = pendingAcknowledged[0];
@@ -233,10 +435,49 @@ class ClusterContext {
     async #checkForMatured(): Promise<void> {
         const selfNode = this.clusterManager.getNode(this.hpContext.publicKey);
 
-        // If this node is not in UNL acknowledge others to add to UNL.
-        if (selfNode && !selfNode.isUnl && !selfNode.ackReceivedOnLcl) {
-            await this.#acknowledgeMaturity().catch(error);
-            log(`Maturity acknowledgement sent.`);
+        if (selfNode && selfNode.owner === ClusterOwner.SELF_MANAGER) {
+            let nodeInfo = JSONHelpers.readFromFile<NodeInfo>(this.nodePrivateInfoFile);
+
+            // If this node is owned by self manager and not a UNL node, probably this might needed to be configured and acknowledge the maturity.
+            if (!selfNode.isUnl) {
+                // WE CANNOT DO STATE OPERATIONS HERE SINCE WE ARE NOT IN THE UNL, SO WE MANAGE TEMPORARY PRIVATE FILE FOR THIS SECTION.
+                // If this is still in CREATED state we should configure the node.
+                if (!nodeInfo && selfNode.status.status === NodeStatus.CREATED) {
+                    // Update the peer list of the node.
+                    log("Peer list Updating..");
+                    const unlNodes = this.clusterManager.getUnlNodes();
+                    const knownPeers = unlNodes.map(kp => { return `${kp.domain}:${kp.peerPort}` });
+                    if (knownPeers && knownPeers.length > 0) {
+                        await this.hpContext.updatePeers(knownPeers);
+                        log(`Peer list was updated with ${knownPeers.length} peers.`);
+                    }
+
+                    // Create a private file stating that the node is configured.
+                    JSONHelpers.writeToFile(this.nodePrivateInfoFile, <NodeInfo>{ status: { status: NodeStatus.CONFIGURED, onLcl: this.hpContext.lclSeqNo }, acknowledgeTries: 0 });
+                }
+                // If the node is configured, Send the acknowledgement after the threshold ledgers.
+                // Or if we have already acknowledged and we have not yet reached the max retry, yet we have been not added to the UNL.
+                // Then we wait for the ledger threshold and resend the acknowledgement.
+                else if (nodeInfo && ((nodeInfo.status.status === NodeStatus.CONFIGURED && (nodeInfo.status.onLcl + this.acknowledgeLclThreshold) < this.hpContext.lclSeqNo) ||
+                    (nodeInfo.acknowledgeTries <= MAX_ACKNOWLEDGE_ATTEMPTS && (nodeInfo.status.status === NodeStatus.ACKNOWLEDGED && (this.hpContext.lclSeqNo - nodeInfo.status.onLcl) > (this.acknowledgeRetryLclThreshold))))) {
+                    try {
+                        await this.#acknowledgeMaturity();
+                        log(`Maturity acknowledgement sent.`);
+
+                        // We record that we have acknowledged the maturity.
+                        nodeInfo.status = { status: NodeStatus.ACKNOWLEDGED, onLcl: this.hpContext.lclSeqNo };
+                        nodeInfo.acknowledgeTries++;
+                        JSONHelpers.writeToFile(this.nodePrivateInfoFile, nodeInfo);
+                    }
+                    catch (e) {
+                        error(e);
+                    }
+                }
+            }
+            else if (nodeInfo) {
+                // If we are in the UNL and still we have the temporary private info file, Remove it.
+                JSONHelpers.removeFile(this.nodePrivateInfoFile);
+            }
         }
     }
 
@@ -248,7 +489,7 @@ class ClusterContext {
         const unlNodes = this.getClusterUnlNodes();
         if (unlNodes && unlNodes.length > 0) {
             const addMessage = <ClusterMessage>{ type: ClusterMessageType.MATURED, data: this.hpContext.publicKey }
-            await this.hpContext.sendMessage(JSON.stringify(addMessage), unlNodes.map(n => new Peer(n.ip, n.userPort)));
+            await this.hpContext.sendMessage(JSON.stringify(addMessage), unlNodes.map(n => new Peer(n.domain, n.userPort)));
         }
         return false;
     }
@@ -386,10 +627,11 @@ class ClusterContext {
 
     /**
      * Acquire and add new node to the cluster.
+     * @param [maxLifeMoments=0] Amount of maximum life moments for the instance. 0 means there's no max life limit for the node.
      * @param [lifeMoments=1] Amount of life moments for the instance.
      * @param [options={}]  Acquire instance options.
      */
-    public async addNewClusterNode(lifeMoments: number = 1, options: AcquireOptions = {}): Promise<void> {
+    public async addNewClusterNode(maxLifeMoments: number = 0, lifeMoments: number = 1, options: AcquireOptions = {}): Promise<void> {
         const hpconfig = await this.hpContext.getContractConfig();
         const unl = hpconfig.unl;
 
@@ -410,7 +652,8 @@ class ClusterContext {
                     unl: unl.sort().slice(0, 1),
                     consensus: {
                         ...(options.instanceCfg?.config?.contract?.consensus ? options.instanceCfg.config.contract.consensus : {}),
-                        roundtime: hpconfig.consensus.roundtime
+                        roundtime: hpconfig.consensus.roundtime,
+                        stage_slice: hpconfig.consensus.stage_slice
                     }
                 },
                 mesh: {
@@ -425,11 +668,11 @@ class ClusterContext {
             }
         }
 
-        let acquire = (await this.evernodeContext.acquireNode(options)) as PendingNode;
-        acquire.targetLifeMoments = lifeMoments;
-        acquire.aliveCheckCount = 0;
-
-        this.clusterManager.addPending(acquire);
+        this.#queueOperation(OperationType.ADD_NODE, `${options.host}${this.hpContext.lclHash}`, <AddNodeOperation>{
+            acquireOptions: options,
+            lifeMoments: lifeMoments,
+            maxLifeMoments: maxLifeMoments
+        });
     }
 
     /**
@@ -458,62 +701,24 @@ class ClusterContext {
     }
 
     /**
+     * Record a provided node for extend.
+     * @param pubkey Public key of the node to be extended.
+     * @param lifeMoments Number of moments to be extended.
+     */
+    public async extendNode(pubkey: string, lifeMoments: number): Promise<void> {
+        this.clusterManager.increaseTargetLifeMoments(pubkey, lifeMoments);
+    }
+
+    /**
      * Removes a provided a node from the cluster.
      * @param pubkey Public key of the node to be removed.
      * @param [force=false] Force remove. (This might cause to fail some pending operations).
      */
     public async removeNode(pubkey: string, force: boolean = false): Promise<void> {
-        // If there ares pending acquires, There could be issues while removing the node.
-        if (!force && this.getPendingNodes().length > 0)
-            throw 'Nodes cannot be removed, There are pending acquires.'
-
-        const node = this.clusterManager.getNode(pubkey);
-
-        if (node?.signerAddress) {
-            if ((node?.signerReplaceFailedAttempts || 0) < MAX_SIGNER_REPLACE_ATTEMPTS) {
-                // Sorting logic to determine new pubkey - start
-                const clusterNodes = this.getClusterNodes();
-                const nonQuorumNodes = clusterNodes.filter(n => !n.signerAddress).sort((a, b) => a.pubkey.localeCompare(b.pubkey));
-
-                let newSignerPubkey = nonQuorumNodes[0]?.pubkey;
-
-                if (newSignerPubkey) {
-                    log(`Replacing the signer ${pubkey} with ${newSignerPubkey}...`);
-                    try {
-                        const newAddress = await this.evernodeContext.xrplContext.replaceSignerList(pubkey, node.signerAddress, newSignerPubkey);
-                        this.clusterManager.markAsQuorum(newSignerPubkey, newAddress);
-                    }
-                    catch (e) {
-                        this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
-                        throw e;
-                    }
-                } else {
-                    this.clusterManager.increaseSignerReplaceFailedAttempts(pubkey);
-                    throw `No NON-Quorum node was found to replace ${pubkey} signer node.`;
-                }
-            }
-            else {
-                error(`${MAX_SIGNER_REPLACE_ATTEMPTS} attempts on signer replacement failed, Skipping the signer replacement.`);
-            }
-        }
-
-        // Update patch config if node exists in UNL.
-        let config = await this.hpContext.getContractConfig();
-        const index = config.unl.findIndex((p: string) => p === pubkey);
-        if (index > -1) {
-            config.unl.splice(index, 1);
-            await this.hpContext.updateContractConfig(config);
-        }
-
-        // Update peer list.
-        if (node) {
-            if (node?.ip && node?.peerPort) {
-                let peer = `${node?.ip}:${node?.peerPort}`
-                await this.hpContext.updatePeers(null, [peer]);
-            }
-
-            this.clusterManager.removeNode(pubkey);
-        }
+        this.#queueOperation(OperationType.REMOVE_NODE, pubkey, <RemoveNodeOperation>{
+            nodePubkey: pubkey,
+            force: force
+        })
     }
 }
 

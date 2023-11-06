@@ -33,7 +33,8 @@ export interface AcquireData {
 
 export interface Instance {
   name: string;
-  ip: string;
+  domain: string;
+  outboundIp: string;
   pubkey: string;
   contractId: string;
   peerPort: number;

@@ -41,6 +41,7 @@ class JSONHelpers {
      * @param obj Json object to be written.
      */
     public static writeToFile(filePath: string, obj: any) {
+        // eslint-disable-next-line no-undef
         const stringified = JSON.stringify(obj, null, 4); // convert the updated data back to JSON string
         fs.writeFileSync(filePath, stringified);
     }
@@ -57,6 +58,14 @@ class JSONHelpers {
         const rawData = fs.readFileSync(filePath, 'utf8');
         const data = rawData ? JSON.parse(rawData) : {};
         return data as T;
+    }
+
+    /**
+     * Delete a given file.
+     * @param filePath File path of the json.
+     */
+    public static removeFile(filePath: string) {
+        fs.rmSync(filePath);
     }
 }
 

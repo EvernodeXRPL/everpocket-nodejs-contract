@@ -1,7 +1,6 @@
-import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Signature, TransactionData, TransactionInfo } from '../models';
+import { XrplOptions, Signer, TransactionSubmissionInfo, SignerListInfo, MultiSignOptions, SignerKey, Signature, TransactionData, TransactionInfo, DecisionOptions } from '../models';
 import { MultiSigner } from '../multi-sign';
 import { AllVoteElector } from '../vote/vote-electors';
-import * as xrplCodec from 'xrpl-binary-codec';
 import * as evernode from 'evernode-js-client';
 import * as crypto from 'crypto';
 import { VoteElectorOptions } from '../models/vote';
@@ -9,10 +8,10 @@ import HotPocketContext from './HotPocketContext';
 import VoteContext from './VoteContext';
 import { JSONHelpers } from '../utils';
 import { error, log } from '../helpers/logger';
+import NumberHelpers from '../utils/helpers/NumberHelper';
 
 const TIMEOUT = 10000;
 const TRANSACTION_VOTE_THRESHOLD = 0.5;
-const VOTE_PERCENTAGE_THRESHOLD = 80;
 
 class XrplContext {
     private transactionDataFile: string = "transactions.json";
@@ -29,7 +28,7 @@ class XrplContext {
         this.hpContext = hpContext;
         this.voteContext = hpContext.voteContext;
         // autoReconnect: false - Do not handle connection failures in XrplApi to avoid contract hanging.
-        this.xrplApi = options.xrplApi || new evernode.XrplApi(null, { autoReconnect : false });
+        this.xrplApi = options.xrplApi || new evernode.XrplApi(null, { autoReconnect: false });
         this.xrplAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
         this.multiSigner = new MultiSigner(this.xrplAcc);
 
@@ -131,7 +130,7 @@ class XrplContext {
         for (const item of this.getPendingTransactions()) {
             const txnInfo = await this.xrplApi.getTxnInfo(item.hash, {});
             if (txnInfo && txnInfo.validated) {
-                log(`Transaction validated with code ${txnInfo?.meta?.TransactionResult}.`);
+                log(`${txnInfo?.TransactionType} | Transaction validated with code ${txnInfo?.meta?.TransactionResult}.`);
                 this.#markTransactionAsValidated(txnInfo.hash, txnInfo.ledger_index, txnInfo.meta.TransactionResult);
                 return;
             }
@@ -225,19 +224,33 @@ class XrplContext {
     /**
      * Decide a transaction submission info for a transaction.
      * @param [options={}] Vote options to decide the transaction submission info.
+     * @param [decisionOptions=null] Any other options that needed to be decided.
      * @returns Transaction submission info.
      */
-    public async getTransactionSubmissionInfo(options: VoteElectorOptions = {}): Promise<TransactionSubmissionInfo> {
-        // Decide a sequence number and max ledger sequence to send the same transaction from all the nodes.
-        const infos: TransactionSubmissionInfo[] = (await this.voteContext.vote(`transactionInfo${this.voteContext.getUniqueNumber()}`, [<TransactionSubmissionInfo>{
+    public async getTransactionSubmissionInfo(options: VoteElectorOptions = {}, decisionOptions: DecisionOptions | null = null): Promise<TransactionSubmissionInfo> {
+        let info = <TransactionSubmissionInfo>{
             sequence: await this.getSequence(),
-            maxLedgerSequence: this.getMaxLedgerSequence()
-        }], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT))).map(ob => ob.data);
+            maxLedgerSequence: this.getMaxLedgerSequence(),
+        }
 
-        return <TransactionSubmissionInfo>{
+        if (decisionOptions)
+            info.options = decisionOptions;
+
+        // Decide a sequence number and max ledger sequence to send the same transaction from all the nodes.
+        const infos: TransactionSubmissionInfo[] = (await this.voteContext.vote(`transactionInfo${this.voteContext.getUniqueNumber()}`, [info], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT))).map(ob => ob.data);
+
+        var res = <TransactionSubmissionInfo>{
             sequence: infos.map(i => i.sequence).sort((a, b) => b - a)[0],
             maxLedgerSequence: infos.map(i => i.maxLedgerSequence).sort((a, b) => b - a)[0]
         };
+
+        const decisionOptionList = infos.filter(i => i.options).map(i => i.options).sort((a, b) => (a?.key.localeCompare(b?.key!) || 0));
+        if (decisionOptionList && decisionOptionList.length > 0) {
+            const randomIndex = NumberHelpers.getRandomNumber(this.hpContext, 0, decisionOptionList.length);
+            res.options = decisionOptionList[randomIndex];
+        }
+
+        return res;
     }
 
     /**
@@ -256,9 +269,9 @@ class XrplContext {
     * @param [options={}] Multisigner options.
      */
     public async multiSignAndSubmitTransaction(transaction: any, options: MultiSignOptions = {}): Promise<any> {
-        const txSubmitInfo = await this.getTransactionSubmissionInfo(options?.voteElectorOptions);
+        const txSubmitInfo = options?.txSubmitInfo || await this.getTransactionSubmissionInfo(options?.voteElectorOptions);
         if (!txSubmitInfo)
-            throw 'Could not get transaction submission info';
+            throw `${transaction.TransactionType} | Could not get transaction submission info`;
 
         transaction = { ...transaction, ...options.txOptions };
         transaction.Sequence = txSubmitInfo.sequence;
@@ -267,7 +280,7 @@ class XrplContext {
         const signerCount = this.signerListInfo?.signerList.length;
 
         if (!this.signerListInfo || !signerCount)
-            throw 'Could not get signer list';
+            throw `${transaction.TransactionType} | Could not get signer list`;
 
         transaction.Fee = `${Number(transaction.Fee) * (signerCount + 2)}`;
 
@@ -279,12 +292,14 @@ class XrplContext {
         // Otherwise just collect the signed blob list.
         if (this.isSigner()) {
             const signed = await this.multiSigner.sign(transaction);
-            const decodedTx = JSON.parse(JSON.stringify(xrplCodec.decode(signed)));
+            const decodedTx = JSON.parse(JSON.stringify(this.xrplApi.xrplHelper.decode(signed)));
             const signature: Signature = decodedTx.Signers[0];
-            signatures = (await this.voteContext.vote(electionName, [signature], elector)).map(ob => ob.data);
+            const pollResults = (await this.voteContext.vote(electionName, [signature], elector)).map(ob => { return { pubkey: ob.sender.publicKey, data: ob.data } });
+            signatures = pollResults.map(ob => ob.data);
         }
         else {
-            signatures = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data);
+            const pollResults = (await this.voteContext.subscribe(electionName, elector)).map(ob => { return { pubkey: ob.sender.publicKey, data: ob.data } });
+            signatures = pollResults.map(ob => ob.data);
         }
 
         // Filter only the signatures which are in the signer list.
@@ -295,7 +310,7 @@ class XrplContext {
             return (this.signerListInfo?.signerList?.find(i => i.account === s.Signer.Account)?.weight || 0);
         }).reduce((a, b) => a + b, 0);
         if (totalWeight < this.signerListInfo.signerQuorum)
-            throw `No enough signatures: Total weight: ${totalWeight}, Quorum: ${this.signerListInfo.signerQuorum}.`;
+            throw `${transaction.TransactionType} | No enough signatures: Total weight: ${totalWeight}, Quorum: ${this.signerListInfo.signerQuorum}.`;
 
         transaction.Signers = signatures.map(s => <Signature>{ Signer: s.Signer }).sort((a, b) => a.Signer.SigningPubKey.localeCompare(b.Signer.SigningPubKey));
 
@@ -305,8 +320,8 @@ class XrplContext {
 
         const txVoteHashElector = new AllVoteElector(this.hpContext.getContractUnl().length, options?.voteElectorOptions?.timeout || TIMEOUT);
         const txVoteHashElectionName = `txVoteHash${this.voteContext.getUniqueNumber()}`;
-
-        let txVoteHashes = (await this.voteContext.vote(txVoteHashElectionName, [voteDigest], txVoteHashElector)).map(ob => ob.data);
+        let txnPollResults = (await this.voteContext.vote(txVoteHashElectionName, [voteDigest], txVoteHashElector)).map(o => { return { pubkey: o.sender.publicKey, data: o.data } })
+        let txVoteHashes = txnPollResults.map(ob => ob.data);
 
         let votes: any = {};
 
@@ -318,18 +333,13 @@ class XrplContext {
         }
 
         const sorted = Object.entries<number>(votes).sort((a, b) => b[1] - a[1]);
-        const totalVotes = sorted.map(n => n[1]).reduce((acc, curr) => acc + curr, 0);
-
         const unlNodeCount = this.hpContext.getContractUnl().length;
-
-        // NOTE : Total Vote count should be considerable enough to make submission decision.
-        if (sorted.length && (unlNodeCount && (Math.ceil(totalVotes * 100 / unlNodeCount)) < VOTE_PERCENTAGE_THRESHOLD))
-            throw 'Could not decide a transaction to submit.';
 
         const txSubmitElector = new AllVoteElector(unlNodeCount, options?.voteElectorOptions?.timeout || TIMEOUT);
         const txSubmitElectionName = `txSubmit${this.voteContext.getUniqueNumber()}`;
         let txResults;
-        if (sorted.length && sorted[0][1] > (unlNodeCount * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
+        let voteResults;
+        if (sorted.length && sorted[0][1] >= (unlNodeCount * TRANSACTION_VOTE_THRESHOLD) && voteDigest === sorted[0][0]) {
             let error;
             const res = await this.xrplAcc.submitMultisigned(transaction).catch((e: any) => {
                 error = e;
@@ -342,19 +352,21 @@ class XrplContext {
                 resultCode: res.result.engine_result
             } : null;
 
-            txResults = (await this.voteContext.vote(txSubmitElectionName, [res ? { res: customRes } : { error: error }], txSubmitElector)).map(ob => ob.data);
+            voteResults = (await this.voteContext.vote(txSubmitElectionName, [res ? { res: customRes } : { error: error }], txSubmitElector)).map(o => { return { pubkey: o.sender.publicKey, data: o.data } });
+            txResults = voteResults.map(ob => ob.data);
         }
         else {
-            txResults = (await this.voteContext.subscribe(txSubmitElectionName, txSubmitElector)).map(ob => ob.data);
+            voteResults = (await this.voteContext.subscribe(txSubmitElectionName, txSubmitElector)).map(o => { return { pubkey: o.sender.publicKey, data: o.data } });
+            txResults = voteResults.map(ob => ob.data);
         }
 
         if (!txResults || !txResults.length)
-            throw 'Could not consider as a valid transaction.';
+            throw `${transaction.TransactionType} | Could not consider as a valid transaction.`;
 
         // Check whether majority aligned submission or not.
         const successfulSubmissions = txResults.filter(r => (r.res?.resultCode === "tesSUCCESS" || r.res?.resultCode === "tefPAST_SEQ" || r.res?.resultCode === "tefALREADY"));
-        if (successfulSubmissions.length * 100 / unlNodeCount < VOTE_PERCENTAGE_THRESHOLD)
-            throw 'Could not consider as a valid submission.';
+        if (successfulSubmissions.length === 0)
+            throw `${transaction.TransactionType} | Could not consider as a valid submission.`;
 
         const sortedResults = txResults.sort((a, b) => {
             if ("res" in a && !("res" in b)) {
@@ -372,7 +384,7 @@ class XrplContext {
         // if (txResult.error)
         //     throw txResult.error;
 
-        log(`Transaction submitted with code ${txResult.res.resultCode}.`);
+        log(`${transaction.TransactionType} | Transaction submitted with code ${txResult.res.resultCode}.`);
 
         this.#addPendingTransaction(txResult.res);
 
@@ -505,7 +517,7 @@ class XrplContext {
 
         let signer: Signer;
         let curSigner: SignerKey | null = null;
-        // If this is a the owner, Generate new signer and send it.
+        // If this is a the owner, Get the signer and send it.
         // Otherwise just collect the signer.
         if (pubkey === this.hpContext.publicKey) {
             curSigner = this.multiSigner.getSigner();
@@ -536,16 +548,12 @@ class XrplContext {
 
     /**
      * Replaces a signer node from a new node.
-     * @param oldPubKey Old pubkey to remove.
      * @param oldSignerAddress Signer address of old node.
-     * @param newPubKey New pubkey to add a signer.
+     * @param newSignerAddress New address to add as signer.
      * @param [options={}] Multisigner options to override.
      * @returns New signer address.
      */
-    async replaceSignerList(oldPubKey: string, oldSignerAddress: string, newPubKey: string, options: MultiSignOptions = {}): Promise<string> {
-        const elector = new AllVoteElector(1, options?.voteElectorOptions?.timeout || TIMEOUT);
-        const electionName = `replaceSigner${this.voteContext.getUniqueNumber()}`;
-
+    async replaceSignerList(oldSignerAddress: string, newSignerAddress: string, options: MultiSignOptions = {}): Promise<void> {
         // Replace signer from the list and renew the signer list. Clone objet to avoid reference.
         let signerListInfo = <SignerListInfo>{};
         if (this.signerListInfo)
@@ -559,40 +567,20 @@ class XrplContext {
         if (oldSignerIndex === -1)
             throw `Could not find a old signer with given address.`
 
-        let signer: Signer;
-        let newSigner: SignerKey | null = null;
-        // If this is a the owner, Generate new signer and send it.
-        // Otherwise just collect the signer.
-        if (newPubKey === this.hpContext.publicKey) {
-            newSigner = this.multiSigner.generateSigner();
-            signer = (await this.voteContext.vote(electionName, [<Signer>{
-                account: newSigner.account,
-                weight: signerListInfo.signerList[oldSignerIndex].weight
-            }], elector)).map(ob => ob.data)[0];
+        const newSignerIndex = signerListInfo.signerList.findIndex(s => s.account === newSignerAddress);
 
+        // Replace old signer with new signer, If the new signer is not already in signer list. Otherwise transfer the weight.
+        if (newSignerIndex == -1) {
+            signerListInfo.signerList[oldSignerIndex].account = newSignerAddress;
         }
         else {
-            signer = (await this.voteContext.subscribe(electionName, elector)).map(ob => ob.data)[0];
+            signerListInfo.signerList[newSignerIndex].weight += signerListInfo.signerList[oldSignerIndex].weight;
+            signerListInfo.signerList.splice(oldSignerIndex, 1);
         }
-
-        if (!signer)
-            throw `Could not generate a new signer.`
-
-        // Replace old signer with new signer.
-        signerListInfo.signerList[oldSignerIndex].account = signer.account;
         if (options.quorum)
             signerListInfo.signerQuorum = options.quorum;
 
         await this.setSignerList(signerListInfo, options);
-
-        if (newSigner)
-            this.multiSigner.setSigner(newSigner);
-
-        // Remove old signer and add new signer.
-        if (oldPubKey === this.hpContext.publicKey)
-            this.multiSigner.removeSigner();
-
-        return signer.account;
     }
 
     /**

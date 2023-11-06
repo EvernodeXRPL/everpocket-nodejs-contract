@@ -10,6 +10,7 @@ import { JSONHelpers } from "../utils";
 import { VoteElectorOptions } from "../models/vote";
 import HotPocketContext from "./HotPocketContext";
 import { error, log } from "../helpers/logger";
+import NumberHelpers from "../utils/helpers/NumberHelper";
 
 const TIMEOUT = 10000;
 const ACQUIRE_ABANDON_LCL_THRESHOLD = 10;
@@ -189,8 +190,14 @@ class EvernodeContext {
 
                     // Updated the acquires if there's a success response.
                     if (payload) {
-                        if (payload !== 'acquire_error')
+                        if (payload !== 'acquire_error') {
+                            // Assign ip to domain and outbound_ip for instance created from old sashimono version.
+                            if ('ip' in payload.content) {
+                                payload.content.domain = payload.content.ip;
+                                delete payload.content.ip;
+                            }
                             this.#updateAcquiredNodeInfo({ host: item.host, refId: item.refId, ...JSONHelpers.castToModel<Instance>(payload.content) });
+                        }
                         this.#updatePendingAcquireInfo(item, "DELETE");
                         if (privateKey)
                             fs.unlinkSync(`../${item.messageKey}.txt`);
@@ -215,7 +222,7 @@ class EvernodeContext {
         const messageKey = await this.decideMessageKey();
 
         if (!leaseOffer || !messageKey)
-            throw "Could not decide aquire params.";
+            throw "Could not decide acquire params.";
 
         // Perform acquire txn on the selected host.
         const res = await this.acquireSubmit(hostAddress, leaseOffer, messageKey, options);
@@ -257,58 +264,39 @@ class EvernodeContext {
     /**
      * Decides a lease offer collectively.
      * @param hostAddress Host that should be used to take lease offers.
-     * @param [options={}] Vote options for lease decision.
      * @returns URIToken related to the lease offer.
      */
-    public async decideLeaseOffer(hostAddress: string, options: VoteElectorOptions = {}): Promise<URIToken> {
+    public async decideLeaseOffer(hostAddress: string): Promise<URIToken> {
         // Get transaction details to use for xrpl tx submission.
         const hostClient = new evernode.HostClient(hostAddress);
         const leaseOffers = await hostClient.getLeaseOffers();
-        const leaseOffer = leaseOffers && leaseOffers[0];
+        const leaseOffer = leaseOffers && leaseOffers.length > 0 && leaseOffers.sort((a: any, b: any) => a.index.localeCompare(b.index))[0];
 
         if (!leaseOffer)
             throw "NO_LEASE_OFFER";
 
-        const electionName = `lease_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [leaseOffer], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
-        let collection = (await voteRound).map((v) => v.data);
-
-        let sortCollection = collection.sort((a, b) => a.index.localeCompare(b.index));
-
-        return sortCollection[0];
+        return leaseOffer;
     }
 
     /**
      * Decides a host collectively.
      * @param [preferredHosts=null] List of proffered host addresses.
-     * @param [options={}] Vote options for host decision.
      * @returns Decided host address.
      */
-    public async decideHost(preferredHosts: string[] | null = null, options: VoteElectorOptions = {}): Promise<string> {
-        const lclBasedNum = parseInt(this.hpContext.lclHash.substr(0, 2), 16);
-
+    public async decideHost(preferredHosts: string[] | null = null): Promise<string> {
         // Choose from hosts that have available instances.
-        const vacantHosts = (await this.getHosts()).sort((a, b) => (a.maxInstances - a.activeInstances) > (b.maxInstances - b.activeInstances) ? -1 : 1);
+        const vacantHosts = await this.getHosts();
         const unusedHosts = preferredHosts ? preferredHosts.filter(a => vacantHosts.find(h => a === h.address)) : vacantHosts.map(h => h.address);
 
         let hostAddress = null;
-        if (unusedHosts.length > 0)
-            hostAddress = unusedHosts[lclBasedNum % unusedHosts.length];
+        if (unusedHosts.length > 0) {
+            const randomIndex = NumberHelpers.getRandomNumber(this.hpContext, 0, unusedHosts.length);
+            hostAddress = unusedHosts.sort((a: any, b: any) => a.localeCompare(b))[randomIndex];
+        }
         else
             throw 'There are no vacant hosts in the network';
 
-        const electionName = `host_selector${this.voteContext.getUniqueNumber()}`;
-        const voteRound = this.voteContext.vote(electionName, [hostAddress], new AllVoteElector(this.hpContext.getContractUnl().length, options?.timeout || TIMEOUT));
-        let collection = (await voteRound).map((v) => v.data);
-
-        let sortCollection = collection.sort((a, b) => {
-            if (a === b) {
-                return 0;
-            }
-            return a > b ? 1 : -1;
-        });
-
-        return sortCollection[0];
+        return hostAddress;
     }
 
     /**
@@ -327,13 +315,8 @@ class EvernodeContext {
         let sortCollection = collection.sort((a, b) => a.localeCompare(b));
 
         if (sortCollection[0] === keyPair.publicKey) {
-            fs.writeFile(`../${keyPair.publicKey}.txt`, keyPair.privateKey, (err) => {
-                if (err) {
-                    error(err);
-                    return;
-                }
-                log("Wrote Key file.");
-            });
+            fs.writeFileSync(`../${keyPair.publicKey}.txt`, keyPair.privateKey);
+            log("Wrote Key file.");
         }
 
         return collection[0];
