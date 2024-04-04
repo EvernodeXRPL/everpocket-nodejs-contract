@@ -25,14 +25,13 @@ class EvernodeContext {
     public xrplContext: XrplContext;
     public voteContext: VoteContext;
 
-    public constructor(xrplContext: XrplContext, governorAddress: string) {
+    public constructor(xrplContext: XrplContext) {
         this.xrplContext = xrplContext;
         this.hpContext = this.xrplContext.hpContext;
         this.voteContext = this.xrplContext.voteContext;
 
         evernode.Defaults.set({
-            xrplApi: xrplContext.xrplApi,
-            governorAddress: governorAddress,
+            xrplApi: xrplContext.xrplApi
         });
 
         const data = JSONHelpers.readFromFile<AcquireData>(this.acquireDataFile);
@@ -392,7 +391,7 @@ class EvernodeContext {
      * @returns An array of hosts that are having vacant leases.
      */
     public async getHosts(): Promise<any[]> {
-        const allHosts = await this.registryClient.getActiveHosts();
+        const allHosts = await this.registryClient.getActiveHostsFromLedger();
         return allHosts.filter((h: { maxInstances: number; activeInstances: number; }) => (h.maxInstances - h.activeInstances) > 0);
     }
 

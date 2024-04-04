@@ -48,6 +48,8 @@ export interface TransactionSubmissionInfo {
 
 export interface XrplOptions {
   xrplApi?: any;
+  rippleServer?: any;
+  network?: any;
 }
 
 export interface MultiSignOptions {

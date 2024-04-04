@@ -13,6 +13,18 @@ import NumberHelpers from '../utils/helpers/NumberHelper';
 const TIMEOUT = 10000;
 const TRANSACTION_VOTE_THRESHOLD = 0.5;
 
+const NETWORKS: { [key: string]: { rippledServer: string; } } = {
+    testnet: {
+        rippledServer: "wss://hooks-testnet-v3.xrpl-labs.com"
+    },
+    devnet: {
+        rippledServer: "wss://hooks-testnet-v3.xrpl-labs.com"
+    },
+    mainnet: {
+        rippledServer: "wss://xahau.network"
+    }
+}
+
 class XrplContext {
     private transactionDataFile: string = "transactions.json";
     private transactionData: TransactionData = { pending: [], validated: [] };
@@ -23,12 +35,16 @@ class XrplContext {
     public xrplAcc: any;
     public multiSigner: MultiSigner;
     public voteContext: VoteContext;
+    public network: string;
 
     public constructor(hpContext: HotPocketContext, address: string, secret: string | null = null, options: XrplOptions = {}) {
         this.hpContext = hpContext;
         this.voteContext = hpContext.voteContext;
+        this.network = options?.network ? options.network : "mainnet";
+        const rippleServer = options?.rippleServer ? options.rippleServer : NETWORKS[this.network].rippledServer;
+
         // autoReconnect: false - Do not handle connection failures in XrplApi to avoid contract hanging.
-        this.xrplApi = options.xrplApi || new evernode.XrplApi(null, { autoReconnect: false });
+        this.xrplApi = options.xrplApi || new evernode.XrplApi(rippleServer, { autoReconnect: false });
         this.xrplAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
         this.multiSigner = new MultiSigner(this.xrplAcc);
 
@@ -43,6 +59,11 @@ class XrplContext {
      * Initialize the xrpl context.
      */
     public async init(): Promise<void> {
+
+        await evernode.Defaults.useNetwork(this.network);
+        evernode.Defaults.set({
+            xrplApi: this.xrplApi
+        });
         await this.xrplApi.connect();
         await this.loadSignerList();
         this.#checkSignerValidity();
