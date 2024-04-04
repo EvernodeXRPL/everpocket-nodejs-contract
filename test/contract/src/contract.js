@@ -2,8 +2,8 @@ const HotPocket = require('hotpocket-nodejs-contract');
 const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
-const masterAddress = "rs3aeAwccnxuiM2fhUK4yf5i7NEPmNqT5p";
-// const masterSecret = "ssBzJ6Vk2cyYzKzxgdhvWpKtBTgUe";
+const masterAddress = "rsPLkkfGdqjtsgecNaUckgkhiaR6y8EeVk";
+// const masterSecret = "snCAfBCCqqJKF7zMqBwtwetgLiRri";
 
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
@@ -58,15 +58,15 @@ const testContract = async (contractCtx) => {
         // if (!fs.existsSync('multisig')) {
         //     const isSigner = !nonSigners.includes(hpContext.publicKey);
 
-        //     await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret), signerCount, isSigner, quorum);
+        //     await prepareMultiSigner(new evp.XrplContext(hpContext, masterAddress, masterSecret, { network: "testnet" }), signerCount, isSigner, quorum);
 
         //     fs.writeFileSync('multisig', '');
         // }
         ////////////////////////////////////////////////////////////////////////
     }
 
-    const xrplContext = new evp.XrplContext(hpContext, masterAddress);
-    const evernodeContext = new evp.EvernodeContext(xrplContext, evernodeGovernor);
+    const xrplContext = new evp.XrplContext(hpContext, masterAddress, null, { network: "testnet" });
+    const evernodeContext = new evp.EvernodeContext(xrplContext);
     const clusterContext = new evp.ClusterContext(evernodeContext);
     const nomadContext = new evp.NomadContext(clusterContext, nomadOptions);
 
@@ -97,7 +97,7 @@ const testContract = async (contractCtx) => {
             // () => extendNode(evernodeContext),
             // () => addNewClusterNode(clusterContext),
             // () => removeNode(clusterContext),
-            () => runNomadContract(nomadContext)
+            // () => runNomadContract(nomadContext)
         ];
 
         try {
@@ -410,4 +410,4 @@ const prepareMultiSigner = async (xrplContext, signerCount, isSigner, quorum) =>
 ////////////////////////////////////////////////////////////////////////////
 
 const hpc = new HotPocket.Contract();
-hpc.init(testContract);
+hpc.init(testContract, null, true);
