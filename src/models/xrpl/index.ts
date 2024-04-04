@@ -49,6 +49,7 @@ export interface TransactionSubmissionInfo {
 export interface XrplOptions {
   xrplApi?: any;
   rippleServer?: any;
+  fallbackRippledServers?: any;
   network?: any;
 }
 
