@@ -13,7 +13,6 @@ import NumberHelpers from '../utils/helpers/NumberHelper';
 const TIMEOUT = 10000;
 const TRANSACTION_VOTE_THRESHOLD = 0.5;
 
-
 class XrplContext {
     private transactionDataFile: string = "transactions.json";
     private transactionData: TransactionData = { pending: [], validated: [] };
