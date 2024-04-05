@@ -18,11 +18,12 @@ class XrplContext {
     private transactionDataFile: string = "transactions.json";
     private transactionData: TransactionData = { pending: [], validated: [] };
     private signerListInfo: SignerListInfo | null = null;
+    private initialized: boolean = false;
     private updatedData: boolean = false;
     public hpContext: HotPocketContext;
     public xrplApi: any;
     public xrplAcc: any;
-    public multiSigner: any;
+    public multiSigner!: MultiSigner;
     public voteContext: VoteContext;
     public contextOptions: XrplOptions;
 
@@ -46,6 +47,8 @@ class XrplContext {
      * Initialize the xrpl context.
      */
     public async init(): Promise<void> {
+        if (this.initialized)
+            return;
 
         await evernode.Defaults.useNetwork(this.contextOptions.network || "mainnet");
         this.xrplApi = this.xrplApi || new evernode.XrplApi(this.contextOptions.rippleServer, { autoReconnect: false, ...this.contextOptions });
@@ -54,10 +57,12 @@ class XrplContext {
         });
         this.xrplAcc = new evernode.XrplAccount(this.xrplAcc.address, this.xrplAcc.secret, { xrplApi: this.xrplApi });
         this.multiSigner = new MultiSigner(this.xrplAcc);
+
         await this.xrplApi.connect();
         await this.loadSignerList();
         this.#checkSignerValidity();
         await this.#checkForValidateTransactions();
+        this.initialized = true;
     }
 
     /**

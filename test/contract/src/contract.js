@@ -3,7 +3,7 @@ const evp = require('everpocket-nodejs-contract');
 const fs = require('fs');
 
 const masterAddress = "rsPLkkfGdqjtsgecNaUckgkhiaR6y8EeVk";
-// const masterSecret = "snCAfBCCqqJKF7zMqBwtwetgLiRri";
+const masterSecret = "snCAfBCCqqJKF7zMqBwtwetgLiRri";
 
 const destinationAddress = "rwL8pyCFRZ6JcKUjfg61TZKdj3TGaXPbot";
 const signerWeight = 1;
@@ -20,8 +20,7 @@ const nomadOptions = {
     lifeIncrMomentMinLimit: 4,
     maxLifeMomentLimit: 48,
     preferredHosts: [
-        "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
-        "r9kCyGhhwGj3KaSGemFrrPVpXkzVtT2b1N"
+        "rhYaBSUWhdmLNM9Dye99jh3RCUPPGPzZGx"
     ],
     instanceCfg: {
         config: {
@@ -224,7 +223,7 @@ const addNewClusterNode = async (clusterContext) => {
     }
 
     await clusterContext.addNewClusterNode(0, 1, {
-        host: "rEiP3muQXyNVuASSEfGo9tGjnhoPHK8oww",
+        host: "rLBE5sCTcgRaKanhuHHS2ubxkG15DghE2t",
         instanceCfg: {
             config: {
                 log: {
