@@ -17,20 +17,23 @@ class XrplContext {
     private transactionDataFile: string = "transactions.json";
     private transactionData: TransactionData = { pending: [], validated: [] };
     private signerListInfo: SignerListInfo | null = null;
+    private initialized: boolean = false;
     private updatedData: boolean = false;
     public hpContext: HotPocketContext;
     public xrplApi: any;
     public xrplAcc: any;
-    public multiSigner: MultiSigner;
+    public multiSigner!: MultiSigner;
     public voteContext: VoteContext;
+    public contextOptions: XrplOptions;
 
     public constructor(hpContext: HotPocketContext, address: string, secret: string | null = null, options: XrplOptions = {}) {
         this.hpContext = hpContext;
         this.voteContext = hpContext.voteContext;
-        // autoReconnect: false - Do not handle connection failures in XrplApi to avoid contract hanging.
-        this.xrplApi = options.xrplApi || new evernode.XrplApi(null, { autoReconnect: false });
-        this.xrplAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
-        this.multiSigner = new MultiSigner(this.xrplAcc);
+        this.xrplAcc = {
+            address: address,
+            secret: secret
+        }
+        this.contextOptions = options;
 
         const data = JSONHelpers.readFromFile<TransactionData>(this.transactionDataFile);
         if (data)
@@ -43,10 +46,22 @@ class XrplContext {
      * Initialize the xrpl context.
      */
     public async init(): Promise<void> {
+        if (this.initialized)
+            return;
+
+        await evernode.Defaults.useNetwork(this.contextOptions.network || "mainnet");
+        this.xrplApi = this.xrplApi || new evernode.XrplApi(this.contextOptions.rippleServer, { autoReconnect: false, ...this.contextOptions });
+        evernode.Defaults.set({
+            xrplApi: this.xrplApi
+        });
+        this.xrplAcc = new evernode.XrplAccount(this.xrplAcc.address, this.xrplAcc.secret, { xrplApi: this.xrplApi });
+        this.multiSigner = new MultiSigner(this.xrplAcc);
+
         await this.xrplApi.connect();
         await this.loadSignerList();
         this.#checkSignerValidity();
         await this.#checkForValidateTransactions();
+        this.initialized = true;
     }
 
     /**
@@ -420,7 +435,7 @@ class XrplContext {
 
             newSigner = this.multiSigner.generateSigner();
             signerList = (await this.voteContext.vote(electionName, [<Signer>{
-                account: newSigner.account,
+                account: newSigner!.account,
                 weight: weight
             }], elector)).map(ob => ob.data);
 
@@ -480,7 +495,7 @@ class XrplContext {
         if (pubkey === this.hpContext.publicKey) {
             newSigner = this.multiSigner.generateSigner();
             signer = (await this.voteContext.vote(electionName, [<Signer>{
-                account: newSigner.account,
+                account: newSigner!.account,
                 weight: weight
             }], elector)).map(ob => ob.data)[0];
 
