@@ -13,17 +13,6 @@ import NumberHelpers from '../utils/helpers/NumberHelper';
 const TIMEOUT = 10000;
 const TRANSACTION_VOTE_THRESHOLD = 0.5;
 
-const NETWORKS: { [key: string]: { rippledServer: string; } } = {
-    testnet: {
-        rippledServer: "wss://hooks-testnet-v3.xrpl-labs.com"
-    },
-    devnet: {
-        rippledServer: "wss://hooks-testnet-v3.xrpl-labs.com"
-    },
-    mainnet: {
-        rippledServer: "wss://xahau.network"
-    }
-}
 
 class XrplContext {
     private transactionDataFile: string = "transactions.json";
@@ -33,20 +22,18 @@ class XrplContext {
     public hpContext: HotPocketContext;
     public xrplApi: any;
     public xrplAcc: any;
-    public multiSigner: MultiSigner;
+    public multiSigner: any;
     public voteContext: VoteContext;
-    public network: string;
+    public contextOptions: XrplOptions;
 
     public constructor(hpContext: HotPocketContext, address: string, secret: string | null = null, options: XrplOptions = {}) {
         this.hpContext = hpContext;
         this.voteContext = hpContext.voteContext;
-        this.network = options?.network ? options.network : "mainnet";
-        const rippleServer = options?.rippleServer ? options.rippleServer : NETWORKS[this.network].rippledServer;
-
-        // autoReconnect: false - Do not handle connection failures in XrplApi to avoid contract hanging.
-        this.xrplApi = options.xrplApi || new evernode.XrplApi(rippleServer, { autoReconnect: false, fallbackRippledServers: options?.fallbackRippledServers });
-        this.xrplAcc = new evernode.XrplAccount(address, secret, { xrplApi: this.xrplApi });
-        this.multiSigner = new MultiSigner(this.xrplAcc);
+        this.xrplAcc = {
+            address: address,
+            secret: secret
+        }
+        this.contextOptions = options;
 
         const data = JSONHelpers.readFromFile<TransactionData>(this.transactionDataFile);
         if (data)
@@ -60,10 +47,13 @@ class XrplContext {
      */
     public async init(): Promise<void> {
 
-        await evernode.Defaults.useNetwork(this.network);
+        await evernode.Defaults.useNetwork(this.contextOptions.network || "mainnet");
+        this.xrplApi = this.xrplApi || new evernode.XrplApi(this.contextOptions.rippleServer, { autoReconnect: false, ...this.contextOptions });
         evernode.Defaults.set({
             xrplApi: this.xrplApi
         });
+        this.xrplAcc = new evernode.XrplAccount(this.xrplAcc.address, this.xrplAcc.secret, { xrplApi: this.xrplApi });
+        this.multiSigner = new MultiSigner(this.xrplAcc);
         await this.xrplApi.connect();
         await this.loadSignerList();
         this.#checkSignerValidity();
@@ -441,7 +431,7 @@ class XrplContext {
 
             newSigner = this.multiSigner.generateSigner();
             signerList = (await this.voteContext.vote(electionName, [<Signer>{
-                account: newSigner.account,
+                account: newSigner!.account,
                 weight: weight
             }], elector)).map(ob => ob.data);
 
@@ -501,7 +491,7 @@ class XrplContext {
         if (pubkey === this.hpContext.publicKey) {
             newSigner = this.multiSigner.generateSigner();
             signer = (await this.voteContext.vote(electionName, [<Signer>{
-                account: newSigner.account,
+                account: newSigner!.account,
                 weight: weight
             }], elector)).map(ob => ob.data)[0];
 
