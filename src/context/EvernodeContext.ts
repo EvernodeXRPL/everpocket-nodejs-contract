@@ -15,6 +15,9 @@ import NumberHelpers from "../utils/helpers/NumberHelper";
 const TIMEOUT = 10000;
 const ACQUIRE_ABANDON_LCL_THRESHOLD = 10;
 
+/**
+* Handles operations related to node acquisition, host selection, transaction submission, and state management.
+*/
 class EvernodeContext {
     private acquireDataFile: string = "acquires.json";
     private acquireData: AcquireData = { acquiredNodes: [], pendingAcquires: [] };
@@ -25,6 +28,11 @@ class EvernodeContext {
     public xrplContext: XrplContext;
     public voteContext: VoteContext;
 
+    /**
+     * Creates an instance of EvernodeContext.
+     *
+     * @param {XrplContext} xrplContext - The XRPL context object that handles communication with the XRPL network.
+     */
     public constructor(xrplContext: XrplContext) {
         this.xrplContext = xrplContext;
         this.hpContext = this.xrplContext.hpContext;

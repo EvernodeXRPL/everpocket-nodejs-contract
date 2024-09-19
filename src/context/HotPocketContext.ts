@@ -7,6 +7,11 @@ const HotPocket = require('hotpocket-js-client');
 
 const TIMEOUT = 60000;
 
+/**
+ * The HotPocketContext class manages interactions with the HotPocket framework, 
+ * including client connections, contract configurations, and peer management.
+ * It provides methods to connect to nodes, send messages, and update contract and peer data.
+ */
 class HotPocketContext {
     private hpClient: any;
     private contractContext: any;
@@ -17,6 +22,12 @@ class HotPocketContext {
     public lclHash: string;
     public timestamp: number;
 
+    /**
+     * Creates an instance of HotPocketContext.
+     *
+     * @param {any} contractContext - The contract context containing the necessary contract and sequence details.
+     * @param {HotPocketOptions} [options={}] - Optional configuration options.
+     * */
     constructor(contractContext: any, options: HotPocketOptions = {}) {
         this.contractContext = contractContext;
         this.publicKey = this.contractContext.publicKey;

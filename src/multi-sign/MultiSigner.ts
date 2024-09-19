@@ -4,12 +4,19 @@ import * as kp from 'ripple-keypairs';
 import { SignerKey } from '../models';
 import { JSONHelpers } from "../utils";
 
+/**
+ * Manages signing operations for Xahau transactions using a signer key.
+ */
 class MultiSigner {
     private keyPath: string;
     private signer: SignerKey | null = null;
     public masterAcc: any;
     public signerAcc: any;
 
+    /**
+     * Creates an instance of MultiSigner.
+     * @param {any} masterAcc The master account containing XRPL API and address information.
+     */
     public constructor(masterAcc: any) {
         this.masterAcc = masterAcc;
         this.keyPath = `../${this.masterAcc.address}.key`;
