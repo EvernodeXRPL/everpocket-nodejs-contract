@@ -5,6 +5,9 @@ import VoteSerializer from '../vote/VoteSerializer';
 import { AllVoteElector } from '../vote/vote-electors';
 import { VoteOptions } from '../models/vote';
 
+/**
+ * The VoteContext class handles voting operations and manages elections.
+ */
 class VoteContext {
     private contractContext: any;
     private eventEmitter: EventEmitter = new EventEmitter();
@@ -12,6 +15,11 @@ class VoteContext {
     private uniqueNumber: number = 0;
     private voteCollection: any = {};
 
+    /**
+     * Creates an instance of VoteContext.
+     * @param contractContext The contract context to use.
+     * @param [options={}] Options for vote context, including voteSerializer.
+     */
     public constructor(contractContext: any, options: VoteOptions = {}) {
         this.contractContext = contractContext;
         this.voteSerializer = options.voteSerializer || new VoteSerializer();

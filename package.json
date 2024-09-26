@@ -13,7 +13,8 @@
         "build": "npm run lint && tsc --build tsconfig.json && cp evernode-license.pdf dist/",
         "bundle": "npm run build && ./clean-pkg.sh",
         "publish": "npm run bundle && cp npm-readme.md dist/README.md && npm publish ./dist",
-        "test": "npm run build && npm --prefix test i &&  npm --prefix test start"
+        "test": "npm run build && npm --prefix test i &&  npm --prefix test start",
+        "docs": "echo '# Everpocket JS API Documentation' > docs/everpocket-api.md && xargs jsdoc2md < docs/filelist >> docs/everpocket-api.md"
     },
     "dependencies": {
         "@typescript-eslint/parser": "5.48.1",
@@ -24,6 +25,7 @@
     "devDependencies": {
         "@types/node": "18.11.18",
         "eslint": "8.31.0",
+        "jsdoc-to-markdown": "9.0.1",
         "typescript": "4.9.4"
     },
     "peerDependencies": {

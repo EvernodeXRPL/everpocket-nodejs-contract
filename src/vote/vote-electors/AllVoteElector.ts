@@ -1,10 +1,18 @@
 import * as EventEmitter from 'events';
 import VoteContext from '../../context/VoteContext';
 
+/**
+ * Evaluates votes in an election based on the desired vote count and timeout.
+ */
 class AllVoteElector {
     protected desiredVoteCount: number;
     protected timeout: number;
 
+    /**
+     * Creates an instance of AllVoteElector.
+     * @param {number} desiredVoteCount The number of votes needed to complete the election.
+     * @param {number} timeout The timeout period in milliseconds for the election.
+     */
     public constructor(desiredVoteCount: number, timeout: number) {
         this.desiredVoteCount = desiredVoteCount;
         this.timeout = timeout;

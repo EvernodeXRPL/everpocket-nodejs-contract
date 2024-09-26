@@ -21,6 +21,9 @@ const MAX_ACKNOWLEDGE_ATTEMPTS = 3;
 const MAX_SIGNER_REPLACE_ATTEMPTS = 10;
 const TIMEOUT = 10000;
 
+    /**
+     * Manages the operations and states of the cluster.
+     */
 class ClusterContext {
     private operationDataFile: string = "operations.json";
     private nodePrivateInfoFile: string = "../node_private_info.json";
@@ -36,6 +39,11 @@ class ClusterContext {
     public voteContext: VoteContext;
     public evernodeContext: EvernodeContext;
 
+    /**
+     * Creates an instance of `ClusterContext`
+     * @param {EvernodeContext} evernodeContext - The context associated with Evernode for interacting with its environment.
+     * @param {ClusterOptions} [options={}] - Optional parameters for configuring the cluster thresholds.
+     */
     public constructor(evernodeContext: EvernodeContext, options: ClusterOptions = {}) {
         this.evernodeContext = evernodeContext;
         this.hpContext = this.evernodeContext.hpContext;

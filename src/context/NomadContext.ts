@@ -10,12 +10,20 @@ const INACTIVE_PRUNE_LCL_THRESHOLD = 60;
 const LIFE_INCR_MOMENT_MAX_LIMIT = 48;
 const EXPIRE_PRUNE_TS_THRESHOLD = 900000; // 15 mins in ms.
 
+/**
+ * The NomadContext class manages the lifecycle of nodes in a Nomad cluster.
+ */
 class NomadContext {
     private initialized: boolean = false;
     public clusterContext: ClusterContext;
     public options: NomadOptions;
     public hpContext: HotPocketContext;
 
+    /**
+     * Creates an instance of NomadContext.
+     * @param {ClusterContext} clusterContext - The cluster context for managing the cluster.
+     * @param {NomadOptions} contract - Configuration options for the Nomad contract.
+     */
     public constructor(clusterContext: ClusterContext, contract: NomadOptions) {
         this.clusterContext = clusterContext;
         this.options = contract;

@@ -1,0 +1,3 @@
+dist/context/*.js
+dist/vote/vote-electors/*.js
+dist/multi-sign/*.js

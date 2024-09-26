@@ -13,6 +13,9 @@ import NumberHelpers from '../utils/helpers/NumberHelper';
 const TIMEOUT = 10000;
 const TRANSACTION_VOTE_THRESHOLD = 0.5;
 
+/**
+* Handles operations related to XRPL transactions.
+*/
 class XrplContext {
     private transactionDataFile: string = "transactions.json";
     private transactionData: TransactionData = { pending: [], validated: [] };
@@ -26,6 +29,13 @@ class XrplContext {
     public voteContext: VoteContext;
     public contextOptions: XrplOptions;
 
+    /**
+     * Creates an instance of XrplContext.
+     * @param {HotPocketContext} hpContext The HotPocket context to use.
+     * @param {string} address The XRPL account address.
+     * @param {string | null} [secret=null] The XRPL account secret.
+     * @param {XrplOptions} [options={}] Options for XRPL context.
+     */
     public constructor(hpContext: HotPocketContext, address: string, secret: string | null = null, options: XrplOptions = {}) {
         this.hpContext = hpContext;
         this.voteContext = hpContext.voteContext;
@@ -600,7 +610,7 @@ class XrplContext {
 
     /**
      * Returns the signer list of the account
-     * @returns An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || null 
+     * @returns {Object|null} An object in the form of {signerQuorum: <1> , signerList: [{account: "rawweeeere3e3", weight: 1}, {}, ...]} || null 
      */
     public getSignerList(): SignerListInfo | null {
         return this.signerListInfo;

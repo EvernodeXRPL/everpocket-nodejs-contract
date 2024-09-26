@@ -1,11 +1,20 @@
 import { JSONHelpers } from "../utils";
 import { ClusterData, ClusterNode, NodeStatus, NodeStatusInfo, PendingNode } from '../models/cluster';
 
+/**
+ * Manages the cluster data and provides methods to manage cluster nodes.
+ */
 class ClusterManager {
     private clusterDataFile: string = "cluster.json";
     private clusterData: ClusterData = { initialized: false, nodes: [], pendingNodes: [] };
     private updated: boolean = false;
 
+    /**
+     * Initializes a new instance of the ClusterManager class.
+     * Loads cluster data from the cluster data file. If the file 
+     * does not exist, it initializes a new cluster with default data 
+     * and writes it to the file.
+     */
     public constructor() {
         const data = JSONHelpers.readFromFile<ClusterData>(this.clusterDataFile);
         if (data)
@@ -62,7 +71,6 @@ class ClusterManager {
     /**
      * Record pending node.
      * @param node Pending node to add
-     * @returns 
      */
     public addPending(node: PendingNode): void {
         // Return if pending node already exist.
