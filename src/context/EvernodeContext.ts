@@ -30,7 +30,6 @@ class EvernodeContext {
 
     /**
      * Creates an instance of EvernodeContext.
-     *
      * @param {XrplContext} xrplContext - The XRPL context object that handles communication with the XRPL network.
      */
     public constructor(xrplContext: XrplContext) {

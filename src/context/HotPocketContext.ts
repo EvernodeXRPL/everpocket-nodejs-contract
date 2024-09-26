@@ -24,7 +24,6 @@ class HotPocketContext {
 
     /**
      * Creates an instance of HotPocketContext.
-     *
      * @param {any} contractContext - The contract context containing the necessary contract and sequence details.
      * @param {HotPocketOptions} [options={}] - Optional configuration options.
      * */

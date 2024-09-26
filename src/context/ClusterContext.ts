@@ -41,7 +41,6 @@ class ClusterContext {
 
     /**
      * Creates an instance of `ClusterContext`
-     * 
      * @param {EvernodeContext} evernodeContext - The context associated with Evernode for interacting with its environment.
      * @param {ClusterOptions} [options={}] - Optional parameters for configuring the cluster thresholds.
      */

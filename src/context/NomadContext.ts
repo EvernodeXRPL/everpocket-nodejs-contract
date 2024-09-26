@@ -21,7 +21,6 @@ class NomadContext {
 
     /**
      * Creates an instance of NomadContext.
-     *
      * @param {ClusterContext} clusterContext - The cluster context for managing the cluster.
      * @param {NomadOptions} contract - Configuration options for the Nomad contract.
      */

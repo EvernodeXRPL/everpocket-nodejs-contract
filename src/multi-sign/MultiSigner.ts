@@ -69,7 +69,6 @@ class MultiSigner {
     }
 
     /**
-     * 
      * @param tx Transaction in json.
      * @returns The signed transaction blob.
      */
