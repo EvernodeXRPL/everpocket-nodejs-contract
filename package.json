@@ -7,7 +7,7 @@
     ],
     "homepage": "https://github.com/EvernodeXRPL/everpocket-nodejs-contract",
     "license": "SEE LICENSE IN https://raw.githubusercontent.com/EvernodeXRPL/evernode-resources/main/license/evernode-license.pdf",
-    "version": "0.1.5",
+    "version": "0.1.6",
     "scripts": {
         "lint": "./node_modules/.bin/eslint src --ext .ts",
         "build": "npm run lint && tsc --build tsconfig.json && cp evernode-license.pdf dist/",
@@ -18,7 +18,7 @@
     "dependencies": {
         "@typescript-eslint/parser": "5.48.1",
         "bson": "4.7.2",
-        "hotpocket-js-client": "0.5.6",
+        "hotpocket-js-client": "0.5.7",
         "ripple-keypairs": "1.1.4"
     },
     "devDependencies": {
@@ -27,7 +27,7 @@
         "typescript": "4.9.4"
     },
     "peerDependencies": {
-        "evernode-js-client": "0.6.44",
+        "evernode-js-client": "file:/home/chalith/Workspace/HotpocketDev/evernode-js-client/dist",
         "hotpocket-nodejs-contract": "0.7.4"
     }
 }
