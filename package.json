@@ -27,7 +27,7 @@
         "typescript": "4.9.4"
     },
     "peerDependencies": {
-        "evernode-js-client": "0.6.61",
+        "evernode-js-client": "0.6.60",
         "hotpocket-nodejs-contract": "0.7.4"
     }
 }
