@@ -318,7 +318,7 @@ class EvernodeContext {
             log("Wrote Key file.");
         }
 
-        return collection[0];
+        return sortCollection[0];
     }
 
     /**

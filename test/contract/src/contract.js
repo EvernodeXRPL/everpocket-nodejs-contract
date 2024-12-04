@@ -31,6 +31,12 @@ const nomadOptions = {
     }
 }
 
+const acquireOptions = {
+    preferredHosts: [
+        "rhYaBSUWhdmLNM9Dye99jh3RCUPPGPzZGx"
+    ]
+}
+
 const testContract = async (contractCtx) => {
 
     let nonSigners = [];
@@ -179,6 +185,7 @@ const acquireNewNode = async (evernodeContext) => {
     }
 
     const options = {
+        ...acquireOptions,
         instanceCfg: {
             ownerPubkey: "ed3b4f907632e222987809a35e8ea55ed3b5d2e406b7d230a5e6f39a5e9834bafb",
             contractId: "dc411912-bcdd-4f73-af43-32ec45844b9a",
